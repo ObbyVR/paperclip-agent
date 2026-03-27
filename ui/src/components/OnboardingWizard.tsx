@@ -54,7 +54,8 @@ import {
   Check,
   Loader2,
   ChevronDown,
-  X
+  X,
+  Zap
 } from "lucide-react";
 
 type Step = 1 | 2 | 3 | 4;
@@ -66,7 +67,8 @@ type AdapterType =
   | "pi_local"
   | "cursor"
   | "http"
-  | "openclaw_gateway";
+  | "openclaw_gateway"
+  | "direct_llm";
 
 const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the company.
 
@@ -850,6 +852,12 @@ export function OnboardingWizard() {
                             desc: "Invoke OpenClaw via gateway protocol",
                             comingSoon: true,
                             disabledLabel: "Configure OpenClaw within the App"
+                          },
+                          {
+                            value: "direct_llm" as const,
+                            label: "Direct LLM",
+                            icon: Zap,
+                            desc: "API routing with tier & fallback"
                           }
                         ].map((opt) => (
                           <button

@@ -25,42 +25,42 @@ export interface TierCascade {
 // ---------------------------------------------------------------------------
 
 const MODELS: Record<string, ModelSpec> = {
-  // Free tier
-  "groq/llama-3.3-70b": {
-    id: "groq/llama-3.3-70b",
-    provider: "groq",
-    label: "Llama 3.3 70B (Groq)",
+  // Free tier — verified against OpenRouter /api/v1/models 2026-03-27
+  "meta-llama/llama-3.3-70b-instruct:free": {
+    id: "meta-llama/llama-3.3-70b-instruct:free",
+    provider: "meta-llama",
+    label: "Llama 3.3 70B (Free)",
+    inputCostPer1M: 0,
+    outputCostPer1M: 0,
+    maxContext: 65536,
+    maxOutput: 8192,
+  },
+  "google/gemma-3-27b-it:free": {
+    id: "google/gemma-3-27b-it:free",
+    provider: "google",
+    label: "Gemma 3 27B (Free)",
     inputCostPer1M: 0,
     outputCostPer1M: 0,
     maxContext: 131072,
     maxOutput: 8192,
   },
-  "google/gemini-2.5-flash:free": {
-    id: "google/gemini-2.5-flash:free",
-    provider: "google",
-    label: "Gemini 2.5 Flash (Free)",
+  "mistralai/mistral-small-3.1-24b-instruct:free": {
+    id: "mistralai/mistral-small-3.1-24b-instruct:free",
+    provider: "mistralai",
+    label: "Mistral Small 3.1 (Free)",
     inputCostPer1M: 0,
     outputCostPer1M: 0,
-    maxContext: 1048576,
+    maxContext: 128000,
     maxOutput: 8192,
   },
 
   // Cheap tier
-  "anthropic/claude-haiku-4-5": {
-    id: "anthropic/claude-haiku-4-5",
-    provider: "anthropic",
-    label: "Claude Haiku 4.5",
-    inputCostPer1M: 0.80,
-    outputCostPer1M: 4.0,
-    maxContext: 200000,
-    maxOutput: 8192,
-  },
   "deepseek/deepseek-chat-v3-0324": {
     id: "deepseek/deepseek-chat-v3-0324",
     provider: "deepseek",
     label: "DeepSeek V3",
-    inputCostPer1M: 0.27,
-    outputCostPer1M: 1.10,
+    inputCostPer1M: 0.20,
+    outputCostPer1M: 0.77,
     maxContext: 131072,
     maxOutput: 8192,
   },
@@ -73,25 +73,43 @@ const MODELS: Record<string, ModelSpec> = {
     maxContext: 1048576,
     maxOutput: 32768,
   },
+  "anthropic/claude-haiku-4.5": {
+    id: "anthropic/claude-haiku-4.5",
+    provider: "anthropic",
+    label: "Claude Haiku 4.5",
+    inputCostPer1M: 1.0,
+    outputCostPer1M: 5.0,
+    maxContext: 200000,
+    maxOutput: 8192,
+  },
 
   // Medium tier
-  "anthropic/claude-sonnet-4-6": {
-    id: "anthropic/claude-sonnet-4-6",
+  "google/gemini-2.5-flash": {
+    id: "google/gemini-2.5-flash",
+    provider: "google",
+    label: "Gemini 2.5 Flash",
+    inputCostPer1M: 0.30,
+    outputCostPer1M: 2.50,
+    maxContext: 1048576,
+    maxOutput: 65536,
+  },
+  "qwen/qwen3-coder": {
+    id: "qwen/qwen3-coder",
+    provider: "qwen",
+    label: "Qwen3 Coder",
+    inputCostPer1M: 0.22,
+    outputCostPer1M: 1.0,
+    maxContext: 262144,
+    maxOutput: 65536,
+  },
+  "anthropic/claude-sonnet-4.6": {
+    id: "anthropic/claude-sonnet-4.6",
     provider: "anthropic",
     label: "Claude Sonnet 4.6",
     inputCostPer1M: 3.0,
     outputCostPer1M: 15.0,
     maxContext: 200000,
     maxOutput: 16384,
-  },
-  "google/gemini-2.5-flash": {
-    id: "google/gemini-2.5-flash",
-    provider: "google",
-    label: "Gemini 2.5 Flash",
-    inputCostPer1M: 0.15,
-    outputCostPer1M: 0.60,
-    maxContext: 1048576,
-    maxOutput: 65536,
   },
   "openai/gpt-4.1": {
     id: "openai/gpt-4.1",
@@ -102,23 +120,14 @@ const MODELS: Record<string, ModelSpec> = {
     maxContext: 1048576,
     maxOutput: 32768,
   },
-  "qwen/qwen3-coder": {
-    id: "qwen/qwen3-coder",
-    provider: "qwen",
-    label: "Qwen3 Coder",
-    inputCostPer1M: 0.12,
-    outputCostPer1M: 0.75,
-    maxContext: 262144,
-    maxOutput: 65536,
-  },
 
   // Premium tier
-  "anthropic/claude-opus-4-6": {
-    id: "anthropic/claude-opus-4-6",
+  "anthropic/claude-opus-4.6": {
+    id: "anthropic/claude-opus-4.6",
     provider: "anthropic",
     label: "Claude Opus 4.6",
-    inputCostPer1M: 15.0,
-    outputCostPer1M: 75.0,
+    inputCostPer1M: 5.0,
+    outputCostPer1M: 25.0,
     maxContext: 200000,
     maxOutput: 32768,
   },
@@ -139,29 +148,32 @@ const MODELS: Record<string, ModelSpec> = {
 
 export const TIER_CASCADE: Record<Tier, TierCascade> = {
   free: {
-    primary: MODELS["groq/llama-3.3-70b"]!,
-    fallbacks: [MODELS["google/gemini-2.5-flash:free"]!],
+    primary: MODELS["meta-llama/llama-3.3-70b-instruct:free"]!,
+    fallbacks: [
+      MODELS["google/gemma-3-27b-it:free"]!,
+      MODELS["mistralai/mistral-small-3.1-24b-instruct:free"]!,
+    ],
   },
   cheap: {
     primary: MODELS["deepseek/deepseek-chat-v3-0324"]!,
     fallbacks: [
       MODELS["openai/gpt-4.1-mini"]!,
-      MODELS["anthropic/claude-haiku-4-5"]!,
-      MODELS["groq/llama-3.3-70b"]!, // escalate down to free as last resort
+      MODELS["anthropic/claude-haiku-4.5"]!,
+      MODELS["meta-llama/llama-3.3-70b-instruct:free"]!, // free as last resort
     ],
   },
   medium: {
     primary: MODELS["google/gemini-2.5-flash"]!, // Best cost/quality ratio
     fallbacks: [
       MODELS["qwen/qwen3-coder"]!,
-      MODELS["anthropic/claude-sonnet-4-6"]!,
+      MODELS["anthropic/claude-sonnet-4.6"]!,
       MODELS["openai/gpt-4.1"]!,
     ],
   },
   premium: {
-    primary: MODELS["anthropic/claude-sonnet-4-6"]!, // Sonnet as default premium (good enough for most)
+    primary: MODELS["anthropic/claude-sonnet-4.6"]!, // Sonnet as default premium (good enough for most)
     fallbacks: [
-      MODELS["anthropic/claude-opus-4-6"]!,
+      MODELS["anthropic/claude-opus-4.6"]!,
       MODELS["openai/o3"]!,
     ],
   },
@@ -330,9 +342,10 @@ export function resolveRoute(modelSelector: string, prompt: string): RouteResult
  * Get the next fallback model after a failure.
  */
 export function getNextFallback(tier: Tier, currentAttempt: number): ModelSpec | null {
-  const models = getModelsForTier(tier);
-  const nextIndex = currentAttempt + 1;
-  return models[nextIndex] ?? null;
+  const cascade = TIER_CASCADE[tier];
+  const all = [cascade.primary, ...cascade.fallbacks];
+  // Skip already-attempted positions, then find first non-rate-limited model
+  return all.slice(currentAttempt + 1).find((m) => !isRateLimited(m.provider)) ?? null;
 }
 
 /**

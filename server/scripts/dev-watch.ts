@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import { resolveServerDevWatchIgnorePaths } from "../src/dev-watch-ignore.ts";
 
 const require = createRequire(import.meta.url);
-const tsxCliPath = require.resolve("tsx/dist/cli.mjs");
+// tsx@4.x does not export "tsx/dist/cli.mjs" in its exports field, but the file exists.
+// Resolve via tsx/package.json (which is exported) and navigate to dist/cli.mjs.
+const tsxCliPath = path.resolve(path.dirname(require.resolve("tsx/package.json")), "dist/cli.mjs");
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ignoreArgs = resolveServerDevWatchIgnorePaths(serverRoot).flatMap((ignorePath) => ["--exclude", ignorePath]);
 

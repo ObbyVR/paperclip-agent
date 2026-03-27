@@ -98,6 +98,18 @@ async function callOpenRouter(
 // Config helpers
 // ---------------------------------------------------------------------------
 
+function parseEnvVars(text: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    env[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1);
+  }
+  return env;
+}
+
 function asString(val: unknown, fallback: string): string {
   return typeof val === "string" && val.length > 0 ? val : fallback;
 }
@@ -131,10 +143,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const budgetPerRunUsd = asNumber(config.budgetPerRunUsd, 0.50);
   const timeoutSec = asNumber(config.timeoutSec, 120);
 
-  // Resolve API key from config.env or process.env
-  const envConfig = typeof config.env === "object" && config.env !== null
-    ? config.env as Record<string, string>
-    : {};
+  // Resolve API key from config.env (create mode, parsed object),
+  // config.envVars (edit mode, raw KEY=VALUE string), or process.env.
+  const envConfig =
+    typeof config.env === "object" && config.env !== null
+      ? config.env as Record<string, string>
+      : typeof config.envVars === "string" && config.envVars
+      ? parseEnvVars(config.envVars)
+      : {};
   const apiKey =
     envConfig.OPENROUTER_API_KEY ??
     process.env.OPENROUTER_API_KEY ??
