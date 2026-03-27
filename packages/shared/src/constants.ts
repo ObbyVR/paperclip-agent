@@ -29,8 +29,10 @@ export const AGENT_ADAPTER_TYPES = [
   "opencode_local",
   "pi_local",
   "cursor",
+  "gemini_local",
   "openclaw_gateway",
   "hermes_local",
+  "direct_llm",
 ] as const;
 export type AgentAdapterType = (typeof AGENT_ADAPTER_TYPES)[number];
 

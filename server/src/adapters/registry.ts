@@ -75,6 +75,11 @@ import {
   agentConfigurationDoc as hermesAgentConfigurationDoc,
   models as hermesModels,
 } from "hermes-paperclip-adapter";
+import {
+  execute as directLlmExecute,
+  testEnvironment as directLlmTestEnvironment,
+} from "@paperclipai/adapter-direct-llm/server";
+import { agentConfigurationDoc as directLlmAgentConfigurationDoc, models as directLlmModels } from "@paperclipai/adapter-direct-llm";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 
@@ -181,6 +186,15 @@ const hermesLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: hermesAgentConfigurationDoc,
 };
 
+const directLlmAdapter: ServerAdapterModule = {
+  type: "direct_llm",
+  execute: directLlmExecute,
+  testEnvironment: directLlmTestEnvironment,
+  models: directLlmModels,
+  supportsLocalAgentJwt: false,
+  agentConfigurationDoc: directLlmAgentConfigurationDoc,
+};
+
 const adaptersByType = new Map<string, ServerAdapterModule>(
   [
     claudeLocalAdapter,
@@ -191,6 +205,7 @@ const adaptersByType = new Map<string, ServerAdapterModule>(
     geminiLocalAdapter,
     openclawGatewayAdapter,
     hermesLocalAdapter,
+    directLlmAdapter,
     processAdapter,
     httpAdapter,
   ].map((a) => [a.type, a]),
