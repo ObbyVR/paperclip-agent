@@ -2774,6 +2774,22 @@ function RunListItem({ run, isSelected, agentId }: { run: HeartbeatRun; isSelect
         <div className="flex items-center gap-2 pl-5.5 text-[11px] text-muted-foreground tabular-nums">
           {metrics.totalTokens > 0 && <span>{formatTokens(metrics.totalTokens)} tok</span>}
           {metrics.cost > 0 && <span>${metrics.cost.toFixed(3)}</span>}
+          {(() => {
+            const rj = run.resultJson as Record<string, unknown> | null;
+            const tier = typeof rj?.tier === "string" ? rj.tier : null;
+            if (!tier) return null;
+            const bg: Record<string, string> = {
+              free: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+              cheap: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+              medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300",
+              premium: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+            };
+            return (
+              <span className={cn("inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium", bg[tier] ?? "bg-muted text-muted-foreground")}>
+                {tier}
+              </span>
+            );
+          })()}
         </div>
       )}
     </Link>
@@ -3164,6 +3180,37 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
                 <div className="text-xs text-muted-foreground">Cost</div>
                 <div className="text-sm font-medium font-mono">{metrics.cost > 0 ? `$${metrics.cost.toFixed(4)}` : "-"}</div>
               </div>
+              {adapterType === "direct_llm" && (() => {
+                const rj = asRecord(run.resultJson);
+                const tier = typeof rj?.tier === "string" ? rj.tier : null;
+                const via = typeof rj?.via === "string" ? rj.via : null;
+                const modelId = typeof rj?.model === "string" ? rj.model : null;
+                if (!tier && !modelId) return null;
+                const tierColor: Record<string, string> = {
+                  free: "text-green-600 dark:text-green-400",
+                  cheap: "text-blue-600 dark:text-blue-400",
+                  medium: "text-yellow-600 dark:text-yellow-400",
+                  premium: "text-red-600 dark:text-red-400",
+                };
+                return (
+                  <>
+                    {tier && (
+                      <div>
+                        <div className="text-xs text-muted-foreground">Tier</div>
+                        <div className={cn("text-sm font-medium font-mono capitalize", tierColor[tier] ?? "")}>
+                          {tier}{via && via !== "openrouter" ? ` (direct)` : ""}
+                        </div>
+                      </div>
+                    )}
+                    {modelId && (
+                      <div className="col-span-2">
+                        <div className="text-xs text-muted-foreground">Model</div>
+                        <div className="text-xs font-mono text-foreground/80 truncate" title={modelId}>{modelId}</div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>

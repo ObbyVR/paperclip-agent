@@ -17,46 +17,67 @@ import {
 } from "./router.js";
 
 // ---------------------------------------------------------------------------
-// OpenRouter API types
+// OpenAI-compatible API types (used by OpenRouter and OpenAI native)
 // ---------------------------------------------------------------------------
 
-interface OpenRouterMessage {
+interface LLMMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
 
-interface OpenRouterChoice {
+interface LLMChoice {
   message: { role: string; content: string };
   finish_reason: string;
 }
 
-interface OpenRouterUsage {
+interface LLMUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
 }
 
-interface OpenRouterResponse {
+interface LLMResponse {
   id: string;
   model: string;
-  choices: OpenRouterChoice[];
-  usage: OpenRouterUsage;
+  choices: LLMChoice[];
+  usage: LLMUsage;
 }
 
 // ---------------------------------------------------------------------------
-// LLM API caller
+// Anthropic native API types
+// ---------------------------------------------------------------------------
+
+interface AnthropicContentBlock {
+  type: "text";
+  text: string;
+}
+
+interface AnthropicResponse {
+  id: string;
+  type: "message";
+  role: "assistant";
+  content: AnthropicContentBlock[];
+  model: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// LLM API callers
 // ---------------------------------------------------------------------------
 
 async function callOpenRouter(
   model: ModelSpec,
-  messages: OpenRouterMessage[],
+  messages: LLMMessage[],
   config: {
     apiKey: string;
     maxTokens: number;
     temperature: number;
     timeoutMs: number;
   },
-): Promise<{ response: OpenRouterResponse; rawBody: string }> {
+): Promise<{ response: LLMResponse; rawBody: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
 
@@ -87,7 +108,122 @@ async function callOpenRouter(
       throw new Error(`OpenRouter ${res.status}: ${rawBody.slice(0, 500)}`);
     }
 
-    const response = JSON.parse(rawBody) as OpenRouterResponse;
+    const response = JSON.parse(rawBody) as LLMResponse;
+    return { response, rawBody };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callAnthropicDirect(
+  model: ModelSpec,
+  messages: LLMMessage[],
+  config: {
+    apiKey: string;
+    maxTokens: number;
+    temperature: number;
+    timeoutMs: number;
+  },
+): Promise<{ response: LLMResponse; rawBody: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+
+  const systemMsg = messages.find((m) => m.role === "system");
+  const userMessages = messages.filter((m) => m.role !== "system");
+  const nativeModelId = model.nativeModelId ?? model.id.replace("anthropic/", "");
+
+  try {
+    const body: Record<string, unknown> = {
+      model: nativeModelId,
+      messages: userMessages,
+      max_tokens: Math.min(config.maxTokens, model.maxOutput),
+      temperature: config.temperature,
+    };
+    if (systemMsg) {
+      body.system = systemMsg.content;
+    }
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    const rawBody = await res.text();
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        markRateLimited(model.provider);
+      }
+      throw new Error(`Anthropic API ${res.status}: ${rawBody.slice(0, 500)}`);
+    }
+
+    const native = JSON.parse(rawBody) as AnthropicResponse;
+    // Normalize to OpenAI-compatible shape
+    const response: LLMResponse = {
+      id: native.id,
+      model: native.model,
+      choices: [{
+        message: { role: "assistant", content: native.content[0]?.text ?? "" },
+        finish_reason: "stop",
+      }],
+      usage: {
+        prompt_tokens: native.usage.input_tokens,
+        completion_tokens: native.usage.output_tokens,
+        total_tokens: native.usage.input_tokens + native.usage.output_tokens,
+      },
+    };
+    return { response, rawBody };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callOpenAIDirect(
+  model: ModelSpec,
+  messages: LLMMessage[],
+  config: {
+    apiKey: string;
+    maxTokens: number;
+    temperature: number;
+    timeoutMs: number;
+  },
+): Promise<{ response: LLMResponse; rawBody: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  const nativeModelId = model.nativeModelId ?? model.id.replace("openai/", "");
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: nativeModelId,
+        messages,
+        max_tokens: Math.min(config.maxTokens, model.maxOutput),
+        temperature: config.temperature,
+      }),
+      signal: controller.signal,
+    });
+
+    const rawBody = await res.text();
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        markRateLimited(model.provider);
+      }
+      throw new Error(`OpenAI API ${res.status}: ${rawBody.slice(0, 500)}`);
+    }
+
+    const response = JSON.parse(rawBody) as LLMResponse;
     return { response, rawBody };
   } finally {
     clearTimeout(timeout);
@@ -143,7 +279,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const budgetPerRunUsd = asNumber(config.budgetPerRunUsd, 0.50);
   const timeoutSec = asNumber(config.timeoutSec, 120);
 
-  // Resolve API key from config.env (create mode, parsed object),
+  // Resolve API keys from config.env (create mode, parsed object),
   // config.envVars (edit mode, raw KEY=VALUE string), or process.env.
   const envConfig =
     typeof config.env === "object" && config.env !== null
@@ -151,29 +287,56 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : typeof config.envVars === "string" && config.envVars
       ? parseEnvVars(config.envVars)
       : {};
-  const apiKey =
-    envConfig.OPENROUTER_API_KEY ??
-    process.env.OPENROUTER_API_KEY ??
-    "";
+  const openrouterKey = envConfig.OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY ?? "";
+  const anthropicKey = envConfig.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? "";
+  const openaiKey = envConfig.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
 
-  if (!apiKey) {
+  if (!openrouterKey && !anthropicKey && !openaiKey) {
     return {
       exitCode: 1,
       signal: null,
       timedOut: false,
-      errorMessage: "OPENROUTER_API_KEY not set. Configure it in agent env or server environment.",
+      errorMessage: "No API key found. Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY in agent env.",
       errorCode: "missing_api_key",
     };
   }
 
+  // Extract context fields for prompt interpolation
+  const taskId = asString(context.taskId ?? context.issueId, "");
+  const wakeReason = asString(context.wakeReason, "");
+  const wakeCommentId = asString(context.wakeCommentId ?? context.commentId, "");
+  const approvalStatus = asString(context.approvalStatus, "");
+
   // Build prompt from context
-  const promptTemplate = asString(
-    config.promptTemplate,
-    "You are agent {{agent.id}} ({{agent.name}}). Complete your assigned Paperclip task.",
-  );
+  const DEFAULT_PROMPT_TEMPLATE = [
+    "You are {{agent.name}} (id: {{agent.id}}), an AI agent running inside Paperclip.",
+    "{{#taskId}}Task: {{taskId}}{{/taskId}}",
+    "{{#wakeReason}}Wake reason: {{wakeReason}}{{/wakeReason}}",
+    "{{#wakeCommentId}}Comment ref: {{wakeCommentId}}{{/wakeCommentId}}",
+    "{{#approvalStatus}}Approval status: {{approvalStatus}}{{/approvalStatus}}",
+    "",
+    "Complete your assigned task. Be concise and output only the result.",
+  ].join("\n");
+
+  const promptTemplate = asString(config.promptTemplate, DEFAULT_PROMPT_TEMPLATE);
+
   const prompt = promptTemplate
     .replace(/\{\{agent\.id\}\}/g, agent.id)
-    .replace(/\{\{agent\.name\}\}/g, agent.name);
+    .replace(/\{\{agent\.name\}\}/g, agent.name)
+    .replace(/\{\{taskId\}\}/g, taskId)
+    .replace(/\{\{wakeReason\}\}/g, wakeReason)
+    .replace(/\{\{wakeCommentId\}\}/g, wakeCommentId)
+    .replace(/\{\{approvalStatus\}\}/g, approvalStatus)
+    // Remove conditional blocks {{#field}}...{{/field}} when field is empty
+    .replace(/\{\{#\w+\}\}[^\n]*\{\{\/\w+\}\}\n?/g, (match) => {
+      const inner = match.match(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\w+\}\}/);
+      if (!inner) return "";
+      const fieldName = inner[1];
+      const vars: Record<string, string> = { taskId, wakeReason, wakeCommentId, approvalStatus };
+      return vars[fieldName] ? inner[2].trim() + "\n" : "";
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
   // Resolve which model to use
   const effectiveSelector = tierOverride
@@ -195,11 +358,34 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   }) + "\n");
 
   // Build messages
-  const messages: OpenRouterMessage[] = [];
+  const messages: LLMMessage[] = [];
   if (systemPrompt) {
     messages.push({ role: "system", content: systemPrompt });
   }
   messages.push({ role: "user", content: prompt });
+
+  // ---------------------------------------------------------------------------
+  // Helper: pick the best caller for a model given available keys
+  // ---------------------------------------------------------------------------
+  function resolveCallerAndKey(model: ModelSpec): {
+    caller: "anthropic" | "openai" | "openrouter";
+    key: string;
+  } {
+    if (model.nativeProvider === "anthropic" && anthropicKey) {
+      return { caller: "anthropic", key: anthropicKey };
+    }
+    if (model.nativeProvider === "openai" && openaiKey) {
+      return { caller: "openai", key: openaiKey };
+    }
+    if (openrouterKey) {
+      return { caller: "openrouter", key: openrouterKey };
+    }
+    // No valid key found for this model path
+    throw new Error(
+      `No API key available for model ${model.id}. ` +
+      `Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY.`,
+    );
+  }
 
   // Execute with fallback cascade
   let lastError: string | null = null;
@@ -210,19 +396,31 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   while (attemptIndex < maxAttempts) {
     try {
+      const { caller, key: callKey } = resolveCallerAndKey(currentModel);
+
       await onLog("stdout", JSON.stringify({
         type: "attempt",
         attempt: attemptIndex + 1,
         model: currentModel.id,
         provider: currentModel.provider,
+        via: caller,
       }) + "\n");
 
-      const { response } = await callOpenRouter(currentModel, messages, {
-        apiKey,
+      const callConfig = {
+        apiKey: callKey,
         maxTokens,
         temperature,
         timeoutMs: timeoutSec * 1000,
-      });
+      };
+
+      let response: LLMResponse;
+      if (caller === "anthropic") {
+        ({ response } = await callAnthropicDirect(currentModel, messages, callConfig));
+      } else if (caller === "openai") {
+        ({ response } = await callOpenAIDirect(currentModel, messages, callConfig));
+      } else {
+        ({ response } = await callOpenRouter(currentModel, messages, callConfig));
+      }
 
       const inputTokens = response.usage?.prompt_tokens ?? 0;
       const outputTokens = response.usage?.completion_tokens ?? 0;
@@ -240,6 +438,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         type: "result",
         model: response.model || currentModel.id,
         provider: currentModel.provider,
+        via: caller,
         tier: resolvedTier,
         inputTokens,
         outputTokens,
@@ -271,6 +470,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           isAutoRouted: route.isAutoRouted,
           attempts: attemptIndex + 1,
           model: response.model || currentModel.id,
+          via: caller,
           content,
         },
       };
@@ -324,52 +524,44 @@ export async function testEnvironment(
   const envConfig = typeof ctx.config.env === "object" && ctx.config.env !== null
     ? ctx.config.env as Record<string, string>
     : {};
-  const apiKey =
-    envConfig.OPENROUTER_API_KEY ??
-    process.env.OPENROUTER_API_KEY ??
-    "";
+  const openrouterKey = envConfig.OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY ?? "";
+  const anthropicKey = envConfig.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? "";
+  const openaiKey = envConfig.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+  const hasAnyKey = openrouterKey || anthropicKey || openaiKey;
 
-  if (!apiKey) {
+  if (!hasAnyKey) {
     checks.push({
-      code: "openrouter_api_key",
+      code: "api_keys",
       level: "error",
-      message: "OPENROUTER_API_KEY is not set",
-      hint: "Set OPENROUTER_API_KEY in the agent environment or server env. Get one at https://openrouter.ai/keys",
+      message: "No API key configured",
+      hint: "Set at least one of: OPENROUTER_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY",
     });
   } else {
-    checks.push({
-      code: "openrouter_api_key",
-      level: "info",
-      message: "OPENROUTER_API_KEY is configured",
-    });
+    if (openrouterKey) {
+      checks.push({ code: "openrouter_api_key", level: "info", message: "OPENROUTER_API_KEY is configured (multi-provider fallback)" });
+    }
+    if (anthropicKey) {
+      checks.push({ code: "anthropic_api_key", level: "info", message: "ANTHROPIC_API_KEY is configured (direct, no markup)" });
+    }
+    if (openaiKey) {
+      checks.push({ code: "openai_api_key", level: "info", message: "OPENAI_API_KEY is configured (direct, no markup)" });
+    }
 
-    // Quick connectivity check
-    try {
-      const res = await fetch("https://openrouter.ai/api/v1/models", {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        signal: AbortSignal.timeout(10000),
-      });
-      if (res.ok) {
-        checks.push({
-          code: "openrouter_connectivity",
-          level: "info",
-          message: "OpenRouter API is reachable",
+    // Quick connectivity check on OpenRouter if available
+    if (openrouterKey) {
+      try {
+        const res = await fetch("https://openrouter.ai/api/v1/models", {
+          headers: { Authorization: `Bearer ${openrouterKey}` },
+          signal: AbortSignal.timeout(10000),
         });
-      } else {
-        checks.push({
-          code: "openrouter_connectivity",
-          level: "warn",
-          message: `OpenRouter returned ${res.status}`,
-          hint: "Check your API key and account status at https://openrouter.ai",
-        });
+        if (res.ok) {
+          checks.push({ code: "openrouter_connectivity", level: "info", message: "OpenRouter API is reachable" });
+        } else {
+          checks.push({ code: "openrouter_connectivity", level: "warn", message: `OpenRouter returned ${res.status}`, hint: "Check your API key" });
+        }
+      } catch {
+        checks.push({ code: "openrouter_connectivity", level: "warn", message: "Could not reach OpenRouter API", hint: "Check your internet connection" });
       }
-    } catch {
-      checks.push({
-        code: "openrouter_connectivity",
-        level: "warn",
-        message: "Could not reach OpenRouter API",
-        hint: "Check your internet connection",
-      });
     }
   }
 

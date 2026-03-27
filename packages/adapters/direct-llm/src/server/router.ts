@@ -13,6 +13,10 @@ export interface ModelSpec {
   outputCostPer1M: number; // USD per 1M output tokens
   maxContext: number;
   maxOutput: number;
+  /** Direct API provider, enables bypass of OpenRouter when the native key is set */
+  nativeProvider?: "anthropic" | "openai";
+  /** Model ID for the native provider API (differs from OpenRouter ID) */
+  nativeModelId?: string;
 }
 
 export interface TierCascade {
@@ -72,6 +76,8 @@ const MODELS: Record<string, ModelSpec> = {
     outputCostPer1M: 1.60,
     maxContext: 1048576,
     maxOutput: 32768,
+    nativeProvider: "openai",
+    nativeModelId: "gpt-4.1-mini",
   },
   "anthropic/claude-haiku-4.5": {
     id: "anthropic/claude-haiku-4.5",
@@ -81,6 +87,8 @@ const MODELS: Record<string, ModelSpec> = {
     outputCostPer1M: 5.0,
     maxContext: 200000,
     maxOutput: 8192,
+    nativeProvider: "anthropic",
+    nativeModelId: "claude-haiku-4-5-20251001",
   },
 
   // Medium tier
@@ -110,6 +118,8 @@ const MODELS: Record<string, ModelSpec> = {
     outputCostPer1M: 15.0,
     maxContext: 200000,
     maxOutput: 16384,
+    nativeProvider: "anthropic",
+    nativeModelId: "claude-sonnet-4-6",
   },
   "openai/gpt-4.1": {
     id: "openai/gpt-4.1",
@@ -119,6 +129,8 @@ const MODELS: Record<string, ModelSpec> = {
     outputCostPer1M: 8.0,
     maxContext: 1048576,
     maxOutput: 32768,
+    nativeProvider: "openai",
+    nativeModelId: "gpt-4.1",
   },
 
   // Premium tier
@@ -130,6 +142,8 @@ const MODELS: Record<string, ModelSpec> = {
     outputCostPer1M: 25.0,
     maxContext: 200000,
     maxOutput: 32768,
+    nativeProvider: "anthropic",
+    nativeModelId: "claude-opus-4-6",
   },
   "openai/o3": {
     id: "openai/o3",
@@ -139,6 +153,8 @@ const MODELS: Record<string, ModelSpec> = {
     outputCostPer1M: 40.0,
     maxContext: 200000,
     maxOutput: 100000,
+    nativeProvider: "openai",
+    nativeModelId: "o3",
   },
 };
 

@@ -140,9 +140,9 @@ export function DirectLlmConfigFields({
       />
 
       {/* Prompt template */}
-      <Field label="Prompt template" hint="Template for the heartbeat prompt. Use {{agent.id}} and {{agent.name}} placeholders.">
+      <Field label="Prompt template" hint="Template for the heartbeat prompt. Supports: {{agent.id}}, {{agent.name}}, {{taskId}}, {{wakeReason}}, {{wakeCommentId}}, {{approvalStatus}}. Use {{#field}}...{{/field}} for conditional blocks.">
         <textarea
-          className={`${inputClass} min-h-[80px] resize-y`}
+          className={`${inputClass} min-h-[100px] resize-y`}
           value={
             isCreate
               ? values!.promptTemplate ?? ""
@@ -157,7 +157,7 @@ export function DirectLlmConfigFields({
               ? set!({ promptTemplate: e.target.value })
               : mark("adapterConfig", "promptTemplate", e.target.value)
           }
-          placeholder="You are agent {{agent.id}} ({{agent.name}}). Complete your assigned Paperclip task."
+          placeholder={"You are {{agent.name}} (id: {{agent.id}}), an AI agent running inside Paperclip.\n{{#taskId}}Task: {{taskId}}{{/taskId}}\n{{#wakeReason}}Wake reason: {{wakeReason}}{{/wakeReason}}\n\nComplete your assigned task. Be concise and output only the result."}
         />
       </Field>
 
@@ -180,9 +180,9 @@ export function DirectLlmConfigFields({
       </Field>
 
       {/* Environment variables */}
-      <Field label="Environment variables" hint="KEY=VALUE per line. OPENROUTER_API_KEY is required.">
+      <Field label="Environment variables" hint="KEY=VALUE per line. At least one API key required. Direct keys (no OpenRouter markup) are preferred when set.">
         <textarea
-          className={`${inputClass} min-h-[60px] resize-y`}
+          className={`${inputClass} min-h-[80px] resize-y`}
           value={
             isCreate
               ? values!.envVars ?? ""
@@ -193,7 +193,7 @@ export function DirectLlmConfigFields({
               ? set!({ envVars: e.target.value })
               : mark("adapterConfig", "envVars", e.target.value)
           }
-          placeholder="OPENROUTER_API_KEY=sk-or-..."
+          placeholder={"OPENROUTER_API_KEY=sk-or-...   # multi-provider fallback\nANTHROPIC_API_KEY=sk-ant-...  # direct, no markup\nOPENAI_API_KEY=sk-...         # direct, no markup"}
         />
       </Field>
 
