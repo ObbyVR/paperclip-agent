@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
 import type { IssueComment, Agent } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
@@ -131,8 +132,9 @@ const TimelineList = memo(function TimelineList({
   projectId?: string | null;
   highlightCommentId?: string | null;
 }) {
+  const { t } = useTranslation();
   if (timeline.length === 0) {
-    return <p className="text-sm text-muted-foreground">No comments or runs yet.</p>;
+    return <p className="text-sm text-muted-foreground">{t("commentThread.empty")}</p>;
   }
 
   return (
@@ -192,7 +194,7 @@ const TimelineList = memo(function TimelineList({
                   </div>
                 </Link>
               ) : (
-                <div className="h-8 w-8 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center" title="You">
+                <div className="h-8 w-8 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center" title={t("commentThread.you")}>
                   <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Y</span>
                 </div>
               )}
@@ -213,7 +215,7 @@ const TimelineList = memo(function TimelineList({
                       {agentInfo?.name ?? comment.authorAgentId!.slice(0, 8)}
                     </Link>
                   ) : (
-                    <span className="text-emerald-700 dark:text-emerald-400">You</span>
+                    <span className="text-emerald-700 dark:text-emerald-400">{t("commentThread.you")}</span>
                   )}
                 </span>
                 <span className="flex items-center gap-1.5">
@@ -302,6 +304,7 @@ export function CommentThread({
   suggestedAssigneeValue,
   mentions: providedMentions,
 }: CommentThreadProps) {
+  const { t } = useTranslation();
   const [body, setBody] = useState("");
   const [reopen, setReopen] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -435,7 +438,7 @@ export function CommentThread({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Comments &amp; Runs ({timeline.length})</h3>
+        <h3 className="text-sm font-semibold">{t("commentThread.title")} ({timeline.length})</h3>
         <Button
           variant="ghost"
           size="sm"
@@ -443,7 +446,7 @@ export function CommentThread({
           onClick={() => setSortNewestFirst((p) => !p)}
         >
           <ArrowDownUp className="h-3 w-3" />
-          {sortNewestFirst ? "Recenti prima" : "Meno recenti prima"}
+          {sortNewestFirst ? t("commentThread.newestFirst") : t("commentThread.oldestFirst")}
         </Button>
       </div>
 
@@ -462,7 +465,7 @@ export function CommentThread({
           ref={editorRef}
           value={body}
           onChange={setBody}
-          placeholder="Leave a comment..."
+          placeholder={t("commentThread.placeholder")}
           mentions={mentions}
           onSubmit={handleSubmit}
           imageUploadHandler={imageUploadHandler}
@@ -483,7 +486,7 @@ export function CommentThread({
                 size="icon-sm"
                 onClick={() => attachInputRef.current?.click()}
                 disabled={attaching}
-                title="Attach image"
+                title={t("commentThread.attachImage")}
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
@@ -496,20 +499,20 @@ export function CommentThread({
               onChange={(e) => setReopen(e.target.checked)}
               className="rounded border-border"
             />
-            Re-open
+            {t("commentThread.reopen")}
           </label>
           {enableReassign && reassignOptions.length > 0 && (
             <InlineEntitySelector
               value={reassignTarget}
               options={reassignOptions}
-              placeholder="Assignee"
-              noneLabel="No assignee"
-              searchPlaceholder="Search assignees..."
-              emptyMessage="No assignees found."
+              placeholder={t("commentThread.assignee")}
+              noneLabel={t("commentThread.noAssignee")}
+              searchPlaceholder={t("commentThread.searchAssignees")}
+              emptyMessage={t("commentThread.noAssigneesFound")}
               onChange={setReassignTarget}
               className="text-xs h-8"
               renderTriggerValue={(option) => {
-                if (!option) return <span className="text-muted-foreground">Assignee</span>;
+                if (!option) return <span className="text-muted-foreground">{t("commentThread.assignee")}</span>;
                 const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
                 const agent = agentId ? agentMap?.get(agentId) : null;
                 return (
@@ -537,7 +540,7 @@ export function CommentThread({
             />
           )}
           <Button size="sm" disabled={!canSubmit} onClick={handleSubmit}>
-            {submitting ? "Posting..." : "Comment"}
+            {submitting ? t("commentThread.posting") : t("commentThread.submit")}
           </Button>
         </div>
       </div>

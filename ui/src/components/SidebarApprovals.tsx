@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { approvalsApi } from "../api/approvals";
@@ -43,6 +44,7 @@ function ApprovalQuickCard({
   onRequestRevision: (note: string) => void;
   isPending: boolean;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [note, setNote] = useState("");
   const payload = approval.payload as Record<string, unknown>;
@@ -64,7 +66,7 @@ function ApprovalQuickCard({
             <StatusBadge status={approval.status} />
             {agentName && (
               <span className="text-[11px] text-muted-foreground truncate">
-                da {agentName}
+                {t("approvalPanel.from")} {agentName}
               </span>
             )}
           </div>
@@ -112,7 +114,7 @@ function ApprovalQuickCard({
               <Textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Nota per l'agente (opzionale per approvazione, obbligatoria per rifiuto)..."
+                placeholder={t("approvalPanel.notePlaceholder")}
                 className="text-xs min-h-[60px]"
               />
               <div className="flex items-center gap-2 flex-wrap">
@@ -122,7 +124,7 @@ function ApprovalQuickCard({
                   onClick={() => { onApprove(note || undefined); setNote(""); setExpanded(false); }}
                   disabled={isPending}
                 >
-                  <Check className="h-3 w-3" /> Approva
+                  <Check className="h-3 w-3" /> {t("approvalPanel.approve")}
                 </Button>
                 <Button
                   size="sm"
@@ -132,7 +134,7 @@ function ApprovalQuickCard({
                   disabled={isPending || !note.trim()}
                   title={!note.trim() ? "Scrivi una nota per richiedere modifiche" : undefined}
                 >
-                  <RotateCcw className="h-3 w-3" /> Revisione
+                  <RotateCcw className="h-3 w-3" /> {t("approvalPanel.revision")}
                 </Button>
                 <Button
                   size="sm"
@@ -142,7 +144,7 @@ function ApprovalQuickCard({
                   disabled={isPending || !note.trim()}
                   title={!note.trim() ? "Scrivi una nota per motivare il rifiuto" : undefined}
                 >
-                  <X className="h-3 w-3" /> Rifiuta
+                  <X className="h-3 w-3" /> {t("approvalPanel.reject")}
                 </Button>
                 <Button
                   size="sm"
@@ -150,7 +152,7 @@ function ApprovalQuickCard({
                   className="h-7 text-xs"
                   onClick={() => { setExpanded(false); setNote(""); }}
                 >
-                  Annulla
+                  {t("approvalPanel.cancel")}
                 </Button>
               </div>
             </>
@@ -162,7 +164,7 @@ function ApprovalQuickCard({
                 onClick={() => onApprove()}
                 disabled={isPending}
               >
-                <Check className="h-3 w-3" /> Approva
+                <Check className="h-3 w-3" /> {t("approvalPanel.approve")}
               </Button>
               <Button
                 size="sm"
@@ -170,7 +172,7 @@ function ApprovalQuickCard({
                 className="gap-1.5 h-7 text-xs text-muted-foreground"
                 onClick={() => setExpanded(true)}
               >
-                <MessageSquare className="h-3 w-3" /> Rispondi
+                <MessageSquare className="h-3 w-3" /> {t("approvalPanel.reply")}
               </Button>
             </div>
           )}
@@ -187,6 +189,7 @@ export function ApprovalsSidePanel({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { pushToast } = useToast();
   const queryClient = useQueryClient();
@@ -286,10 +289,10 @@ export function ApprovalsSidePanel({
         <SheetHeader className="px-4 pt-4 pb-2 border-b border-border shrink-0">
           <SheetTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-amber-600" />
-            Approvazioni
+            {t("approvalPanel.title")}
             {pendingApprovals.length > 0 && (
               <span className="ml-auto rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                {pendingApprovals.length} in attesa
+                {pendingApprovals.length} {t("approvalPanel.waiting")}
               </span>
             )}
           </SheetTitle>
@@ -298,15 +301,15 @@ export function ApprovalsSidePanel({
         <ScrollArea className="flex-1 min-h-0">
           <div className="p-4 space-y-3">
             {isLoading && (
-              <p className="text-sm text-muted-foreground text-center py-8">Caricamento...</p>
+              <p className="text-sm text-muted-foreground text-center py-8">{t("approvalPanel.loading")}</p>
             )}
 
             {!isLoading && pendingApprovals.length === 0 && (
               <div className="text-center py-8 space-y-2">
                 <ShieldCheck className="h-10 w-10 text-muted-foreground/30 mx-auto" />
-                <p className="text-sm text-muted-foreground">Nessuna approvazione in attesa</p>
+                <p className="text-sm text-muted-foreground">{t("approvalPanel.empty")}</p>
                 <p className="text-xs text-muted-foreground/70">
-                  Quando un agente richiede un'approvazione, apparira qui.
+                  {t("approvalPanel.emptyDesc")}
                 </p>
               </div>
             )}
@@ -327,7 +330,7 @@ export function ApprovalsSidePanel({
               <>
                 <div className="pt-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                    Recenti
+                    {t("approvalPanel.recent")}
                   </p>
                 </div>
                 {recentResolved.map((approval) => {
@@ -357,7 +360,7 @@ export function ApprovalsSidePanel({
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => onOpenChange(false)}
           >
-            Vedi tutte le approvazioni →
+            {t("approvalPanel.viewAll")} →
           </Link>
         </div>
       </SheetContent>

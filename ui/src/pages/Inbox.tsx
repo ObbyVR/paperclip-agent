@@ -127,6 +127,7 @@ function FailedRunInboxRow({
   archiveDisabled?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const issueId = readIssueIdFromRun(run);
   const issue = issueId ? issueById.get(issueId) ?? null : null;
   const displayError = runFailureMessage(run);
@@ -208,7 +209,7 @@ function FailedRunInboxRow({
             disabled={isRetrying}
           >
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-            {isRetrying ? "Retrying…" : "Retry"}
+            {isRetrying ? t("inbox.retrying") : t("inbox.retry")}
           </Button>
           {!showUnreadSlot && (
             <button
@@ -232,7 +233,7 @@ function FailedRunInboxRow({
           disabled={isRetrying}
         >
           <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-          {isRetrying ? "Retrying…" : "Retry"}
+          {isRetrying ? t("inbox.retrying") : t("inbox.retry")}
         </Button>
         {!showUnreadSlot && (
           <button
@@ -272,6 +273,7 @@ function ApprovalInboxRow({
   archiveDisabled?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const Icon = typeIcon[approval.type] ?? defaultTypeIcon;
   const label = approvalLabel(approval.type, approval.payload as Record<string, unknown> | null);
   const showResolutionButtons =
@@ -330,7 +332,7 @@ function ApprovalInboxRow({
             </span>
             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span className="capitalize">{approvalStatusLabel(approval.status)}</span>
-              {requesterName ? <span>requested by {requesterName}</span> : null}
+              {requesterName ? <span>{t("inbox.requestedBy")} {requesterName}</span> : null}
               <span>updated {timeAgo(approval.updatedAt)}</span>
             </span>
           </span>
@@ -343,7 +345,7 @@ function ApprovalInboxRow({
               onClick={onApprove}
               disabled={isPending}
             >
-              Approve
+              {t("inbox.approve")}
             </Button>
             <Button
               variant="destructive"
@@ -352,7 +354,7 @@ function ApprovalInboxRow({
               onClick={onReject}
               disabled={isPending}
             >
-              Reject
+              {t("inbox.reject")}
             </Button>
           </div>
         ) : null}
@@ -365,7 +367,7 @@ function ApprovalInboxRow({
             onClick={onApprove}
             disabled={isPending}
           >
-            Approve
+            {t("inbox.approve")}
           </Button>
           <Button
             variant="destructive"
@@ -374,7 +376,7 @@ function ApprovalInboxRow({
             onClick={onReject}
             disabled={isPending}
           >
-            Reject
+            {t("inbox.reject")}
           </Button>
         </div>
       ) : null}
@@ -403,6 +405,7 @@ function JoinRequestInboxRow({
   archiveDisabled?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const label =
     joinRequest.requestType === "human"
       ? "Human join request"
@@ -468,7 +471,7 @@ function JoinRequestInboxRow({
             onClick={onApprove}
             disabled={isPending}
           >
-            Approve
+            {t("inbox.approve")}
           </Button>
           <Button
             variant="destructive"
@@ -477,7 +480,7 @@ function JoinRequestInboxRow({
             onClick={onReject}
             disabled={isPending}
           >
-            Reject
+            {t("inbox.reject")}
           </Button>
         </div>
       </div>
@@ -488,7 +491,7 @@ function JoinRequestInboxRow({
           onClick={onApprove}
           disabled={isPending}
         >
-          Approve
+          {t("inbox.approve")}
         </Button>
         <Button
           variant="destructive"
@@ -497,7 +500,7 @@ function JoinRequestInboxRow({
           onClick={onReject}
           disabled={isPending}
         >
-          Reject
+          {t("inbox.reject")}
         </Button>
       </div>
     </div>
@@ -991,14 +994,14 @@ export function Inbox() {
               items={[
                 {
                   value: "mine",
-                  label: "Mine",
+                  label: t("inbox.mine"),
                 },
                 {
                   value: "recent",
-                  label: "Recent",
+                  label: t("inbox.recent"),
                 },
-                { value: "unread", label: "Unread" },
-                { value: "all", label: "All" },
+                { value: "unread", label: t("inbox.unread") },
+                { value: "all", label: t("inbox.all") },
               ]}
             />
           </Tabs>
@@ -1012,7 +1015,7 @@ export function Inbox() {
               onClick={() => markAllReadMutation.mutate(unreadIssueIds)}
               disabled={markAllReadMutation.isPending}
             >
-              {markAllReadMutation.isPending ? "Marking…" : "Mark all as read"}
+              {markAllReadMutation.isPending ? t("inbox.marking") : t("inbox.markAllRead")}
             </Button>
           )}
           <Button
@@ -1023,7 +1026,7 @@ export function Inbox() {
             onClick={() => setGroupByAgent((p) => !p)}
           >
             <Group className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{groupByAgent ? "Raggruppati" : "Raggruppa per agente"}</span>
+            <span className="hidden sm:inline">{groupByAgent ? t("inbox.grouped") : t("inbox.groupByAgent")}</span>
           </Button>
         </div>
 
@@ -1077,12 +1080,12 @@ export function Inbox() {
           icon={InboxIcon}
           message={
             tab === "mine"
-              ? "Inbox zero."
+              ? t("inbox.noItems")
               : tab === "unread"
-              ? "No new inbox items."
+              ? t("inbox.noNewItems")
               : tab === "recent"
-                ? "No recent inbox items."
-                : "No inbox items match these filters."
+                ? t("inbox.noRecentItems")
+                : t("inbox.noMatchingItems")
           }
         />
       )}

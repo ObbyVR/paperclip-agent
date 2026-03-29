@@ -11,7 +11,7 @@ import type {
   CompanySkillSourceBadge,
   CompanySkillUpdateStatus,
 } from "@paperclipai/shared";
-import { companySkillsApi } from "../api/companySkills";
+import { companySkillsApi, type SkillSecurityReport } from "../api/companySkills";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useToast } from "../context/ToastContext";
@@ -52,7 +52,62 @@ import {
   RefreshCw,
   Save,
   Search,
+  Shield,
 } from "lucide-react";
+
+const RISK_STYLES: Record<SkillSecurityReport["overallRisk"], { badge: string; dot: string; label: string }> = {
+  safe:     { badge: "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400", dot: "bg-emerald-500", label: "Sicura" },
+  low:      { badge: "bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400", dot: "bg-green-500", label: "Basso" },
+  medium:   { badge: "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400", dot: "bg-amber-500", label: "Medio" },
+  high:     { badge: "bg-orange-500/10 border-orange-500/30 text-orange-700 dark:text-orange-400", dot: "bg-orange-500", label: "Alto" },
+  critical: { badge: "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400", dot: "bg-red-500", label: "Critico" },
+};
+
+function SkillSecurityBadge({ companyId, skillId }: { companyId: string; skillId: string }) {
+  const [triggered, setTriggered] = useState(false);
+  const { data: report, isFetching } = useQuery({
+    queryKey: ["skill-security", companyId, skillId],
+    queryFn: () => companySkillsApi.securityScan(companyId, skillId),
+    enabled: triggered,
+    staleTime: 60_000,
+  });
+
+  if (!triggered) {
+    return (
+      <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] gap-1 text-muted-foreground" onClick={() => setTriggered(true)}>
+        <Shield className="h-3 w-3" />
+        Scansiona
+      </Button>
+    );
+  }
+
+  if (isFetching) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground border-border">
+        <Shield className="h-3 w-3 animate-pulse" />
+        Analisi...
+      </span>
+    );
+  }
+
+  if (!report) return null;
+
+  const style = RISK_STYLES[report.overallRisk];
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium cursor-default", style.badge)}>
+          <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", style.dot)} />
+          {style.label}
+          {report.findings.length > 0 && ` · ${report.findings.length} rilevaz.`}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[280px] text-xs">
+        {report.summary}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 type SkillTreeNode = {
   name: string;
@@ -526,6 +581,7 @@ function SkillPane({
   savePending: boolean;
 }) {
   const { pushToast } = useToast();
+  const { selectedCompanyId } = useCompany();
 
   if (!detail) {
     if (loading) {
@@ -635,6 +691,12 @@ function SkillPane({
               <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Mode</span>
               <span>{detail.editable ? "Editable" : "Read only"}</span>
             </div>
+            {selectedCompanyId && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Security</span>
+                <SkillSecurityBadge companyId={selectedCompanyId} skillId={detail.id} />
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
             <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Used by</span>

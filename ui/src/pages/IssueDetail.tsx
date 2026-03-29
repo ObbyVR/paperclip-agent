@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { pickTextColorForPillBg } from "@/lib/color-contrast";
 import { Link, useLocation, useNavigate, useParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -199,6 +200,7 @@ function ActorIdentity({ evt, agentMap }: { evt: ActivityEvent; agentMap: Map<st
 }
 
 export function IssueDetail() {
+  const { t } = useTranslation();
   const { issueId } = useParams<{ issueId: string }>();
   const { selectedCompanyId } = useCompany();
   const { openPanel, closePanel, panelVisible, setPanelVisible } = usePanel();
@@ -650,7 +652,7 @@ export function IssueDetail() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (isLoading) return <p className="text-sm text-muted-foreground">Loading...</p>;
+  if (isLoading) return <p className="text-sm text-muted-foreground">{t("issueDetail.loading")}</p>;
   if (error) return <p className="text-sm text-destructive">{error.message}</p>;
   if (!issue) return null;
 
@@ -709,10 +711,10 @@ export function IssueDetail() {
         )}
       >
         <Paperclip className="h-3.5 w-3.5 mr-1.5" />
-        {uploadAttachment.isPending || importMarkdownDocument.isPending ? "Uploading..." : (
+        {uploadAttachment.isPending || importMarkdownDocument.isPending ? t("issueDetail.uploading") : (
           <>
-            <span className="hidden sm:inline">Upload attachment</span>
-            <span className="sm:hidden">Upload</span>
+            <span className="hidden sm:inline">{t("issueDetail.uploadAttachment")}</span>
+            <span className="sm:hidden">{t("common.upload")}</span>
           </>
         )}
       </Button>
@@ -745,7 +747,7 @@ export function IssueDetail() {
       {issue.hiddenAt && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           <EyeOff className="h-4 w-4 shrink-0" />
-          This issue is hidden
+          {t("issueDetail.hidden")}
         </div>
       )}
 
@@ -792,7 +794,7 @@ export function IssueDetail() {
           ) : (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground opacity-50 px-1 -mx-1 py-0.5">
               <Hexagon className="h-3 w-3 shrink-0" />
-              No project
+              {t("issueDetail.noProject")}
             </span>
           )}
 
@@ -876,7 +878,7 @@ export function IssueDetail() {
                 }}
               >
                 <EyeOff className="h-3 w-3" />
-                Hide this Issue
+                {t("issueDetail.hideIssue")}
               </button>
             </PopoverContent>
             </Popover>
@@ -895,24 +897,24 @@ export function IssueDetail() {
         <TabsList variant="line" className="w-full justify-start gap-1 -mt-1 sticky top-0 z-10 bg-background pb-1">
           <TabsTrigger value="overview" className="gap-1.5">
             <FileText className="h-3.5 w-3.5" />
-            Overview
+            {t("issueDetail.overview")}
           </TabsTrigger>
           <TabsTrigger value="comments" className="gap-1.5">
             <MessageSquare className="h-3.5 w-3.5" />
-            Comments
+            {t("issueDetail.comments")}
           </TabsTrigger>
           <TabsTrigger value="subissues" className="gap-1.5">
             <ListTree className="h-3.5 w-3.5" />
-            Sub-issues
+            {t("issueDetail.subIssues")}
           </TabsTrigger>
           <TabsTrigger value="activity" className="gap-1.5">
             <ActivityIcon className="h-3.5 w-3.5" />
-            Activity
+            {t("issueDetail.activity")}
           </TabsTrigger>
           {runResults.length > 0 && (
             <TabsTrigger value="results" className="gap-1.5">
               <FileText className="h-3.5 w-3.5" />
-              Risultati
+              {t("issueDetail.results")}
               <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                 {runResults.length}
               </span>
@@ -975,7 +977,7 @@ export function IssueDetail() {
 
         <TabsContent value="subissues">
           {childIssues.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No sub-issues.</p>
+            <p className="text-xs text-muted-foreground">{t("issueDetail.noSubIssues")}</p>
           ) : (
             <div className="border border-border rounded-lg divide-y divide-border">
               {childIssues.map((child) => (
@@ -1008,9 +1010,9 @@ export function IssueDetail() {
         <TabsContent value="activity">
           {linkedRuns && linkedRuns.length > 0 && (
             <div className="mb-3 px-3 py-2 rounded-lg border border-border">
-              <div className="text-sm font-medium text-muted-foreground mb-1">Cost Summary</div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">{t("issueDetail.costSummary")}</div>
               {!issueCostSummary.hasCost && !issueCostSummary.hasTokens ? (
-                <div className="text-xs text-muted-foreground">No cost data yet.</div>
+                <div className="text-xs text-muted-foreground">{t("issueDetail.noCostData")}</div>
               ) : (
                 <div className="flex flex-wrap gap-3 text-xs text-muted-foreground tabular-nums">
                   {issueCostSummary.hasCost && (
@@ -1031,7 +1033,7 @@ export function IssueDetail() {
             </div>
           )}
           {!activity || activity.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No activity yet.</p>
+            <p className="text-xs text-muted-foreground">{t("issueDetail.noActivity")}</p>
           ) : (
             <div className="space-y-1.5">
               {activity.slice(0, 20).map((evt) => (
@@ -1069,7 +1071,7 @@ export function IssueDetail() {
                           <Button
                             variant="ghost"
                             size="icon-xs"
-                            title="Apri in nuova finestra"
+                            title={t("issueDetail.openNewWindow")}
                             onClick={() => {
                               const w = window.open("", "_blank");
                               if (w) { w.document.write(htmlContent); w.document.close(); }
@@ -1080,7 +1082,7 @@ export function IssueDetail() {
                           <Button
                             variant="ghost"
                             size="icon-xs"
-                            title="Scarica HTML"
+                            title={t("issueDetail.downloadHtml")}
                             onClick={() => {
                               const blob = new Blob([htmlContent], { type: "text/html" });
                               const url = URL.createObjectURL(blob);
