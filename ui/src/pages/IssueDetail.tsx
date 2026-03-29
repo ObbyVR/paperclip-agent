@@ -17,12 +17,16 @@ import { assigneeValueFromSelection, suggestedCommentAssigneeValue } from "../li
 import { queryKeys } from "../lib/queryKeys";
 import { readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
 import { useProjectOrder } from "../hooks/useProjectOrder";
-import { relativeTime, cn, formatTokens, visibleRunCostUsd } from "../lib/utils";
+import { relativeTime, cn, visibleRunCostUsd } from "../lib/utils";
+import { estimateRunCostEur } from "../lib/modelPricing";
 import { InlineEditor } from "../components/InlineEditor";
 import { CommentThread } from "../components/CommentThread";
 import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
 import { IssueProperties } from "../components/IssueProperties";
 import { IssueWorkspaceCard } from "../components/IssueWorkspaceCard";
+import { IssueActivityTab } from "../components/IssueActivityTab";
+import { IssueSubIssuesTab } from "../components/IssueSubIssuesTab";
+import { IssueResultsTab } from "../components/IssueResultsTab";
 import { LiveRunWidget } from "../components/LiveRunWidget";
 import type { MentionOption } from "../components/MarkdownEditor";
 import { ScrollToBottom } from "../components/ScrollToBottom";
@@ -45,8 +49,6 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
-  Download,
-  ExternalLink,
   EyeOff,
   FileText,
   Hexagon,
@@ -58,7 +60,6 @@ import {
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
-import type { ActivityEvent } from "@paperclipai/shared";
 import type { Agent, IssueAttachment } from "@paperclipai/shared";
 
 type CommentReassignment = {
@@ -66,34 +67,6 @@ type CommentReassignment = {
   assigneeUserId: string | null;
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  "issue.created": "created the issue",
-  "issue.updated": "updated the issue",
-  "issue.checked_out": "checked out the issue",
-  "issue.released": "released the issue",
-  "issue.comment_added": "added a comment",
-  "issue.attachment_added": "added an attachment",
-  "issue.attachment_removed": "removed an attachment",
-  "issue.document_created": "created a document",
-  "issue.document_updated": "updated a document",
-  "issue.document_deleted": "deleted a document",
-  "issue.deleted": "deleted the issue",
-  "agent.created": "created an agent",
-  "agent.updated": "updated the agent",
-  "agent.paused": "paused the agent",
-  "agent.resumed": "resumed the agent",
-  "agent.terminated": "terminated the agent",
-  "heartbeat.invoked": "invoked a heartbeat",
-  "heartbeat.cancelled": "cancelled a heartbeat",
-  "approval.created": "requested approval",
-  "approval.approved": "approved",
-  "approval.rejected": "rejected",
-};
-
-function humanizeValue(value: unknown): string {
-  if (typeof value !== "string") return String(value ?? "none");
-  return value.replace(/_/g, " ");
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
@@ -144,60 +117,6 @@ function titleizeFilename(input: string) {
     .join(" ");
 }
 
-function formatAction(action: string, details?: Record<string, unknown> | null): string {
-  if (action === "issue.updated" && details) {
-    const previous = (details._previous ?? {}) as Record<string, unknown>;
-    const parts: string[] = [];
-
-    if (details.status !== undefined) {
-      const from = previous.status;
-      parts.push(
-        from
-          ? `changed the status from ${humanizeValue(from)} to ${humanizeValue(details.status)}`
-          : `changed the status to ${humanizeValue(details.status)}`
-      );
-    }
-    if (details.priority !== undefined) {
-      const from = previous.priority;
-      parts.push(
-        from
-          ? `changed the priority from ${humanizeValue(from)} to ${humanizeValue(details.priority)}`
-          : `changed the priority to ${humanizeValue(details.priority)}`
-      );
-    }
-    if (details.assigneeAgentId !== undefined || details.assigneeUserId !== undefined) {
-      parts.push(
-        details.assigneeAgentId || details.assigneeUserId
-          ? "assigned the issue"
-          : "unassigned the issue",
-      );
-    }
-    if (details.title !== undefined) parts.push("updated the title");
-    if (details.description !== undefined) parts.push("updated the description");
-
-    if (parts.length > 0) return parts.join(", ");
-  }
-  if (
-    (action === "issue.document_created" || action === "issue.document_updated" || action === "issue.document_deleted") &&
-    details
-  ) {
-    const key = typeof details.key === "string" ? details.key : "document";
-    const title = typeof details.title === "string" && details.title ? ` (${details.title})` : "";
-    return `${ACTION_LABELS[action] ?? action} ${key}${title}`;
-  }
-  return ACTION_LABELS[action] ?? action.replace(/[._]/g, " ");
-}
-
-function ActorIdentity({ evt, agentMap }: { evt: ActivityEvent; agentMap: Map<string, Agent> }) {
-  const id = evt.actorId;
-  if (evt.actorType === "agent") {
-    const agent = agentMap.get(id);
-    return <Identity name={agent?.name ?? id.slice(0, 8)} size="sm" />;
-  }
-  if (evt.actorType === "system") return <Identity name="System" size="sm" />;
-  if (evt.actorType === "user") return <Identity name="Board" size="sm" />;
-  return <Identity name={id || "Unknown"} size="sm" />;
-}
 
 export function IssueDetail() {
   const { t } = useTranslation();
@@ -232,12 +151,14 @@ export function IssueDetail() {
     queryKey: queryKeys.issues.comments(issueId!),
     queryFn: () => issuesApi.listComments(issueId!),
     enabled: !!issueId,
+    refetchInterval: 5000,
   });
 
   const { data: activity } = useQuery({
     queryKey: queryKeys.issues.activity(issueId!),
     queryFn: () => activityApi.forIssue(issueId!),
     enabled: !!issueId,
+    refetchInterval: 10000,
   });
 
   const { data: linkedRuns } = useQuery({
@@ -424,6 +345,9 @@ export function IssueDetail() {
     let cost = 0;
     let hasCost = false;
     let hasTokens = false;
+    let estimatedEurTotal = 0;
+    let canEstimate = true;
+    const modelSet = new Set<string>();
 
     for (const run of linkedRuns ?? []) {
       const usage = asRecord(run.usageJson);
@@ -437,8 +361,17 @@ export function IssueDetail() {
         "cache_read_input_tokens",
       );
       const runCost = visibleRunCostUsd(usage, result);
+      const runModel = typeof (result?.model ?? usage?.model) === "string"
+        ? String(result?.model ?? usage?.model)
+        : "unknown";
       if (runCost > 0) hasCost = true;
-      if (runInput + runOutput + runCached > 0) hasTokens = true;
+      if (runInput + runOutput + runCached > 0) {
+        hasTokens = true;
+        if (runModel !== "unknown") modelSet.add(runModel);
+        const eur = estimateRunCostEur(runModel, runInput, runOutput, runCached);
+        if (eur === null) canEstimate = false;
+        else estimatedEurTotal += eur;
+      }
       input += runInput;
       output += runOutput;
       cached += runCached;
@@ -453,6 +386,8 @@ export function IssueDetail() {
       totalTokens: input + output,
       hasCost,
       hasTokens,
+      estimatedEur: !hasCost && canEstimate && hasTokens ? estimatedEurTotal : null,
+      models: [...modelSet],
     };
   }, [linkedRuns]);
 
@@ -465,6 +400,9 @@ export function IssueDetail() {
       model: string;
       costUsd: number;
       finishedAt: string;
+      inputTokens: number;
+      outputTokens: number;
+      cachedTokens: number;
     }> = [];
     for (const run of linkedRuns ?? []) {
       if (run.status !== "succeeded") continue;
@@ -481,6 +419,9 @@ export function IssueDetail() {
         model: typeof (result.model ?? usage?.model) === "string" ? (result.model ?? usage?.model) as string : "unknown",
         costUsd: visibleRunCostUsd(usage, result),
         finishedAt: run.finishedAt ?? run.createdAt,
+        inputTokens: usageNumber(usage, "inputTokens", "input_tokens"),
+        outputTokens: usageNumber(usage, "outputTokens", "output_tokens"),
+        cachedTokens: usageNumber(usage, "cachedInputTokens", "cached_input_tokens", "cache_read_input_tokens"),
       });
     }
     return results;
@@ -552,6 +493,15 @@ export function IssueDetail() {
       invalidateIssue();
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId!) });
     },
+  });
+
+  const wakeupAgent = useMutation({
+    mutationFn: (agentId: string) =>
+      agentsApi.wakeup(
+        agentId,
+        { source: "on_demand", triggerDetail: "ping", reason: "Founder comment" },
+        selectedCompanyId ?? undefined,
+      ),
   });
 
   const uploadAttachment = useMutation({
@@ -957,6 +907,9 @@ export function IssueDetail() {
             currentAssigneeValue={actualAssigneeValue}
             suggestedAssigneeValue={suggestedAssigneeValue}
             mentions={mentionOptions}
+            assignedAgentId={issue.assigneeAgentId ?? null}
+            assignedAgentName={issue.assigneeAgentId ? (agentMap.get(issue.assigneeAgentId)?.name ?? null) : null}
+            onWakeupAgent={async (agentId) => { await wakeupAgent.mutateAsync(agentId); }}
             onAdd={async (body, reopen, reassignment) => {
               if (reassignment) {
                 await addCommentAndReassign.mutateAsync({ body, reopen, reassignment });
@@ -975,152 +928,16 @@ export function IssueDetail() {
           />
         </TabsContent>
 
-        <TabsContent value="subissues">
-          {childIssues.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("issueDetail.noSubIssues")}</p>
-          ) : (
-            <div className="border border-border rounded-lg divide-y divide-border">
-              {childIssues.map((child) => (
-                <Link
-                  key={child.id}
-                  to={`/issues/${child.identifier ?? child.id}`}
-                  state={location.state}
-                  className="flex items-center justify-between px-3 py-2 text-sm hover:bg-accent/20 transition-colors"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <StatusIcon status={child.status} />
-                    <PriorityIcon priority={child.priority} />
-                    <span className="font-mono text-muted-foreground shrink-0">
-                      {child.identifier ?? child.id.slice(0, 8)}
-                    </span>
-                    <span className="truncate">{child.title}</span>
-                  </div>
-                  {child.assigneeAgentId && (() => {
-                    const name = agentMap.get(child.assigneeAgentId)?.name;
-                    return name
-                      ? <Identity name={name} size="sm" />
-                      : <span className="text-muted-foreground font-mono">{child.assigneeAgentId.slice(0, 8)}</span>;
-                  })()}
-                </Link>
-              ))}
-            </div>
-          )}
-        </TabsContent>
+        <IssueSubIssuesTab childIssues={childIssues} agentMap={agentMap} />
 
-        <TabsContent value="activity">
-          {linkedRuns && linkedRuns.length > 0 && (
-            <div className="mb-3 px-3 py-2 rounded-lg border border-border">
-              <div className="text-sm font-medium text-muted-foreground mb-1">{t("issueDetail.costSummary")}</div>
-              {!issueCostSummary.hasCost && !issueCostSummary.hasTokens ? (
-                <div className="text-xs text-muted-foreground">{t("issueDetail.noCostData")}</div>
-              ) : (
-                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground tabular-nums">
-                  {issueCostSummary.hasCost && (
-                    <span className="font-medium text-foreground">
-                      ${issueCostSummary.cost.toFixed(4)}
-                    </span>
-                  )}
-                  {issueCostSummary.hasTokens && (
-                    <span>
-                      Tokens {formatTokens(issueCostSummary.totalTokens)}
-                      {issueCostSummary.cached > 0
-                        ? ` (in ${formatTokens(issueCostSummary.input)}, out ${formatTokens(issueCostSummary.output)}, cached ${formatTokens(issueCostSummary.cached)})`
-                        : ` (in ${formatTokens(issueCostSummary.input)}, out ${formatTokens(issueCostSummary.output)})`}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          {!activity || activity.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("issueDetail.noActivity")}</p>
-          ) : (
-            <div className="space-y-1.5">
-              {activity.slice(0, 20).map((evt) => (
-                <div key={evt.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <ActorIdentity evt={evt} agentMap={agentMap} />
-                  <span>{formatAction(evt.action, evt.details)}</span>
-                  <span className="ml-auto shrink-0">{relativeTime(evt.createdAt)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
+        <IssueActivityTab
+          activity={activity}
+          hasLinkedRuns={!!(linkedRuns && linkedRuns.length > 0)}
+          issueCostSummary={issueCostSummary}
+          agentMap={agentMap}
+        />
 
-        {runResults.length > 0 && (
-          <TabsContent value="results">
-            <div className="space-y-4">
-              {runResults.map((r) => {
-                const isHtml = r.content.startsWith("```html") || r.content.startsWith("<!DOCTYPE") || r.content.startsWith("<html");
-                const htmlContent = isHtml ? r.content.replace(/^```html\n?/, "").replace(/\n?```$/, "") : null;
-                return (
-                <div key={r.runId} className="border border-border rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-medium">{r.agentName}</span>
-                      <span className="text-muted-foreground">·</span>
-                      <span className="text-muted-foreground font-mono text-xs">{r.model}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {r.costUsd > 0 && (
-                        <span className="tabular-nums">${r.costUsd.toFixed(4)}</span>
-                      )}
-                      <span>{relativeTime(r.finishedAt)}</span>
-                      {htmlContent && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            title={t("issueDetail.openNewWindow")}
-                            onClick={() => {
-                              const w = window.open("", "_blank");
-                              if (w) { w.document.write(htmlContent); w.document.close(); }
-                            }}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            title={t("issueDetail.downloadHtml")}
-                            onClick={() => {
-                              const blob = new Blob([htmlContent], { type: "text/html" });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = `${r.agentName.replace(/\s+/g, "-").toLowerCase()}-result.html`;
-                              a.click();
-                              URL.revokeObjectURL(url);
-                            }}
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="px-3 py-3 text-sm">
-                    {htmlContent ? (
-                      <div className="border rounded bg-background">
-                        <iframe
-                          srcDoc={htmlContent}
-                          className="w-full h-[500px] rounded"
-                          sandbox="allow-scripts"
-                          title={`Preview: ${r.agentName}`}
-                        />
-                      </div>
-                    ) : (
-                      <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                        {r.content}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                );
-              })}
-            </div>
-          </TabsContent>
-        )}
+        <IssueResultsTab runResults={runResults} />
 
         {activePluginTab && (
           <TabsContent value={activePluginTab.value}>

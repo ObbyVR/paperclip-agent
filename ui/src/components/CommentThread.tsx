@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
 import type { IssueComment, Agent } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
-import { ArrowDownUp, Check, Copy, Paperclip } from "lucide-react";
+import { ArrowDownUp, Check, Copy, Paperclip, SendHorizonal } from "lucide-react";
 import { Identity } from "./Identity";
 import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySelector";
 import { MarkdownBody } from "./MarkdownBody";
@@ -49,6 +49,10 @@ interface CommentThreadProps {
   currentAssigneeValue?: string;
   suggestedAssigneeValue?: string;
   mentions?: MentionOption[];
+  /** If set, shows a "wake up agent after send" toggle and calls this after a comment is posted. */
+  assignedAgentId?: string | null;
+  assignedAgentName?: string | null;
+  onWakeupAgent?: (agentId: string) => Promise<void>;
 }
 
 const DRAFT_DEBOUNCE_MS = 800;
@@ -303,16 +307,22 @@ export function CommentThread({
   currentAssigneeValue = "",
   suggestedAssigneeValue,
   mentions: providedMentions,
+  assignedAgentId,
+  assignedAgentName,
+  onWakeupAgent,
 }: CommentThreadProps) {
   const { t } = useTranslation();
   const [body, setBody] = useState("");
   const [reopen, setReopen] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [wakeupAfterSend, setWakeupAfterSend] = useState(true);
+  const [wokenUp, setWokenUp] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const effectiveSuggestedAssigneeValue = suggestedAssigneeValue ?? currentAssigneeValue;
   const [reassignTarget, setReassignTarget] = useState(effectiveSuggestedAssigneeValue);
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
-  const [sortNewestFirst, setSortNewestFirst] = useState(true);
+  const [sortNewestFirst, setSortNewestFirst] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditorRef>(null);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -378,6 +388,12 @@ export function CommentThread({
     setReassignTarget(effectiveSuggestedAssigneeValue);
   }, [effectiveSuggestedAssigneeValue]);
 
+  // Auto-scroll to latest message when timeline changes (only when sorting oldest-first)
+  useEffect(() => {
+    if (sortNewestFirst) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [timeline.length, sortNewestFirst]);
+
   // Scroll to comment when URL hash matches #comment-{id}
   useEffect(() => {
     const hash = location.hash;
@@ -409,6 +425,13 @@ export function CommentThread({
       if (draftKey) clearDraft(draftKey);
       setReopen(true);
       setReassignTarget(effectiveSuggestedAssigneeValue);
+      if (wakeupAfterSend && assignedAgentId && onWakeupAgent) {
+        try {
+          await onWakeupAgent(assignedAgentId);
+          setWokenUp(true);
+          setTimeout(() => setWokenUp(false), 3000);
+        } catch { /* non-critical */ }
+      }
     } finally {
       setSubmitting(false);
     }
@@ -436,7 +459,8 @@ export function CommentThread({
   const canSubmit = !submitting && !!body.trim();
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-3">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">{t("commentThread.title")} ({timeline.length})</h3>
         <Button
@@ -450,98 +474,136 @@ export function CommentThread({
         </Button>
       </div>
 
-      <TimelineList
-        timeline={timeline}
-        agentMap={agentMap}
-        companyId={companyId}
-        projectId={projectId}
-        highlightCommentId={highlightCommentId}
-      />
-
-      {liveRunSlot}
-
-      <div className="space-y-2">
-        <MarkdownEditor
-          ref={editorRef}
-          value={body}
-          onChange={setBody}
-          placeholder={t("commentThread.placeholder")}
-          mentions={mentions}
-          onSubmit={handleSubmit}
-          imageUploadHandler={imageUploadHandler}
-          contentClassName="min-h-[60px] text-sm"
+      {/* Scrollable message list */}
+      <div className="max-h-[480px] overflow-y-auto pr-1 space-y-4">
+        <TimelineList
+          timeline={timeline}
+          agentMap={agentMap}
+          companyId={companyId}
+          projectId={projectId}
+          highlightCommentId={highlightCommentId}
         />
-        <div className="flex items-center justify-end gap-3">
-          {(imageUploadHandler || onAttachImage) && (
-            <div className="mr-auto flex items-center gap-3">
+        {liveRunSlot}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Compact chat composer — always visible below messages */}
+      <div className="sticky bottom-0 bg-background pt-2">
+        <div className="rounded-xl border border-border bg-muted/30 focus-within:border-primary/50 focus-within:bg-background transition-colors">
+          <MarkdownEditor
+            ref={editorRef}
+            value={body}
+            onChange={setBody}
+            placeholder={t("commentThread.placeholder")}
+            mentions={mentions}
+            onSubmit={handleSubmit}
+            imageUploadHandler={imageUploadHandler}
+            contentClassName="min-h-[44px] max-h-[160px] text-sm px-1"
+          />
+          <div className="flex items-center gap-2 px-3 pb-2 pt-1">
+            {/* Left: attach */}
+            {(imageUploadHandler || onAttachImage) && (
+              <>
+                <input
+                  ref={attachInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleAttachFile}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => attachInputRef.current?.click()}
+                  disabled={attaching}
+                  title={t("commentThread.attachImage")}
+                  className="text-muted-foreground"
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+
+            {/* Toggles */}
+            <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer select-none">
               <input
-                ref={attachInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                className="hidden"
-                onChange={handleAttachFile}
+                type="checkbox"
+                checked={reopen}
+                onChange={(e) => setReopen(e.target.checked)}
+                className="rounded border-border h-3 w-3"
               />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => attachInputRef.current?.click()}
-                disabled={attaching}
-                title={t("commentThread.attachImage")}
-              >
-                <Paperclip className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={reopen}
-              onChange={(e) => setReopen(e.target.checked)}
-              className="rounded border-border"
-            />
-            {t("commentThread.reopen")}
-          </label>
-          {enableReassign && reassignOptions.length > 0 && (
-            <InlineEntitySelector
-              value={reassignTarget}
-              options={reassignOptions}
-              placeholder={t("commentThread.assignee")}
-              noneLabel={t("commentThread.noAssignee")}
-              searchPlaceholder={t("commentThread.searchAssignees")}
-              emptyMessage={t("commentThread.noAssigneesFound")}
-              onChange={setReassignTarget}
-              className="text-xs h-8"
-              renderTriggerValue={(option) => {
-                if (!option) return <span className="text-muted-foreground">{t("commentThread.assignee")}</span>;
-                const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
-                const agent = agentId ? agentMap?.get(agentId) : null;
-                return (
-                  <>
-                    {agent ? (
-                      <AgentIcon icon={agent.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    ) : null}
-                    <span className="truncate">{option.label}</span>
-                  </>
-                );
-              }}
-              renderOption={(option) => {
-                if (!option.id) return <span className="truncate">{option.label}</span>;
-                const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
-                const agent = agentId ? agentMap?.get(agentId) : null;
-                return (
-                  <>
-                    {agent ? (
-                      <AgentIcon icon={agent.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    ) : null}
-                    <span className="truncate">{option.label}</span>
-                  </>
-                );
-              }}
-            />
-          )}
-          <Button size="sm" disabled={!canSubmit} onClick={handleSubmit}>
-            {submitting ? t("commentThread.posting") : t("commentThread.submit")}
-          </Button>
+              {t("commentThread.reopen")}
+            </label>
+
+            {assignedAgentId && onWakeupAgent && (
+              <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={wakeupAfterSend}
+                  onChange={(e) => setWakeupAfterSend(e.target.checked)}
+                  className="rounded border-border h-3 w-3"
+                />
+                <span className={wakeupAfterSend ? "text-primary font-medium" : "text-muted-foreground"}>
+                  {assignedAgentName
+                    ? t("commentThread.wakeupAgent", { name: assignedAgentName })
+                    : t("commentThread.wakeupAgentGeneric")}
+                </span>
+              </label>
+            )}
+
+            {enableReassign && reassignOptions.length > 0 && (
+              <InlineEntitySelector
+                value={reassignTarget}
+                options={reassignOptions}
+                placeholder={t("commentThread.assignee")}
+                noneLabel={t("commentThread.noAssignee")}
+                searchPlaceholder={t("commentThread.searchAssignees")}
+                emptyMessage={t("commentThread.noAssigneesFound")}
+                onChange={setReassignTarget}
+                className="text-xs h-7"
+                renderTriggerValue={(option) => {
+                  if (!option) return <span className="text-muted-foreground">{t("commentThread.assignee")}</span>;
+                  const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
+                  const agent = agentId ? agentMap?.get(agentId) : null;
+                  return (
+                    <>
+                      {agent ? <AgentIcon icon={agent.icon} className="h-3 w-3 shrink-0 text-muted-foreground" /> : null}
+                      <span className="truncate">{option.label}</span>
+                    </>
+                  );
+                }}
+                renderOption={(option) => {
+                  if (!option.id) return <span className="truncate">{option.label}</span>;
+                  const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
+                  const agent = agentId ? agentMap?.get(agentId) : null;
+                  return (
+                    <>
+                      {agent ? <AgentIcon icon={agent.icon} className="h-3 w-3 shrink-0 text-muted-foreground" /> : null}
+                      <span className="truncate">{option.label}</span>
+                    </>
+                  );
+                }}
+              />
+            )}
+
+            {/* Wakeup feedback */}
+            {wokenUp && (
+              <span className="text-xs text-primary font-medium animate-in fade-in duration-300">
+                ⚡ {t("commentThread.woken")}
+              </span>
+            )}
+
+            {/* Send button — right-aligned */}
+            <Button
+              size="icon-sm"
+              className="ml-auto h-7 w-7 rounded-lg"
+              disabled={!canSubmit}
+              onClick={handleSubmit}
+              title={submitting ? t("commentThread.posting") : t("commentThread.submit")}
+            >
+              <SendHorizonal className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
