@@ -132,9 +132,9 @@ export function DirectLlmConfigFields({
             ? true
             : Boolean(eff("adapterConfig", "fallbackEnabled", config.fallbackEnabled ?? true))
         }
-        onCheckedChange={(v) =>
+        onChange={(v) =>
           isCreate
-            ? {} // default true
+            ? undefined // default true
             : mark("adapterConfig", "fallbackEnabled", v)
         }
       />

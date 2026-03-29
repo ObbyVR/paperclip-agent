@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Moon, Settings, Sun } from "lucide-react";
+import { BookOpen, Globe, Moon, ShieldCheck, Settings, Sun } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { LANG_STORAGE_KEY } from "../i18n";
 import { Link, Outlet, useLocation, useNavigate, useParams } from "@/lib/router";
 import { CompanyRail } from "./CompanyRail";
 import { Sidebar } from "./Sidebar";
@@ -13,6 +15,7 @@ import { NewProjectDialog } from "./NewProjectDialog";
 import { NewGoalDialog } from "./NewGoalDialog";
 import { NewAgentDialog } from "./NewAgentDialog";
 import { ToastViewport } from "./ToastViewport";
+import { ApprovalsSidePanel } from "./SidebarApprovals";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { WorktreeBanner } from "./WorktreeBanner";
 import { DevRestartBanner } from "./DevRestartBanner";
@@ -47,6 +50,13 @@ function readRememberedInstanceSettingsPath(): string {
 }
 
 export function Layout() {
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.language;
+  const toggleLang = useCallback(() => {
+    const next = currentLang === "it" ? "en" : "it";
+    i18n.changeLanguage(next);
+    try { localStorage.setItem(LANG_STORAGE_KEY, next); } catch {}
+  }, [currentLang, i18n]);
   const { sidebarOpen, setSidebarOpen, toggleSidebar, isMobile } = useSidebar();
   const { openNewIssue, openOnboarding } = useDialog();
   const { togglePanelVisible } = usePanel();
@@ -67,6 +77,14 @@ export function Layout() {
   const lastMainScrollTop = useRef(0);
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const [instanceSettingsTarget, setInstanceSettingsTarget] = useState<string>(() => readRememberedInstanceSettingsPath());
+  const [approvalsPanelOpen, setApprovalsPanelOpen] = useState(false);
+
+  // Listen for custom event to open approvals panel from sidebar
+  useEffect(() => {
+    const handler = () => setApprovalsPanelOpen(true);
+    window.addEventListener("paperclip:open-approvals-panel", handler);
+    return () => window.removeEventListener("paperclip:open-approvals-panel", handler);
+  }, []);
   const nextTheme = theme === "dark" ? "light" : "dark";
   const matchedCompany = useMemo(() => {
     if (!companyPrefix) return null;
@@ -269,7 +287,7 @@ export function Layout() {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[200] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        Skip to Main Content
+        {t("nav.skipToMain")}
       </a>
       <WorktreeBanner />
       <DevRestartBanner devServer={health?.devServer} />
@@ -303,7 +321,7 @@ export function Layout() {
                   className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors text-foreground/80 hover:bg-accent/50 hover:text-foreground flex-1 min-w-0"
                 >
                   <BookOpen className="h-4 w-4 shrink-0" />
-                  <span className="truncate">Documentation</span>
+                  <span className="truncate">{t("nav.documentation")}</span>
                 </a>
                 {health?.version && (
                   <Tooltip>
@@ -316,8 +334,8 @@ export function Layout() {
                 <Button variant="ghost" size="icon-sm" className="text-muted-foreground shrink-0" asChild>
                   <Link
                     to={instanceSettingsTarget}
-                    aria-label="Instance settings"
-                    title="Instance settings"
+                    aria-label={t("nav.instanceSettings")}
+                    title={t("nav.instanceSettings")}
                     onClick={() => {
                       if (isMobile) setSidebarOpen(false);
                     }}
@@ -331,10 +349,21 @@ export function Layout() {
                   size="icon-sm"
                   className="text-muted-foreground shrink-0"
                   onClick={toggleTheme}
-                  aria-label={`Switch to ${nextTheme} mode`}
-                  title={`Switch to ${nextTheme} mode`}
+                  aria-label={nextTheme === "dark" ? t("nav.switchToDark") : t("nav.switchToLight")}
+                  title={nextTheme === "dark" ? t("nav.switchToDark") : t("nav.switchToLight")}
                 >
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground shrink-0 text-xs font-bold"
+                  onClick={toggleLang}
+                  aria-label={t("lang.switchLang")}
+                  title={t("lang.switchLang")}
+                >
+                  {currentLang === "it" ? "EN" : "IT"}
                 </Button>
               </div>
             </div>
@@ -361,7 +390,7 @@ export function Layout() {
                   className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors text-foreground/80 hover:bg-accent/50 hover:text-foreground flex-1 min-w-0"
                 >
                   <BookOpen className="h-4 w-4 shrink-0" />
-                  <span className="truncate">Documentation</span>
+                  <span className="truncate">{t("nav.documentation")}</span>
                 </a>
                 {health?.version && (
                   <Tooltip>
@@ -374,8 +403,8 @@ export function Layout() {
                 <Button variant="ghost" size="icon-sm" className="text-muted-foreground shrink-0" asChild>
                   <Link
                     to={instanceSettingsTarget}
-                    aria-label="Instance settings"
-                    title="Instance settings"
+                    aria-label={t("nav.instanceSettings")}
+                    title={t("nav.instanceSettings")}
                     onClick={() => {
                       if (isMobile) setSidebarOpen(false);
                     }}
@@ -389,10 +418,21 @@ export function Layout() {
                   size="icon-sm"
                   className="text-muted-foreground shrink-0"
                   onClick={toggleTheme}
-                  aria-label={`Switch to ${nextTheme} mode`}
-                  title={`Switch to ${nextTheme} mode`}
+                  aria-label={nextTheme === "dark" ? t("nav.switchToDark") : t("nav.switchToLight")}
+                  title={nextTheme === "dark" ? t("nav.switchToDark") : t("nav.switchToLight")}
                 >
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground shrink-0 text-xs font-bold"
+                  onClick={toggleLang}
+                  aria-label={t("lang.switchLang")}
+                  title={t("lang.switchLang")}
+                >
+                  {currentLang === "it" ? "EN" : "IT"}
                 </Button>
               </div>
             </div>
@@ -435,6 +475,7 @@ export function Layout() {
       <NewProjectDialog />
       <NewGoalDialog />
       <NewAgentDialog />
+      <ApprovalsSidePanel open={approvalsPanelOpen} onOpenChange={setApprovalsPanelOpen} />
       <ToastViewport />
     </div>
   );

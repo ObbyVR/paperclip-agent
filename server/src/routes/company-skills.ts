@@ -7,7 +7,8 @@ import {
   companySkillProjectScanRequestSchema,
 } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
-import { accessService, agentService, companySkillService, logActivity } from "../services/index.js";
+import { accessService, agentService, companySkillService, logActivity, analyzeSkillSecurity } from "../services/index.js";
+import type { CompanySkillTrustLevel } from "@paperclipai/shared";
 import { forbidden } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 
@@ -220,6 +221,27 @@ export function companySkillRoutes(db: Db) {
       res.json(result);
     },
   );
+
+  // ─── Security scan endpoint ────────────────────────────────────────
+  router.get("/companies/:companyId/skills/:skillId/security", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const skillId = req.params.skillId as string;
+    assertCompanyAccess(req, companyId);
+    const detail = await svc.detail(companyId, skillId);
+    if (!detail) {
+      res.status(404).json({ error: "Skill not found" });
+      return;
+    }
+    // Read the main SKILL.md content
+    const fileResult = await svc.readFile(companyId, skillId, "SKILL.md");
+    const content = fileResult?.content ?? "";
+    const report = analyzeSkillSecurity(
+      detail.key,
+      content,
+      (detail.trustLevel ?? "markdown_only") as CompanySkillTrustLevel,
+    );
+    res.json(report);
+  });
 
   router.delete("/companies/:companyId/skills/:skillId", async (req, res) => {
     const companyId = req.params.companyId as string;

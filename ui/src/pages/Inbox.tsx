@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { approvalsApi } from "../api/approvals";
@@ -35,6 +36,7 @@ import {
 import {
   Inbox as InboxIcon,
   AlertTriangle,
+  Group,
   XCircle,
   X,
   RotateCcw,
@@ -503,6 +505,7 @@ function JoinRequestInboxRow({
 }
 
 export function Inbox() {
+  const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const navigate = useNavigate();
@@ -511,6 +514,7 @@ export function Inbox() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [allCategoryFilter, setAllCategoryFilter] = useState<InboxCategoryFilter>("everything");
   const [allApprovalFilter, setAllApprovalFilter] = useState<InboxApprovalFilter>("all");
+  const [groupByAgent, setGroupByAgent] = useState(false);
   const { dismissed, dismiss } = useDismissedInboxItems();
   const { readItems, markRead: markItemRead } = useReadInboxItems();
 
@@ -535,7 +539,7 @@ export function Inbox() {
   });
 
   useEffect(() => {
-    setBreadcrumbs([{ label: "Inbox" }]);
+    setBreadcrumbs([{ label: t("inbox.title") }]);
   }, [setBreadcrumbs]);
 
   useEffect(() => {
@@ -697,6 +701,33 @@ export function Inbox() {
     if (!id) return null;
     return agentById.get(id) ?? null;
   };
+
+  // Group work items by agent when groupByAgent is active
+  const groupedWorkItems = useMemo(() => {
+    if (!groupByAgent) return null;
+    const groups = new Map<string, typeof workItemsToRender>();
+    for (const item of workItemsToRender) {
+      let agentId = "other";
+      let agentLabel = "Other";
+      if (item.kind === "issue" && item.issue.assigneeAgentId) {
+        agentId = item.issue.assigneeAgentId;
+        agentLabel = agentById.get(agentId) ?? agentId.slice(0, 8);
+      } else if (item.kind === "failed_run") {
+        agentId = item.run.agentId;
+        agentLabel = agentById.get(agentId) ?? agentId.slice(0, 8);
+      } else if (item.kind === "approval" && item.approval.requestedByAgentId) {
+        agentId = item.approval.requestedByAgentId;
+        agentLabel = agentById.get(agentId) ?? agentId.slice(0, 8);
+      }
+      const key = `${agentId}|||${agentLabel}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(item);
+    }
+    return Array.from(groups.entries()).map(([key, items]) => ({
+      agentLabel: key.split("|||")[1],
+      items,
+    }));
+  }, [groupByAgent, workItemsToRender, agentById]);
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => approvalsApi.approve(id),
@@ -909,7 +940,7 @@ export function Inbox() {
   };
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={InboxIcon} message="Select a company to view inbox." />;
+    return <EmptyState icon={InboxIcon} message={t("inbox.selectCompany")} />;
   }
 
   const hasRunFailures = failedRuns.length > 0;
@@ -984,6 +1015,16 @@ export function Inbox() {
               {markAllReadMutation.isPending ? "Marking…" : "Mark all as read"}
             </Button>
           )}
+          <Button
+            type="button"
+            variant={groupByAgent ? "default" : "outline"}
+            size="sm"
+            className="h-8 shrink-0 gap-1.5"
+            onClick={() => setGroupByAgent((p) => !p)}
+          >
+            <Group className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{groupByAgent ? "Raggruppati" : "Raggruppa per agente"}</span>
+          </Button>
         </div>
 
         {tab === "all" && (
@@ -1049,9 +1090,20 @@ export function Inbox() {
       {showWorkItemsSection && (
         <>
           {showSeparatorBefore("work_items") && <Separator />}
-          <div>
+          <div className="space-y-4">
+            {(groupedWorkItems ?? [{ agentLabel: null, items: workItemsToRender }]).map((group, gi) => (
+            <div key={group.agentLabel ?? "all"}>
+              {group.agentLabel && (
+                <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                    {group.agentLabel.charAt(0).toUpperCase()}
+                  </span>
+                  {group.agentLabel}
+                  <span className="text-xs font-normal text-muted-foreground">({group.items.length})</span>
+                </h3>
+              )}
             <div className="overflow-hidden rounded-xl border border-border bg-card">
-              {workItemsToRender.map((item) => {
+              {group.items.map((item) => {
                 const isMineTab = tab === "mine";
 
                 if (item.kind === "approval") {
@@ -1176,6 +1228,11 @@ export function Inbox() {
                         <span className="shrink-0 font-mono text-xs text-muted-foreground">
                           {issue.identifier ?? issue.id.slice(0, 8)}
                         </span>
+                        {issue.assigneeAgentId && agentName(issue.assigneeAgentId) && (
+                          <span className="hidden shrink-0 rounded bg-accent/60 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline">
+                            {agentName(issue.assigneeAgentId)}
+                          </span>
+                        )}
                         {liveIssueIds.has(issue.id) && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 sm:gap-1.5 sm:px-2">
                             <span className="relative flex h-2 w-2">
@@ -1223,6 +1280,8 @@ export function Inbox() {
                 ) : row;
               })}
             </div>
+            </div>
+            ))}
           </div>
         </>
       )}

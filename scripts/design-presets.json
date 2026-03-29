@@ -1,0 +1,239 @@
+{
+  "_meta": {
+    "description": "Design style presets for RedesignPreview agent. Each preset defines visual identity guidelines based on business category.",
+    "usage": "The CEO or RedesignPreview agent reads this file to select the appropriate style based on the audit context.",
+    "version": "1.0"
+  },
+  "presets": {
+    "ristorante_tradizionale": {
+      "name": "Trattoria Classica",
+      "category": "food & beverage",
+      "subcategory": "traditional restaurant",
+      "palette": {
+        "primary": "#8B4513",
+        "secondary": "#D4A574",
+        "accent": "#C41E3A",
+        "background": "#FFF8F0",
+        "text": "#2C1810",
+        "muted": "#A0897A"
+      },
+      "fonts": {
+        "heading": "Playfair Display, Georgia, serif",
+        "body": "Lora, 'Times New Roman', serif",
+        "accent": "Dancing Script, cursive"
+      },
+      "layout": "hero-image-fullwidth",
+      "mood": "Caldo, accogliente, autentico. Immagini grandi del cibo, texture legno/terracotta. Menu prominente con prezzi. Sezione prenotazioni above-the-fold.",
+      "sections": ["hero con piatto signature", "menu highlights (3-4 piatti)", "storia/tradizione", "galleria foto", "mappa + orari + prenotazione"],
+      "do": ["Usare foto food di alta qualità", "Mostrare il menu con prezzi", "Includere reviews Google", "CTA prenotazione visibile"],
+      "dont": ["Troppi colori vivaci", "Font moderni/tech", "Stock photos generiche", "Animazioni eccessive"]
+    },
+    "ristorante_moderno": {
+      "name": "Fine Dining Contemporaneo",
+      "category": "food & beverage",
+      "subcategory": "modern/fine dining",
+      "palette": {
+        "primary": "#1A1A1A",
+        "secondary": "#C9B037",
+        "accent": "#FFFFFF",
+        "background": "#0D0D0D",
+        "text": "#F5F5F5",
+        "muted": "#666666"
+      },
+      "fonts": {
+        "heading": "Cormorant Garamond, 'Times New Roman', serif",
+        "body": "Montserrat, 'Helvetica Neue', sans-serif",
+        "accent": "Italiana, serif"
+      },
+      "layout": "minimal-dark-elegant",
+      "mood": "Lussuoso, minimalista, sofisticato. Tanto spazio bianco (nero), tipografia elegante, immagini editoriali. Sensazione di esclusività.",
+      "sections": ["hero video/immagine full-bleed", "philosophy/chef", "menu degustazione", "wine selection", "prenotazione elegante"],
+      "do": ["Dark mode come default", "Tipografia grande e spaziata", "Immagini editoriali del cibo", "Animazioni sottili on-scroll"],
+      "dont": ["Colori brillanti", "Layout affollato", "Popup aggressivi", "Prezzi troppo in evidenza"]
+    },
+    "pizzeria": {
+      "name": "Pizzeria Napoletana",
+      "category": "food & beverage",
+      "subcategory": "pizzeria",
+      "palette": {
+        "primary": "#D32F2F",
+        "secondary": "#FFC107",
+        "accent": "#4CAF50",
+        "background": "#FFFDE7",
+        "text": "#3E2723",
+        "muted": "#8D6E63"
+      },
+      "fonts": {
+        "heading": "Fredoka One, 'Comic Sans MS', cursive",
+        "body": "Nunito, 'Trebuchet MS', sans-serif",
+        "accent": "Pacifico, cursive"
+      },
+      "layout": "vibrant-fun-scrolling",
+      "mood": "Vivace, informale, appetitoso. Colori caldi (rosso, giallo, verde — bandiera italiana). Foto pizza prominenti. Atmosfera festosa e familiare.",
+      "sections": ["hero con pizza in primo piano", "menu pizze (griglia visiva)", "ingredienti/forno a legna", "delivery/asporto CTA", "location + orari"],
+      "do": ["Colori vivaci tricolore", "Foto pizza ravvicinate", "Menu visivo con immagini", "Pulsante ordine/delivery prominente"],
+      "dont": ["Design troppo formale", "Troppo testo", "Palette scura", "Assenza di foto cibo"]
+    },
+    "hotel_boutique": {
+      "name": "Hotel Boutique",
+      "category": "hospitality",
+      "subcategory": "boutique hotel",
+      "palette": {
+        "primary": "#2C3E50",
+        "secondary": "#C5A55A",
+        "accent": "#E8D5B7",
+        "background": "#F9F6F1",
+        "text": "#2C3E50",
+        "muted": "#95A5A6"
+      },
+      "fonts": {
+        "heading": "Cinzel, 'Times New Roman', serif",
+        "body": "Raleway, 'Helvetica Neue', sans-serif",
+        "accent": "Satisfy, cursive"
+      },
+      "layout": "fullscreen-gallery-immersive",
+      "mood": "Elegante, immersivo, aspirazionale. Gallery full-screen delle camere, esperienza visiva che fa sognare. Prenotazione semplice e diretta.",
+      "sections": ["hero full-screen camera/vista", "camere (carousel)", "servizi/spa", "location/esperienze", "booking widget + reviews"],
+      "do": ["Foto professionali grandi", "Booking widget above-the-fold", "Mostrare prezzi a partire da", "Storytelling sulla location"],
+      "dont": ["Layout generico da catena", "Troppe informazioni", "Form di contatto nascosto", "Stock photos"]
+    },
+    "studio_legale": {
+      "name": "Studio Professionale",
+      "category": "professional services",
+      "subcategory": "law firm / accountant",
+      "palette": {
+        "primary": "#1B2A4A",
+        "secondary": "#4A6FA5",
+        "accent": "#B8860B",
+        "background": "#FFFFFF",
+        "text": "#1B2A4A",
+        "muted": "#6B7280"
+      },
+      "fonts": {
+        "heading": "EB Garamond, Georgia, serif",
+        "body": "Source Sans Pro, 'Helvetica Neue', sans-serif",
+        "accent": "EB Garamond, serif"
+      },
+      "layout": "corporate-clean-trust",
+      "mood": "Autorevole, affidabile, professionale. Palette blu/navy, layout pulito, focus sulla competenza. Trasmettere fiducia e serietà.",
+      "sections": ["hero con value proposition", "aree di competenza", "team/professionisti", "casi di successo / numeri", "contatti + form consulenza"],
+      "do": ["Palette conservativa (blu, grigio, oro)", "Foto team professionali", "Testimonianze clienti", "CTA consulenza gratuita"],
+      "dont": ["Colori troppo vivaci", "Design troppo creativo", "Linguaggio informale", "Assenza di credenziali"]
+    },
+    "ecommerce_artigianale": {
+      "name": "Bottega Artigiana",
+      "category": "retail",
+      "subcategory": "handmade / artisan shop",
+      "palette": {
+        "primary": "#5D4E37",
+        "secondary": "#B8956A",
+        "accent": "#D4A373",
+        "background": "#FAF6F1",
+        "text": "#3D2B1F",
+        "muted": "#9C8C7C"
+      },
+      "fonts": {
+        "heading": "Amatic SC, 'Comic Sans MS', cursive",
+        "body": "Josefin Sans, 'Trebuchet MS', sans-serif",
+        "accent": "Caveat, cursive"
+      },
+      "layout": "organic-storytelling-grid",
+      "mood": "Artigianale, autentico, caldo. Texture naturali (carta, legno, lino). Grid prodotti irregolare. Focus sul processo di creazione e la storia dietro ogni pezzo.",
+      "sections": ["hero prodotto hero con storia", "prodotti in evidenza (grid)", "processo artigianale", "materiali e qualità", "shop/acquista + spedizioni"],
+      "do": ["Foto prodotto lifestyle", "Raccontare la storia del maker", "Texture e pattern naturali", "Etichette handwritten-style"],
+      "dont": ["Layout troppo corporate", "Grid perfettamente simmetrica", "Estetica da marketplace", "Troppi prodotti nella home"]
+    },
+    "salone_bellezza": {
+      "name": "Beauty & Wellness",
+      "category": "beauty",
+      "subcategory": "hair salon / spa / beauty",
+      "palette": {
+        "primary": "#B76E79",
+        "secondary": "#F4E0D9",
+        "accent": "#DDA0DD",
+        "background": "#FFF5F5",
+        "text": "#4A2C2A",
+        "muted": "#C4A7A7"
+      },
+      "fonts": {
+        "heading": "Playfair Display, Georgia, serif",
+        "body": "Poppins, 'Helvetica Neue', sans-serif",
+        "accent": "Great Vibes, cursive"
+      },
+      "layout": "soft-editorial-booking",
+      "mood": "Femminile, rilassante, aspirazionale. Toni rosa/nude/gold. Immagini luminose e ariose. Focus su trasformazione e benessere. Prenotazione semplice.",
+      "sections": ["hero trattamento/risultato", "servizi con prezzi", "gallery before/after", "team stylists", "prenota appuntamento"],
+      "do": ["Palette soft e femminile", "Gallery before/after", "Prezzi visibili", "Booking online integrato"],
+      "dont": ["Colori scuri o freddi", "Layout affollato", "Stock photos ovvie", "Assenza di listino"]
+    },
+    "palestra_fitness": {
+      "name": "Fitness & Gym",
+      "category": "health & fitness",
+      "subcategory": "gym / crossfit / personal training",
+      "palette": {
+        "primary": "#FF4500",
+        "secondary": "#1A1A1A",
+        "accent": "#FFD700",
+        "background": "#111111",
+        "text": "#FFFFFF",
+        "muted": "#888888"
+      },
+      "fonts": {
+        "heading": "Oswald, Impact, sans-serif",
+        "body": "Open Sans, Arial, sans-serif",
+        "accent": "Bebas Neue, sans-serif"
+      },
+      "layout": "bold-dark-energy",
+      "mood": "Energico, potente, motivazionale. Dark mode con accenti vivaci. Tipografia bold e impattante. Immagini action/movimento. Sensazione di forza.",
+      "sections": ["hero full-screen con video/atleta", "programmi/classi", "orari settimanali", "trainer team", "prova gratuita CTA + prezzi"],
+      "do": ["Dark theme", "Font bold/uppercase", "Video o foto in azione", "CTA prova gratuita prominente"],
+      "dont": ["Palette pastello", "Font eleganti/script", "Layout troppo statico", "Assenza di social proof"]
+    },
+    "agenzia_immobiliare": {
+      "name": "Real Estate Agency",
+      "category": "real estate",
+      "subcategory": "real estate agency",
+      "palette": {
+        "primary": "#003366",
+        "secondary": "#0077B6",
+        "accent": "#48CAE4",
+        "background": "#F8FBFF",
+        "text": "#003366",
+        "muted": "#6C8EAD"
+      },
+      "fonts": {
+        "heading": "Merriweather, Georgia, serif",
+        "body": "Inter, 'Helvetica Neue', sans-serif",
+        "accent": "Merriweather, serif"
+      },
+      "layout": "search-first-property-grid",
+      "mood": "Affidabile, professionale, orientato alla ricerca. Barra di ricerca prominente, grid immobili con filtri. Mappa interattiva. Sensazione di competenza locale.",
+      "sections": ["hero con search bar immobili", "immobili in evidenza (grid)", "servizi (vendita, affitto, valutazione)", "zona/quartiere focus", "contatti + valutazione gratuita"],
+      "do": ["Search bar immobili in hero", "Grid con foto e prezzi", "Mappa del territorio", "CTA valutazione gratuita"],
+      "dont": ["Troppo testo", "Foto piccole", "Navigazione confusa", "Assenza filtri ricerca"]
+    },
+    "startup_tech": {
+      "name": "Tech / SaaS",
+      "category": "technology",
+      "subcategory": "startup / SaaS / app",
+      "palette": {
+        "primary": "#6366F1",
+        "secondary": "#8B5CF6",
+        "accent": "#06B6D4",
+        "background": "#FAFAFA",
+        "text": "#1E293B",
+        "muted": "#94A3B8"
+      },
+      "fonts": {
+        "heading": "Inter, 'Helvetica Neue', sans-serif",
+        "body": "Inter, 'Helvetica Neue', sans-serif",
+        "accent": "JetBrains Mono, monospace"
+      },
+      "layout": "modern-saas-gradient",
+      "mood": "Moderno, pulito, innovativo. Gradients sottili, cards con ombre, illustrazioni/icone. Molto spazio bianco. Focus su features e pricing.",
+      "sections": ["hero con headline + CTA + screenshot prodotto", "features (icon grid)", "social proof / loghi clienti", "pricing cards", "FAQ + footer ricco"],
+      "do": ["Gradient moderni", "Screenshot/mockup prodotto", "Social proof (loghi, numeri)", "Pricing trasparente"],
+      "dont": ["Stockphotos di gente in ufficio", "Troppi colori", "Layout datato pre-2020", "CTA nascosta"]
+    }
+  }
+}

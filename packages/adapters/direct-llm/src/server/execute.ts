@@ -306,6 +306,52 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const wakeReason = asString(context.wakeReason, "");
   const wakeCommentId = asString(context.wakeCommentId ?? context.commentId, "");
   const approvalStatus = asString(context.approvalStatus, "");
+  const issueTitle = asString(context.issueTitle, "");
+  const issueDescription = asString(context.issueDescription, "");
+
+  // ---------------------------------------------------------------------------
+  // Optional URL fetch: if config.fetchUrl is true, extract URL from issue
+  // description and fetch its HTML content for the LLM to analyze.
+  // ---------------------------------------------------------------------------
+  const fetchUrlEnabled = asBoolean(config.fetchUrl, false);
+  let fetchedContent = "";
+  if (fetchUrlEnabled && issueDescription) {
+    const urlMatch = issueDescription.match(/https?:\/\/[^\s<>"]+/);
+    if (urlMatch) {
+      const targetUrl = urlMatch[0];
+      await onLog("stdout", JSON.stringify({
+        type: "fetch_url",
+        url: targetUrl,
+        status: "fetching",
+      }) + "\n");
+      try {
+        const fetchController = new AbortController();
+        const fetchTimeout = setTimeout(() => fetchController.abort(), 15000);
+        const fetchRes = await fetch(targetUrl, {
+          signal: fetchController.signal,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; PaperclipBot/1.0)" },
+        });
+        clearTimeout(fetchTimeout);
+        const html = await fetchRes.text();
+        // Truncate to avoid blowing up the context window (max ~30k chars)
+        fetchedContent = html.slice(0, 30000);
+        await onLog("stdout", JSON.stringify({
+          type: "fetch_url",
+          url: targetUrl,
+          status: "ok",
+          length: fetchedContent.length,
+        }) + "\n");
+      } catch (fetchErr) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : "Unknown fetch error";
+        await onLog("stderr", JSON.stringify({
+          type: "fetch_url",
+          url: targetUrl,
+          status: "error",
+          error: msg,
+        }) + "\n");
+      }
+    }
+  }
 
   // Build prompt from context
   const DEFAULT_PROMPT_TEMPLATE = [
@@ -314,11 +360,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     "{{#wakeReason}}Wake reason: {{wakeReason}}{{/wakeReason}}",
     "{{#wakeCommentId}}Comment ref: {{wakeCommentId}}{{/wakeCommentId}}",
     "{{#approvalStatus}}Approval status: {{approvalStatus}}{{/approvalStatus}}",
+    "{{#issueTitle}}Issue: {{issueTitle}}{{/issueTitle}}",
+    "{{#issueDescription}}Description: {{issueDescription}}{{/issueDescription}}",
     "",
     "Complete your assigned task. Be concise and output only the result.",
   ].join("\n");
 
   const promptTemplate = asString(config.promptTemplate, DEFAULT_PROMPT_TEMPLATE);
+
+  const allVars: Record<string, string> = {
+    taskId, wakeReason, wakeCommentId, approvalStatus,
+    issueTitle, issueDescription, fetchedContent,
+  };
 
   const prompt = promptTemplate
     .replace(/\{\{agent\.id\}\}/g, agent.id)
@@ -327,13 +380,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     .replace(/\{\{wakeReason\}\}/g, wakeReason)
     .replace(/\{\{wakeCommentId\}\}/g, wakeCommentId)
     .replace(/\{\{approvalStatus\}\}/g, approvalStatus)
+    .replace(/\{\{issueTitle\}\}/g, issueTitle)
+    .replace(/\{\{issueDescription\}\}/g, issueDescription)
+    .replace(/\{\{fetchedContent\}\}/g, fetchedContent)
     // Remove conditional blocks {{#field}}...{{/field}} when field is empty
     .replace(/\{\{#\w+\}\}[^\n]*\{\{\/\w+\}\}\n?/g, (match) => {
       const inner = match.match(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\w+\}\}/);
       if (!inner) return "";
       const fieldName = inner[1];
-      const vars: Record<string, string> = { taskId, wakeReason, wakeCommentId, approvalStatus };
-      return vars[fieldName] ? inner[2].trim() + "\n" : "";
+      return allVars[fieldName] ? inner[2].trim() + "\n" : "";
     })
     .replace(/\n{3,}/g, "\n\n")
     .trim();

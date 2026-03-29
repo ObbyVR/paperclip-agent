@@ -44,7 +44,10 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Download,
+  ExternalLink,
   EyeOff,
+  FileText,
   Hexagon,
   ListTree,
   MessageSquare,
@@ -207,7 +210,7 @@ export function IssueDetail() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState("comments");
+  const [detailTab, setDetailTab] = useState("overview");
   const [secondaryOpen, setSecondaryOpen] = useState({
     approvals: false,
   });
@@ -450,6 +453,36 @@ export function IssueDetail() {
       hasTokens,
     };
   }, [linkedRuns]);
+
+  // Extract completed run results for the Results tab
+  const runResults = useMemo(() => {
+    const results: Array<{
+      runId: string;
+      agentName: string;
+      content: string;
+      model: string;
+      costUsd: number;
+      finishedAt: string;
+    }> = [];
+    for (const run of linkedRuns ?? []) {
+      if (run.status !== "succeeded") continue;
+      const result = asRecord(run.resultJson);
+      if (!result) continue;
+      const content = typeof result.content === "string" ? result.content : null;
+      if (!content || content.length === 0) continue;
+      const usage = asRecord(run.usageJson);
+      const agent = agentMap.get(run.agentId);
+      results.push({
+        runId: run.runId,
+        agentName: agent?.name ?? run.agentId.slice(0, 8),
+        content,
+        model: typeof (result.model ?? usage?.model) === "string" ? (result.model ?? usage?.model) as string : "unknown",
+        costUsd: visibleRunCostUsd(usage, result),
+        finishedAt: run.finishedAt ?? run.createdAt,
+      });
+    }
+    return results;
+  }, [linkedRuns, agentMap]);
 
   const invalidateIssue = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.detail(issueId!) });
@@ -856,21 +889,252 @@ export function IssueDetail() {
           as="h2"
           className="text-xl font-bold"
         />
-
-        <InlineEditor
-          value={issue.description ?? ""}
-          onSave={(description) => updateIssue.mutateAsync({ description })}
-          as="p"
-          className="text-[15px] leading-7 text-foreground"
-          placeholder="Add a description..."
-          multiline
-          mentions={mentionOptions}
-          imageUploadHandler={async (file) => {
-            const attachment = await uploadAttachment.mutateAsync(file);
-            return attachment.contentPath;
-          }}
-        />
       </div>
+
+      <Tabs value={detailTab} onValueChange={setDetailTab} className="space-y-3">
+        <TabsList variant="line" className="w-full justify-start gap-1 -mt-1 sticky top-0 z-10 bg-background pb-1">
+          <TabsTrigger value="overview" className="gap-1.5">
+            <FileText className="h-3.5 w-3.5" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="comments" className="gap-1.5">
+            <MessageSquare className="h-3.5 w-3.5" />
+            Comments
+          </TabsTrigger>
+          <TabsTrigger value="subissues" className="gap-1.5">
+            <ListTree className="h-3.5 w-3.5" />
+            Sub-issues
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="gap-1.5">
+            <ActivityIcon className="h-3.5 w-3.5" />
+            Activity
+          </TabsTrigger>
+          {runResults.length > 0 && (
+            <TabsTrigger value="results" className="gap-1.5">
+              <FileText className="h-3.5 w-3.5" />
+              Risultati
+              <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                {runResults.length}
+              </span>
+            </TabsTrigger>
+          )}
+          {issuePluginTabItems.map((item) => (
+            <TabsTrigger key={item.value} value={item.value}>
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <InlineEditor
+            value={issue.description ?? ""}
+            onSave={(description) => updateIssue.mutateAsync({ description })}
+            as="p"
+            className="text-[15px] leading-7 text-foreground"
+            placeholder="Add a description..."
+            multiline
+            mentions={mentionOptions}
+            imageUploadHandler={async (file) => {
+              const attachment = await uploadAttachment.mutateAsync(file);
+              return attachment.contentPath;
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="comments">
+          <CommentThread
+            comments={commentsWithRunMeta}
+            linkedRuns={timelineRuns}
+            companyId={issue.companyId}
+            projectId={issue.projectId}
+            issueStatus={issue.status}
+            agentMap={agentMap}
+            draftKey={`paperclip:issue-comment-draft:${issue.id}`}
+            enableReassign
+            reassignOptions={commentReassignOptions}
+            currentAssigneeValue={actualAssigneeValue}
+            suggestedAssigneeValue={suggestedAssigneeValue}
+            mentions={mentionOptions}
+            onAdd={async (body, reopen, reassignment) => {
+              if (reassignment) {
+                await addCommentAndReassign.mutateAsync({ body, reopen, reassignment });
+                return;
+              }
+              await addComment.mutateAsync({ body, reopen });
+            }}
+            imageUploadHandler={async (file) => {
+              const attachment = await uploadAttachment.mutateAsync(file);
+              return attachment.contentPath;
+            }}
+            onAttachImage={async (file) => {
+              await uploadAttachment.mutateAsync(file);
+            }}
+            liveRunSlot={<LiveRunWidget issueId={issueId!} companyId={issue.companyId} />}
+          />
+        </TabsContent>
+
+        <TabsContent value="subissues">
+          {childIssues.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No sub-issues.</p>
+          ) : (
+            <div className="border border-border rounded-lg divide-y divide-border">
+              {childIssues.map((child) => (
+                <Link
+                  key={child.id}
+                  to={`/issues/${child.identifier ?? child.id}`}
+                  state={location.state}
+                  className="flex items-center justify-between px-3 py-2 text-sm hover:bg-accent/20 transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <StatusIcon status={child.status} />
+                    <PriorityIcon priority={child.priority} />
+                    <span className="font-mono text-muted-foreground shrink-0">
+                      {child.identifier ?? child.id.slice(0, 8)}
+                    </span>
+                    <span className="truncate">{child.title}</span>
+                  </div>
+                  {child.assigneeAgentId && (() => {
+                    const name = agentMap.get(child.assigneeAgentId)?.name;
+                    return name
+                      ? <Identity name={name} size="sm" />
+                      : <span className="text-muted-foreground font-mono">{child.assigneeAgentId.slice(0, 8)}</span>;
+                  })()}
+                </Link>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="activity">
+          {linkedRuns && linkedRuns.length > 0 && (
+            <div className="mb-3 px-3 py-2 rounded-lg border border-border">
+              <div className="text-sm font-medium text-muted-foreground mb-1">Cost Summary</div>
+              {!issueCostSummary.hasCost && !issueCostSummary.hasTokens ? (
+                <div className="text-xs text-muted-foreground">No cost data yet.</div>
+              ) : (
+                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground tabular-nums">
+                  {issueCostSummary.hasCost && (
+                    <span className="font-medium text-foreground">
+                      ${issueCostSummary.cost.toFixed(4)}
+                    </span>
+                  )}
+                  {issueCostSummary.hasTokens && (
+                    <span>
+                      Tokens {formatTokens(issueCostSummary.totalTokens)}
+                      {issueCostSummary.cached > 0
+                        ? ` (in ${formatTokens(issueCostSummary.input)}, out ${formatTokens(issueCostSummary.output)}, cached ${formatTokens(issueCostSummary.cached)})`
+                        : ` (in ${formatTokens(issueCostSummary.input)}, out ${formatTokens(issueCostSummary.output)})`}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {!activity || activity.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No activity yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {activity.slice(0, 20).map((evt) => (
+                <div key={evt.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <ActorIdentity evt={evt} agentMap={agentMap} />
+                  <span>{formatAction(evt.action, evt.details)}</span>
+                  <span className="ml-auto shrink-0">{relativeTime(evt.createdAt)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {runResults.length > 0 && (
+          <TabsContent value="results">
+            <div className="space-y-4">
+              {runResults.map((r) => {
+                const isHtml = r.content.startsWith("```html") || r.content.startsWith("<!DOCTYPE") || r.content.startsWith("<html");
+                const htmlContent = isHtml ? r.content.replace(/^```html\n?/, "").replace(/\n?```$/, "") : null;
+                return (
+                <div key={r.runId} className="border border-border rounded-lg overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-medium">{r.agentName}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground font-mono text-xs">{r.model}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {r.costUsd > 0 && (
+                        <span className="tabular-nums">${r.costUsd.toFixed(4)}</span>
+                      )}
+                      <span>{relativeTime(r.finishedAt)}</span>
+                      {htmlContent && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            title="Apri in nuova finestra"
+                            onClick={() => {
+                              const w = window.open("", "_blank");
+                              if (w) { w.document.write(htmlContent); w.document.close(); }
+                            }}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            title="Scarica HTML"
+                            onClick={() => {
+                              const blob = new Blob([htmlContent], { type: "text/html" });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `${r.agentName.replace(/\s+/g, "-").toLowerCase()}-result.html`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            }}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="px-3 py-3 text-sm">
+                    {htmlContent ? (
+                      <div className="border rounded bg-background">
+                        <iframe
+                          srcDoc={htmlContent}
+                          className="w-full h-[500px] rounded"
+                          sandbox="allow-scripts"
+                          title={`Preview: ${r.agentName}`}
+                        />
+                      </div>
+                    ) : (
+                      <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                        {r.content}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          </TabsContent>
+        )}
+
+        {activePluginTab && (
+          <TabsContent value={activePluginTab.value}>
+            <PluginSlotMount
+              slot={activePluginTab.slot}
+              context={{
+                companyId: issue.companyId,
+                projectId: issue.projectId ?? null,
+                entityId: issue.id,
+                entityType: "issue",
+              }}
+              missingBehavior="placeholder"
+            />
+          </TabsContent>
+        )}
+      </Tabs>
 
       <PluginSlotOutlet
         slotTypes={["toolbarButton", "contextMenuItem"]}
@@ -999,149 +1263,6 @@ export function IssueDetail() {
         project={orderedProjects.find((p) => p.id === issue.projectId) ?? null}
         onUpdate={(data) => updateIssue.mutate(data)}
       />
-
-      <Separator />
-
-      <Tabs value={detailTab} onValueChange={setDetailTab} className="space-y-3">
-        <TabsList variant="line" className="w-full justify-start gap-1">
-          <TabsTrigger value="comments" className="gap-1.5">
-            <MessageSquare className="h-3.5 w-3.5" />
-            Comments
-          </TabsTrigger>
-          <TabsTrigger value="subissues" className="gap-1.5">
-            <ListTree className="h-3.5 w-3.5" />
-            Sub-issues
-          </TabsTrigger>
-          <TabsTrigger value="activity" className="gap-1.5">
-            <ActivityIcon className="h-3.5 w-3.5" />
-            Activity
-          </TabsTrigger>
-          {issuePluginTabItems.map((item) => (
-            <TabsTrigger key={item.value} value={item.value}>
-              {item.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <TabsContent value="comments">
-          <CommentThread
-            comments={commentsWithRunMeta}
-            linkedRuns={timelineRuns}
-            companyId={issue.companyId}
-            projectId={issue.projectId}
-            issueStatus={issue.status}
-            agentMap={agentMap}
-            draftKey={`paperclip:issue-comment-draft:${issue.id}`}
-            enableReassign
-            reassignOptions={commentReassignOptions}
-            currentAssigneeValue={actualAssigneeValue}
-            suggestedAssigneeValue={suggestedAssigneeValue}
-            mentions={mentionOptions}
-            onAdd={async (body, reopen, reassignment) => {
-              if (reassignment) {
-                await addCommentAndReassign.mutateAsync({ body, reopen, reassignment });
-                return;
-              }
-              await addComment.mutateAsync({ body, reopen });
-            }}
-            imageUploadHandler={async (file) => {
-              const attachment = await uploadAttachment.mutateAsync(file);
-              return attachment.contentPath;
-            }}
-            onAttachImage={async (file) => {
-              await uploadAttachment.mutateAsync(file);
-            }}
-            liveRunSlot={<LiveRunWidget issueId={issueId!} companyId={issue.companyId} />}
-          />
-        </TabsContent>
-
-        <TabsContent value="subissues">
-          {childIssues.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No sub-issues.</p>
-          ) : (
-            <div className="border border-border rounded-lg divide-y divide-border">
-              {childIssues.map((child) => (
-                <Link
-                  key={child.id}
-                  to={`/issues/${child.identifier ?? child.id}`}
-                  state={location.state}
-                  className="flex items-center justify-between px-3 py-2 text-sm hover:bg-accent/20 transition-colors"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <StatusIcon status={child.status} />
-                    <PriorityIcon priority={child.priority} />
-                    <span className="font-mono text-muted-foreground shrink-0">
-                      {child.identifier ?? child.id.slice(0, 8)}
-                    </span>
-                    <span className="truncate">{child.title}</span>
-                  </div>
-                  {child.assigneeAgentId && (() => {
-                    const name = agentMap.get(child.assigneeAgentId)?.name;
-                    return name
-                      ? <Identity name={name} size="sm" />
-                      : <span className="text-muted-foreground font-mono">{child.assigneeAgentId.slice(0, 8)}</span>;
-                  })()}
-                </Link>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="activity">
-          {linkedRuns && linkedRuns.length > 0 && (
-            <div className="mb-3 px-3 py-2 rounded-lg border border-border">
-              <div className="text-sm font-medium text-muted-foreground mb-1">Cost Summary</div>
-              {!issueCostSummary.hasCost && !issueCostSummary.hasTokens ? (
-                <div className="text-xs text-muted-foreground">No cost data yet.</div>
-              ) : (
-                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground tabular-nums">
-                  {issueCostSummary.hasCost && (
-                    <span className="font-medium text-foreground">
-                      ${issueCostSummary.cost.toFixed(4)}
-                    </span>
-                  )}
-                  {issueCostSummary.hasTokens && (
-                    <span>
-                      Tokens {formatTokens(issueCostSummary.totalTokens)}
-                      {issueCostSummary.cached > 0
-                        ? ` (in ${formatTokens(issueCostSummary.input)}, out ${formatTokens(issueCostSummary.output)}, cached ${formatTokens(issueCostSummary.cached)})`
-                        : ` (in ${formatTokens(issueCostSummary.input)}, out ${formatTokens(issueCostSummary.output)})`}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          {!activity || activity.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No activity yet.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {activity.slice(0, 20).map((evt) => (
-                <div key={evt.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <ActorIdentity evt={evt} agentMap={agentMap} />
-                  <span>{formatAction(evt.action, evt.details)}</span>
-                  <span className="ml-auto shrink-0">{relativeTime(evt.createdAt)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {activePluginTab && (
-          <TabsContent value={activePluginTab.value}>
-            <PluginSlotMount
-              slot={activePluginTab.slot}
-              context={{
-                companyId: issue.companyId,
-                projectId: issue.projectId ?? null,
-                entityId: issue.id,
-                entityType: "issue",
-              }}
-              missingBehavior="placeholder"
-            />
-          </TabsContent>
-        )}
-      </Tabs>
 
       {linkedApprovals && linkedApprovals.length > 0 && (
         <Collapsible

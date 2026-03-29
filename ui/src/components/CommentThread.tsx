@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent } from "re
 import { Link, useLocation } from "react-router-dom";
 import type { IssueComment, Agent } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
-import { Check, Copy, Paperclip } from "lucide-react";
+import { ArrowDownUp, Check, Copy, Paperclip } from "lucide-react";
 import { Identity } from "./Identity";
 import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySelector";
 import { MarkdownBody } from "./MarkdownBody";
@@ -136,60 +136,117 @@ const TimelineList = memo(function TimelineList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {timeline.map((item) => {
         if (item.kind === "run") {
           const run = item.run;
           return (
-            <div key={`run:${run.runId}`} className="border border-border bg-accent/20 p-3 overflow-hidden min-w-0 rounded-sm">
-              <div className="flex items-center justify-between mb-2">
-                <Link to={`/agents/${run.agentId}`} className="hover:underline">
-                  <Identity
-                    name={agentMap?.get(run.agentId)?.name ?? run.agentId.slice(0, 8)}
-                    size="sm"
-                  />
-                </Link>
-                <span className="text-xs text-muted-foreground">
-                  {formatDateTime(run.startedAt ?? run.createdAt)}
-                </span>
+            <div key={`run:${run.runId}`} className="flex gap-3 items-start">
+              <div className="shrink-0 pt-0.5">
+                <div className="h-8 w-8 rounded-full bg-accent/60 flex items-center justify-center">
+                  <span className="text-xs font-medium text-muted-foreground">⚡</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Run</span>
-                <Link
-                  to={`/agents/${run.agentId}/runs/${run.runId}`}
-                  className="inline-flex items-center rounded-md border border-border bg-accent/40 px-2 py-1 font-mono text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-                >
-                  {run.runId.slice(0, 8)}
-                </Link>
-                <StatusBadge status={run.status} />
+              <div className="flex-1 min-w-0 border border-border bg-accent/10 rounded-xl px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <Link to={`/agents/${run.agentId}`} className="hover:underline font-medium text-sm">
+                    {agentMap?.get(run.agentId)?.name ?? run.agentId.slice(0, 8)}
+                  </Link>
+                  <span className="text-[11px] text-muted-foreground">
+                    {formatDateTime(run.startedAt ?? run.createdAt)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Run</span>
+                  <Link
+                    to={`/agents/${run.agentId}/runs/${run.runId}`}
+                    className="inline-flex items-center rounded-md border border-border bg-accent/40 px-2 py-1 font-mono text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+                  >
+                    {run.runId.slice(0, 8)}
+                  </Link>
+                  <StatusBadge status={run.status} />
+                </div>
               </div>
             </div>
           );
         }
 
         const comment = item.comment;
+        const isAgent = !!comment.authorAgentId;
         const isHighlighted = highlightCommentId === comment.id;
+        const agentInfo = isAgent ? agentMap?.get(comment.authorAgentId!) : null;
+
         return (
           <div
             key={comment.id}
             id={`comment-${comment.id}`}
-            className={`border p-3 overflow-hidden min-w-0 rounded-sm transition-colors duration-1000 ${isHighlighted ? "border-primary/50 bg-primary/5" : "border-border"}`}
+            className={`flex gap-3 items-start ${isAgent ? "" : "flex-row-reverse"}`}
           >
-            <div className="flex items-center justify-between mb-1">
-              {comment.authorAgentId ? (
-                <Link to={`/agents/${comment.authorAgentId}`} className="hover:underline">
-                  <Identity
-                    name={agentMap?.get(comment.authorAgentId)?.name ?? comment.authorAgentId.slice(0, 8)}
-                    size="sm"
-                  />
+            <div className="shrink-0 pt-0.5">
+              {isAgent ? (
+                <Link to={`/agents/${comment.authorAgentId}`}>
+                  <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center" title={agentInfo?.name ?? "Agent"}>
+                    <span className="text-xs font-bold text-primary">
+                      {(agentInfo?.name ?? "A").charAt(0).toUpperCase()}
+                    </span>
+                  </div>
                 </Link>
               ) : (
-                <Identity name="You" size="sm" />
+                <div className="h-8 w-8 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center" title="You">
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Y</span>
+                </div>
               )}
-              <span className="flex items-center gap-1.5">
-                {companyId ? (
+            </div>
+            <div
+              className={`flex-1 min-w-0 max-w-[85%] rounded-2xl px-4 py-3 shadow-sm transition-colors duration-1000 ${
+                isHighlighted
+                  ? "border-2 border-primary/50 bg-primary/5"
+                  : isAgent
+                    ? "bg-card border border-border"
+                    : "bg-emerald-500/8 border border-emerald-500/20"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-medium text-sm">
+                  {isAgent ? (
+                    <Link to={`/agents/${comment.authorAgentId}`} className="hover:underline text-foreground">
+                      {agentInfo?.name ?? comment.authorAgentId!.slice(0, 8)}
+                    </Link>
+                  ) : (
+                    <span className="text-emerald-700 dark:text-emerald-400">You</span>
+                  )}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  {companyId ? (
+                    <PluginSlotOutlet
+                      slotTypes={["commentContextMenuItem"]}
+                      entityType="comment"
+                      context={{
+                        companyId,
+                        projectId: projectId ?? null,
+                        entityId: comment.id,
+                        entityType: "comment",
+                        parentEntityId: comment.issueId,
+                      }}
+                      className="flex flex-wrap items-center gap-1.5"
+                      itemClassName="inline-flex"
+                      missingBehavior="placeholder"
+                    />
+                  ) : null}
+                  <a
+                    href={`#comment-${comment.id}`}
+                    className="text-[11px] text-muted-foreground hover:text-foreground hover:underline transition-colors"
+                  >
+                    {formatDateTime(comment.createdAt)}
+                  </a>
+                  <CopyMarkdownButton text={comment.body} />
+                </span>
+              </div>
+              <MarkdownBody className="text-sm">{comment.body}</MarkdownBody>
+              {companyId ? (
+                <div className="mt-2 space-y-2">
                   <PluginSlotOutlet
-                    slotTypes={["commentContextMenuItem"]}
+                    slotTypes={["commentAnnotation"]}
                     entityType="comment"
                     context={{
                       companyId,
@@ -198,55 +255,29 @@ const TimelineList = memo(function TimelineList({
                       entityType: "comment",
                       parentEntityId: comment.issueId,
                     }}
-                    className="flex flex-wrap items-center gap-1.5"
-                    itemClassName="inline-flex"
+                    className="space-y-2"
+                    itemClassName="rounded-md"
                     missingBehavior="placeholder"
                   />
-                ) : null}
-                <a
-                  href={`#comment-${comment.id}`}
-                  className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
-                >
-                  {formatDateTime(comment.createdAt)}
-                </a>
-                <CopyMarkdownButton text={comment.body} />
-              </span>
+                </div>
+              ) : null}
+              {comment.runId && (
+                <div className="mt-2 pt-2 border-t border-border/40">
+                  {comment.runAgentId ? (
+                    <Link
+                      to={`/agents/${comment.runAgentId}/runs/${comment.runId}`}
+                      className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                    >
+                      run {comment.runId.slice(0, 8)}
+                    </Link>
+                  ) : (
+                    <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+                      run {comment.runId.slice(0, 8)}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-            <MarkdownBody className="text-sm">{comment.body}</MarkdownBody>
-            {companyId ? (
-              <div className="mt-2 space-y-2">
-                <PluginSlotOutlet
-                  slotTypes={["commentAnnotation"]}
-                  entityType="comment"
-                  context={{
-                    companyId,
-                    projectId: projectId ?? null,
-                    entityId: comment.id,
-                    entityType: "comment",
-                    parentEntityId: comment.issueId,
-                  }}
-                  className="space-y-2"
-                  itemClassName="rounded-md"
-                  missingBehavior="placeholder"
-                />
-              </div>
-            ) : null}
-            {comment.runId && (
-              <div className="mt-2 pt-2 border-t border-border/60">
-                {comment.runAgentId ? (
-                  <Link
-                    to={`/agents/${comment.runAgentId}/runs/${comment.runId}`}
-                    className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
-                  >
-                    run {comment.runId.slice(0, 8)}
-                  </Link>
-                ) : (
-                  <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
-                    run {comment.runId.slice(0, 8)}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         );
       })}
@@ -278,6 +309,7 @@ export function CommentThread({
   const effectiveSuggestedAssigneeValue = suggestedAssigneeValue ?? currentAssigneeValue;
   const [reassignTarget, setReassignTarget] = useState(effectiveSuggestedAssigneeValue);
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
+  const [sortNewestFirst, setSortNewestFirst] = useState(true);
   const editorRef = useRef<MarkdownEditorRef>(null);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -297,12 +329,13 @@ export function CommentThread({
       createdAtMs: new Date(run.startedAt ?? run.createdAt).getTime(),
       run,
     }));
-    return [...commentItems, ...runItems].sort((a, b) => {
+    const sorted = [...commentItems, ...runItems].sort((a, b) => {
       if (a.createdAtMs !== b.createdAtMs) return a.createdAtMs - b.createdAtMs;
       if (a.kind === b.kind) return a.id.localeCompare(b.id);
       return a.kind === "comment" ? -1 : 1;
     });
-  }, [comments, linkedRuns]);
+    return sortNewestFirst ? sorted.reverse() : sorted;
+  }, [comments, linkedRuns, sortNewestFirst]);
 
   // Build mention options from agent map (exclude terminated agents)
   const mentions = useMemo<MentionOption[]>(() => {
@@ -401,7 +434,18 @@ export function CommentThread({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold">Comments &amp; Runs ({timeline.length})</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Comments &amp; Runs ({timeline.length})</h3>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5 text-xs text-muted-foreground"
+          onClick={() => setSortNewestFirst((p) => !p)}
+        >
+          <ArrowDownUp className="h-3 w-3" />
+          {sortNewestFirst ? "Recenti prima" : "Meno recenti prima"}
+        </Button>
+      </div>
 
       <TimelineList
         timeline={timeline}

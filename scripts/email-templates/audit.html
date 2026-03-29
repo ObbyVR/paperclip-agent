@@ -1,0 +1,80 @@
+<!-- subject: Analisi gratuita del tuo sito web — {{sito}} -->
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#f7f7f7;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f7f7;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:#1a1a2e;padding:32px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:600;">{{agenzia}}</h1>
+              <p style="margin:8px 0 0;color:#a0a0c0;font-size:14px;">Web Design & Digital Strategy</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+              <p style="margin:0 0 16px;color:#333;font-size:16px;line-height:1.6;">
+                Gentile {{nome}},
+              </p>
+              <p style="margin:0 0 16px;color:#333;font-size:16px;line-height:1.6;">
+                abbiamo analizzato il sito <strong>{{sito}}</strong> e abbiamo individuato alcune aree di miglioramento che potrebbero fare la differenza per il tuo business online.
+              </p>
+
+              <!-- Report highlights -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4ff;border-radius:8px;margin:24px 0;">
+                <tr>
+                  <td style="padding:24px;">
+                    <h2 style="margin:0 0 12px;color:#1a1a2e;font-size:18px;">Risultati principali</h2>
+                    <div style="color:#444;font-size:15px;line-height:1.8;">{{report}}</div>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 16px;color:#333;font-size:16px;line-height:1.6;">
+                Se vuoi, possiamo mostrarti come il tuo sito potrebbe apparire con un redesign moderno — <strong>senza alcun impegno</strong>.
+              </p>
+
+              <!-- CTA -->
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto;">
+                <tr>
+                  <td style="background:#4f46e5;border-radius:6px;">
+                    <a href="mailto:{{email_risposta}}?subject=Interessato%20al%20redesign%20di%20{{sito}}" style="display:inline-block;padding:14px 32px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;">
+                      Sì, voglio vedere il redesign
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;color:#666;font-size:14px;line-height:1.6;">
+                Cordiali saluti,<br>
+                <strong>{{agenzia}}</strong>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f7f7f7;padding:24px 40px;border-top:1px solid #eee;">
+              <p style="margin:0;color:#999;font-size:12px;line-height:1.6;text-align:center;">
+                Questa email è inviata ai sensi del legittimo interesse B2B (Art. 6(1)(f) GDPR) per finalità di comunicazione commerciale tra imprese.<br>
+                {{agenzia}} — P.IVA {{piva}}<br>
+                <a href="mailto:{{email_risposta}}?subject=Cancellazione" style="color:#4f46e5;text-decoration:underline;">Annulla iscrizione</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

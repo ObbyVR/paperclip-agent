@@ -30,3 +30,5 @@ export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";
 export { reconcilePersistedRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
+export { analyzeSkillSecurity, isSkillContentSafe, getSecurityBadge } from "./skill-security.js";
+export type { SkillSecurityReport, SkillSecurityFinding } from "./skill-security.js";

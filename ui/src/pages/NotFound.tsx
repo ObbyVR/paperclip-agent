@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "@/lib/router";
 import { AlertTriangle, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ interface NotFoundPageProps {
 }
 
 export function NotFoundPage({ scope = "global", requestedPrefix }: NotFoundPageProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { companies, selectedCompany } = useCompany();
@@ -29,8 +31,8 @@ export function NotFoundPage({ scope = "global", requestedPrefix }: NotFoundPage
   const title = scope === "invalid_company_prefix" ? "Company not found" : "Page not found";
   const description =
     scope === "invalid_company_prefix"
-      ? `No company matches prefix "${normalizedPrefix ?? "unknown"}".`
-      : "This route does not exist.";
+      ? `${t("notFound.invalidCompany")}: "${normalizedPrefix ?? t("common.unknown")}"`
+      : t("notFound.title");
 
   return (
     <div className="mx-auto max-w-2xl py-10">

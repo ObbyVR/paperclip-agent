@@ -634,6 +634,12 @@ function mergeCoalescedContextSnapshot(
     ...existing,
     ...incoming,
   };
+  // Preserve the original task identity fields from the existing run to prevent
+  // PAPERCLIP_TASK_ID from being overwritten by a later coalesced wakeup
+  for (const key of ["taskId", "issueId", "taskKey"] as const) {
+    const orig = readNonEmptyString((existing as Record<string, unknown>)[key]);
+    if (orig) merged[key] = orig;
+  }
   const commentId = deriveCommentId(incoming, null);
   if (commentId) {
     merged.commentId = commentId;
@@ -1976,6 +1982,7 @@ export function heartbeatService(db: Db) {
             id: issues.id,
             identifier: issues.identifier,
             title: issues.title,
+            description: issues.description,
             projectId: issues.projectId,
             projectWorkspaceId: issues.projectWorkspaceId,
             executionWorkspaceId: issues.executionWorkspaceId,
@@ -2071,6 +2078,9 @@ export function heartbeatService(db: Db) {
           executionWorkspacePreference: issueContext.executionWorkspacePreference,
         }
       : null;
+    // Expose issue title & description to adapter context (used by direct_llm for web agency workflows)
+    if (issueContext?.title) context.issueTitle = issueContext.title;
+    if (issueContext?.description) context.issueDescription = issueContext.description;
     const existingExecutionWorkspace =
       issueRef?.executionWorkspaceId ? await executionWorkspacesSvc.getById(issueRef.executionWorkspaceId) : null;
     const workspaceOperationRecorder = workspaceOperationsSvc.createRecorder({
@@ -2688,6 +2698,34 @@ export function heartbeatService(db: Db) {
           },
         });
         await releaseIssueExecutionAndPromote(finalizedRun);
+
+        // Post-processing for direct_llm: auto-complete issue and post result as comment
+        if (
+          agent.adapterType === "direct_llm" &&
+          outcome === "succeeded" &&
+          issueId &&
+          adapterResult.resultJson
+        ) {
+          try {
+            const resultContent =
+              typeof adapterResult.resultJson === "object" && adapterResult.resultJson !== null
+                ? (adapterResult.resultJson as Record<string, unknown>).content
+                : null;
+            if (typeof resultContent === "string" && resultContent.length > 0) {
+              await issuesSvc.addComment(
+                issueId,
+                `## Risultato completato\n\n${resultContent}`,
+                { agentId: agent.id },
+              );
+              await issuesSvc.update(issueId, { status: "done" });
+            }
+          } catch (postProcessErr) {
+            logger.warn(
+              { err: postProcessErr, runId, issueId },
+              "direct_llm post-processing: failed to update issue or post comment",
+            );
+          }
+        }
       }
 
       if (finalizedRun) {
@@ -3818,6 +3856,18 @@ export function heartbeatService(db: Db) {
         const baseline = new Date(agent.lastHeartbeatAt ?? agent.createdAt).getTime();
         const elapsedMs = now.getTime() - baseline;
         if (elapsedMs < policy.intervalSec * 1000) continue;
+
+        // Skip timer wakeup if agent already has a queued or running run (prevents duplicates
+        // when timer fires close to an assignment wakeup)
+        const existingRuns = await db
+          .select({ id: heartbeatRuns.id })
+          .from(heartbeatRuns)
+          .where(and(eq(heartbeatRuns.agentId, agent.id), inArray(heartbeatRuns.status, ["queued", "running"])))
+          .limit(1);
+        if (existingRuns.length > 0) {
+          skipped += 1;
+          continue;
+        }
 
         const run = await enqueueWakeup(agent.id, {
           source: "timer",

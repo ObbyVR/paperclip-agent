@@ -51,4 +51,24 @@ export const companySkillsApi = {
       `/companies/${encodeURIComponent(companyId)}/skills/${encodeURIComponent(skillId)}/install-update`,
       {},
     ),
+  securityScan: (companyId: string, skillId: string) =>
+    api.get<SkillSecurityReport>(
+      `/companies/${encodeURIComponent(companyId)}/skills/${encodeURIComponent(skillId)}/security`,
+    ),
 };
+
+export interface SkillSecurityReport {
+  skillKey: string;
+  trustLevel: string;
+  scannedAt: string;
+  overallRisk: "safe" | "low" | "medium" | "high" | "critical";
+  findings: Array<{
+    severity: string;
+    category: string;
+    description: string;
+    line?: number;
+    snippet?: string;
+  }>;
+  approved: boolean;
+  summary: string;
+}
