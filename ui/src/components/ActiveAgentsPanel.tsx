@@ -28,7 +28,7 @@ export function ActiveAgentsPanel({ companyId }: ActiveAgentsPanelProps) {
   const { data: liveRuns } = useQuery({
     queryKey: [...queryKeys.liveRuns(companyId), "dashboard"],
     queryFn: () => heartbeatsApi.liveRunsForCompany(companyId, MIN_DASHBOARD_RUNS),
-    refetchInterval: 5000,
+    refetchInterval: 60000, // fallback — WebSocket handles real-time invalidation
   });
 
   const runs = liveRuns ?? [];

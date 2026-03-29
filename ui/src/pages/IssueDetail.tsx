@@ -151,14 +151,14 @@ export function IssueDetail() {
     queryKey: queryKeys.issues.comments(issueId!),
     queryFn: () => issuesApi.listComments(issueId!),
     enabled: !!issueId,
-    refetchInterval: 5000,
+    refetchInterval: 60000, // fallback — WebSocket handles real-time invalidation
   });
 
   const { data: activity } = useQuery({
     queryKey: queryKeys.issues.activity(issueId!),
     queryFn: () => activityApi.forIssue(issueId!),
     enabled: !!issueId,
-    refetchInterval: 10000,
+    refetchInterval: 60000, // fallback — WebSocket handles real-time invalidation
   });
 
   const { data: linkedRuns } = useQuery({
