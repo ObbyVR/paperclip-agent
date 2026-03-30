@@ -1,10 +1,21 @@
+import { useTranslation } from "react-i18next";
 import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck } from "lucide-react";
 import { formatCents } from "../lib/utils";
 
+export function useTypeLabel(): Record<string, string> {
+  const { t } = useTranslation();
+  return {
+    hire_agent: t("approval.typeHireAgent"),
+    approve_ceo_strategy: t("approval.typeCeoStrategy"),
+    budget_override_required: t("approval.typeBudgetOverride"),
+  };
+}
+
+/** Fallback non-hook version for contexts where hooks can't be used */
 export const typeLabel: Record<string, string> = {
-  hire_agent: "Hire Agent",
-  approve_ceo_strategy: "CEO Strategy",
-  budget_override_required: "Budget Override",
+  hire_agent: "Assunzione Agente",
+  approve_ceo_strategy: "Strategia CEO",
+  budget_override_required: "Sovrascrittura Budget",
 };
 
 /** Build a contextual label for an approval, e.g. "Hire Agent: Designer" */
@@ -38,6 +49,7 @@ function PayloadField({ label, value }: { label: string; value: unknown }) {
 }
 
 function SkillList({ values }: { values: unknown }) {
+  const { t } = useTranslation();
   if (!Array.isArray(values)) return null;
   const items = values
     .filter((value): value is string => typeof value === "string")
@@ -47,7 +59,7 @@ function SkillList({ values }: { values: unknown }) {
 
   return (
     <div className="flex items-start gap-2">
-      <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">Skills</span>
+      <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">{t("approvalPanel.skills", "Skill")}</span>
       <div className="flex flex-wrap gap-1.5">
         {items.map((item) => (
           <span
@@ -63,24 +75,25 @@ function SkillList({ values }: { values: unknown }) {
 }
 
 export function HireAgentPayload({ payload }: { payload: Record<string, unknown> }) {
+  const { t } = useTranslation();
   return (
     <div className="mt-3 space-y-1.5 text-sm">
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">Name</span>
+        <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">{t("agentDetail.name", "Nome")}</span>
         <span className="font-medium">{String(payload.name ?? "—")}</span>
       </div>
-      <PayloadField label="Role" value={payload.role} />
-      <PayloadField label="Title" value={payload.title} />
+      <PayloadField label={t("approvalPanel.role", "Ruolo")} value={payload.role} />
+      <PayloadField label={t("agentDetail.title", "Titolo")} value={payload.title} />
       <PayloadField label="Icon" value={payload.icon} />
       {!!payload.capabilities && (
         <div className="flex items-start gap-2">
-          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">Capabilities</span>
+          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">{t("agentDetail.capabilities", "Capacita'")}</span>
           <span className="text-muted-foreground">{String(payload.capabilities)}</span>
         </div>
       )}
       {!!payload.adapterType && (
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">Adapter</span>
+          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">{t("approvalPanel.adapter", "Adapter")}</span>
           <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
             {String(payload.adapterType)}
           </span>
@@ -96,7 +109,7 @@ export function CeoStrategyPayload({ payload }: { payload: Record<string, unknow
   const isRedesign = !!(payload.style || payload.sections);
   return (
     <div className="mt-3 space-y-1.5 text-sm">
-      <PayloadField label="Title" value={payload.title} />
+      <PayloadField label="Titolo" value={payload.title} />
       {isRedesign && (
         <div className="flex flex-wrap gap-2 mt-1">
           {payload.style ? (
@@ -130,12 +143,12 @@ export function BudgetOverridePayload({ payload }: { payload: Record<string, unk
   const observedAmount = typeof payload.observedAmount === "number" ? payload.observedAmount : null;
   return (
     <div className="mt-3 space-y-1.5 text-sm">
-      <PayloadField label="Scope" value={payload.scopeName ?? payload.scopeType} />
-      <PayloadField label="Window" value={payload.windowKind} />
-      <PayloadField label="Metric" value={payload.metric} />
+      <PayloadField label="Ambito" value={payload.scopeName ?? payload.scopeType} />
+      <PayloadField label="Finestra" value={payload.windowKind} />
+      <PayloadField label="Metrica" value={payload.metric} />
       {(budgetAmount !== null || observedAmount !== null) ? (
         <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          Limit {budgetAmount !== null ? formatCents(budgetAmount) : "—"} · Observed {observedAmount !== null ? formatCents(observedAmount) : "—"}
+          Limite {budgetAmount !== null ? formatCents(budgetAmount) : "—"} · Osservato {observedAmount !== null ? formatCents(observedAmount) : "—"}
         </div>
       ) : null}
       {!!payload.guidance && (
