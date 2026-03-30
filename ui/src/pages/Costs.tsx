@@ -30,6 +30,7 @@ import { useCompany } from "../context/CompanyContext";
 import { useDateRange, PRESET_KEYS, PRESET_LABELS } from "../hooks/useDateRange";
 import { queryKeys } from "../lib/queryKeys";
 import { billingTypeDisplayName, cn, formatCents, formatTokens, providerDisplayName } from "../lib/utils";
+import { estimateRunCostEur, formatEur } from "../lib/modelPricing";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -521,6 +522,20 @@ export function Costs() {
       0,
     );
 
+  // Stima EUR da token quando non ci sono costi API reali (agenti local)
+  const estimatedEurTotal = useMemo(() => {
+    const rows = spendData?.byAgentModel ?? [];
+    if (rows.length === 0) return null;
+    if ((spendData?.summary.spendCents ?? 0) > 0) return null; // ha già costi reali
+    let total = 0;
+    let hasEstimate = false;
+    for (const row of rows) {
+      const eur = estimateRunCostEur(row.model, row.inputTokens, row.outputTokens, row.cachedInputTokens);
+      if (eur !== null) { total += eur; hasEstimate = true; }
+    }
+    return hasEstimate && total > 0 ? total : null;
+  }, [spendData]);
+
   const topFinanceEvents = (financeData?.events ?? []) as FinanceEvent[];
   const budgetPolicies = budgetData?.policies ?? [];
   const activeBudgetIncidents = budgetData?.activeIncidents ?? [];
@@ -584,8 +599,16 @@ export function Costs() {
           <div className="grid gap-3 lg:grid-cols-4">
             <MetricTile
               label="Inference spend"
-              value={formatCents(spendData?.summary.spendCents ?? 0)}
-              subtitle={`${formatTokens(inferenceTokenTotal)} tokens across request-scoped events`}
+              value={
+                (spendData?.summary.spendCents ?? 0) === 0 && estimatedEurTotal !== null
+                  ? `~${formatEur(estimatedEurTotal)}`
+                  : formatCents(spendData?.summary.spendCents ?? 0)
+              }
+              subtitle={
+                (spendData?.summary.spendCents ?? 0) === 0 && estimatedEurTotal !== null
+                  ? `${formatTokens(inferenceTokenTotal)} token · stima equivalente API`
+                  : `${formatTokens(inferenceTokenTotal)} tokens across request-scoped events`
+              }
               icon={DollarSign}
             />
             <MetricTile
@@ -747,7 +770,16 @@ export function Costs() {
                                 {row.agentStatus === "terminated" ? <StatusBadge status="terminated" /> : null}
                               </div>
                               <div className="text-right text-sm tabular-nums">
-                                <div className="font-medium">{formatCents(row.costCents)}</div>
+                                {(() => {
+                                  const modelRows = agentModelRows.get(row.agentId) ?? [];
+                                  const agentEur = row.costCents === 0 ? modelRows.reduce((sum, mr) => {
+                                    const eur = estimateRunCostEur(mr.model, mr.inputTokens, mr.outputTokens, mr.cachedInputTokens);
+                                    return sum + (eur ?? 0);
+                                  }, 0) : 0;
+                                  return row.costCents === 0 && agentEur > 0
+                                    ? <div className="font-medium text-muted-foreground">~{formatEur(agentEur)}</div>
+                                    : <div className="font-medium">{formatCents(row.costCents)}</div>;
+                                })()}
                                 <div className="text-xs text-muted-foreground">
                                   in {formatTokens(row.inputTokens + row.cachedInputTokens)} · out {formatTokens(row.outputTokens)}
                                 </div>
@@ -783,10 +815,19 @@ export function Costs() {
                                         </div>
                                       </div>
                                       <div className="text-right tabular-nums">
-                                        <div className="font-medium">
-                                          {formatCents(modelRow.costCents)}
-                                          <span className="ml-1 font-normal text-muted-foreground">({sharePct}%)</span>
-                                        </div>
+                                        {(() => {
+                                          const modelEur = modelRow.costCents === 0
+                                            ? estimateRunCostEur(modelRow.model, modelRow.inputTokens, modelRow.outputTokens, modelRow.cachedInputTokens)
+                                            : null;
+                                          return modelRow.costCents === 0 && modelEur !== null && modelEur > 0 ? (
+                                            <div className="font-medium text-muted-foreground">~{formatEur(modelEur)}</div>
+                                          ) : (
+                                            <div className="font-medium">
+                                              {formatCents(modelRow.costCents)}
+                                              <span className="ml-1 font-normal text-muted-foreground">({sharePct}%)</span>
+                                            </div>
+                                          );
+                                        })()}
                                         <div className="text-muted-foreground">
                                           {formatTokens(modelRow.inputTokens + modelRow.cachedInputTokens + modelRow.outputTokens)} tok
                                         </div>
