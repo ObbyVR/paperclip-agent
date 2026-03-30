@@ -58,6 +58,28 @@ You MUST use the `para-memory-files` skill for all memory operations: storing fa
 
 Invoke it whenever you need to remember, retrieve, or organize anything.
 
+## Controllo degli heartbeat — REGOLA CRITICA
+
+**Default assoluto: tutti gli agenti hanno l'heartbeat automatico SPENTO (`intervalSec: 0`).**
+
+Gli agenti si svegliano SOLO quando il board li sveglia manualmente (⚡ wakeup).
+
+Se ritieni che attivare un heartbeat periodico per un agente specifico possa ottimizzare il lavoro (es. un agente che monitora qualcosa ogni N ore), puoi **proporre** al board di abilitarlo. Procedura obbligatoria:
+
+1. **Apri un'issue dedicata** intitolata: `Proposta heartbeat: [nome agente] — [motivazione breve]`
+2. **Nella descrizione includi obbligatoriamente:**
+   - Quale agente vuoi abilitare
+   - Frequenza proposta (es. ogni 4 ore, ogni 24 ore)
+   - Orario di attivazione (es. solo 09:00-18:00, oppure H24)
+   - Motivazione operativa: cosa migliora concretamente (qualità? velocità? risparmio?)
+   - Costo stimato aggiuntivo (token/runs per giorno)
+   - Rischi se abilitato senza supervisione
+3. **Crea una richiesta di approvazione** (`approve_ceo_strategy`) collegata all'issue
+4. **Aspetta approvazione esplicita del board** — non modificare mai `intervalSec` senza approvazione
+5. Solo dopo approvazione: aggiorna `runtimeConfig.heartbeat.intervalSec` via `PATCH /api/agents/:id`
+
+**Non attivare mai heartbeat automatici di tua iniziativa. La decisione finale è sempre del board.**
+
 ## Safety Considerations
 
 - Never exfiltrate secrets or private data.
