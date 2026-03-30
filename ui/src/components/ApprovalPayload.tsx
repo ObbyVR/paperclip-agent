@@ -93,9 +93,24 @@ export function HireAgentPayload({ payload }: { payload: Record<string, unknown>
 
 export function CeoStrategyPayload({ payload }: { payload: Record<string, unknown> }) {
   const plan = payload.plan ?? payload.description ?? payload.strategy ?? payload.text;
+  const isRedesign = !!(payload.style || payload.sections);
   return (
     <div className="mt-3 space-y-1.5 text-sm">
       <PayloadField label="Title" value={payload.title} />
+      {isRedesign && (
+        <div className="flex flex-wrap gap-2 mt-1">
+          {payload.style ? (
+            <span className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              Stile: {String(payload.style)}
+            </span>
+          ) : null}
+          {payload.sections ? (
+            <span className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              {String(payload.sections)} sezioni
+            </span>
+          ) : null}
+        </div>
+      )}
       {!!plan && (
         <div className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-sm text-muted-foreground whitespace-pre-wrap font-mono text-xs max-h-48 overflow-y-auto">
           {String(plan)}
