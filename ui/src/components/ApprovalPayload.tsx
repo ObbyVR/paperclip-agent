@@ -13,6 +13,9 @@ export function approvalLabel(type: string, payload?: Record<string, unknown> | 
   if (type === "hire_agent" && payload?.name) {
     return `${base}: ${String(payload.name)}`;
   }
+  if (type === "approve_ceo_strategy" && payload?.title) {
+    return String(payload.title);
+  }
   return base;
 }
 

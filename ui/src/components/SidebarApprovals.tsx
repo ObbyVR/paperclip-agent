@@ -26,8 +26,20 @@ import {
   ChevronRight,
   RotateCcw,
   ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import type { Approval } from "@paperclipai/shared";
+
+/** Fetches the first linked issue ID for a redesign approval (approve_ceo_strategy). */
+function useLinkedIssueId(approvalId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["approvals", "issues", approvalId],
+    queryFn: () => approvalsApi.listIssues(approvalId),
+    enabled,
+    staleTime: 60_000,
+    select: (issues) => issues[0]?.id ?? null,
+  });
+}
 
 function ApprovalQuickCard({
   approval,
@@ -50,6 +62,8 @@ function ApprovalQuickCard({
   const payload = approval.payload as Record<string, unknown>;
   const TypeIcon = typeIcon[approval.type] ?? defaultTypeIcon;
   const isActionable = approval.status === "pending" || approval.status === "revision_requested";
+  const isRedesign = approval.type === "approve_ceo_strategy";
+  const { data: linkedIssueId } = useLinkedIssueId(approval.id, isRedesign);
 
   return (
     <div className="border border-border rounded-xl bg-card p-3 space-y-2 shadow-sm">
@@ -95,8 +109,35 @@ function ApprovalQuickCard({
       )}
 
       {approval.type === "approve_ceo_strategy" ? (
-        <div className="text-xs text-muted-foreground pl-10 line-clamp-3">
-          {String(payload.plan ?? payload.strategy ?? payload.description ?? "")}
+        <div className="pl-10 space-y-1">
+          {(payload.description || payload.plan || payload.strategy) ? (
+            <p className="text-xs text-muted-foreground line-clamp-2">
+              {String(payload.description ?? payload.plan ?? payload.strategy ?? "")}
+            </p>
+          ) : null}
+          {(payload.style || payload.sections) ? (
+            <div className="flex flex-wrap gap-2">
+              {payload.style ? (
+                <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                  Stile: {String(payload.style)}
+                </span>
+              ) : null}
+              {payload.sections ? (
+                <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                  {String(payload.sections)} sezioni
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {linkedIssueId ? (
+            <Link
+              to={`/issues/${linkedIssueId}`}
+              className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-medium"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Vedi issue con allegato HTML →
+            </Link>
+          ) : null}
         </div>
       ) : null}
 
