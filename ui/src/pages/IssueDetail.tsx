@@ -844,7 +844,7 @@ export function IssueDetail() {
       </div>
 
       <Tabs value={detailTab} onValueChange={setDetailTab} className="space-y-3">
-        <TabsList variant="line" className="w-full justify-start gap-1 -mt-1 sticky top-0 z-10 bg-background pb-1">
+        <TabsList variant="line" className="w-full justify-start gap-1 -mt-1 sticky top-0 z-10 bg-background pb-1 overflow-x-auto flex-nowrap">
           <TabsTrigger value="overview" className="gap-1.5">
             <FileText className="h-3.5 w-3.5" />
             {t("issueDetail.overview")}
