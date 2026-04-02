@@ -272,21 +272,36 @@ export function Dashboard() {
           if (!agentRuns.has(key)) agentRuns.set(key, []);
           agentRuns.get(key)!.push(run);
         }
+        // Build issue title map for better labels
+        const issueTitleMap = new Map<string, string>();
+        for (const issue of (issues ?? [])) {
+          issueTitleMap.set(issue.id, issue.identifier ? `${issue.identifier}` : issue.title.substring(0, 30));
+        }
+        const runLabel = (run: typeof runs[0]) => {
+          if (run.issueId && issueTitleMap.has(run.issueId)) return issueTitleMap.get(run.issueId)!;
+          if (run.invocationSource === "on_demand") return "Manuale";
+          if (run.invocationSource === "assignment") return "Assegnazione";
+          if (run.invocationSource === "timer") return "Heartbeat";
+          return run.triggerDetail ?? "Run";
+        };
         const lanes: WorkflowLane[] = Array.from(agentRuns.entries()).map(([name, agentRunList]) => {
           const sorted = [...agentRunList].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
           return {
             agentName: name,
             agentLink: `/agents/${sorted[0].agentId}`,
-            steps: sorted.map((run, i) => ({
+            steps: sorted.map((run) => ({
               id: run.id,
-              label: run.issueId ? `Task #${i + 1}` : (run.triggerDetail ?? `Run #${i + 1}`),
+              label: runLabel(run),
               icon: Zap,
               status: run.status === "running" ? "active" as const
                 : run.status === "queued" ? "waiting" as const
+                : run.status === "succeeded" ? "done" as const
+                : run.status === "failed" || run.status === "error" ? "error" as const
                 : run.finishedAt ? "done" as const
-                : run.status === "error" || run.status === "failed" ? "error" as const
                 : "pending" as const,
-              statusLabel: run.status === "running" ? "In esecuzione..." : undefined,
+              statusLabel: run.status === "running" ? "In esecuzione..."
+                : run.status === "failed" ? "Fallito"
+                : undefined,
             })),
           };
         });
