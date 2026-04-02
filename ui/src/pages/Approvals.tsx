@@ -652,16 +652,26 @@ export function Approvals() {
     [approvals],
   );
 
-  // Resolved issues (done/cancelled from formerly blocked)
-  const resolvedBlockedIssues = useMemo(
+  // Issues approved by founder (done with assignee = agent, i.e. work completed by agents)
+  const founderApprovedIssues = useMemo(
     () =>
       issueList
-        .filter((i) => i.status === "done" || i.status === "cancelled")
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        .slice(0, 20),
+        .filter((i) => i.status === "done" && i.assigneeAgentId)
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
     [issueList],
   );
 
+  // Issues rejected by founder (cancelled with assignee = agent)
+  const founderRejectedIssues = useMemo(
+    () =>
+      issueList
+        .filter((i) => i.status === "cancelled" && i.assigneeAgentId)
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [issueList],
+  );
+
+  const totalApproved = approvedApprovals.length + founderApprovedIssues.length;
+  const totalRejected = rejectedApprovals.length + founderRejectedIssues.length;
   const pendingCount = pendingApprovals.length + blockedIssues.length;
 
   // ── Choose what to display ──
@@ -784,9 +794,9 @@ export function Approvals() {
                 label: (
                   <>
                     Approvate
-                    {approvedApprovals.length > 0 && (
+                    {totalApproved > 0 && (
                       <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-green-500/20 text-green-500">
-                        {approvedApprovals.length}
+                        {totalApproved}
                       </span>
                     )}
                   </>
@@ -797,9 +807,9 @@ export function Approvals() {
                 label: (
                   <>
                     Rifiutate
-                    {rejectedApprovals.length > 0 && (
+                    {totalRejected > 0 && (
                       <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-red-500/20 text-red-500">
-                        {rejectedApprovals.length}
+                        {totalRejected}
                       </span>
                     )}
                   </>
@@ -827,8 +837,8 @@ export function Approvals() {
       {error && <p className="text-sm text-destructive">{error.message}</p>}
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
-      {/* ── Approval cards (not shown on "blocked" tab) ── */}
-      {statusFilter !== "blocked" && filtered.length > 0 && (
+      {/* ── Formal approval cards (pending/all tabs) ── */}
+      {(statusFilter === "pending" || statusFilter === "all") && filtered.length > 0 && (
         <div className="grid gap-3">
           {filtered.map((approval) => (
             <ApprovalCard
@@ -844,6 +854,54 @@ export function Approvals() {
               detailLink={`/approvals/${approval.id}`}
               isPending={approveMutation.isPending || rejectMutation.isPending}
             />
+          ))}
+        </div>
+      )}
+
+      {/* ── Approved tab: formal approvals + founder-approved issues ── */}
+      {statusFilter === "approved" && (
+        <div className="grid gap-3">
+          {approvedApprovals.map((approval) => (
+            <ApprovalCard
+              key={approval.id}
+              approval={approval}
+              requesterAgent={
+                approval.requestedByAgentId
+                  ? agentList.find((a) => a.id === approval.requestedByAgentId) ?? null
+                  : null
+              }
+              onApprove={() => {}}
+              onReject={() => {}}
+              detailLink={`/approvals/${approval.id}`}
+              isPending={false}
+            />
+          ))}
+          {founderApprovedIssues.map((issue) => (
+            <ResolvedIssueCard key={issue.id} issue={issue} agents={agentList} resolution="approved" />
+          ))}
+        </div>
+      )}
+
+      {/* ── Rejected tab: formal rejections + founder-rejected issues ── */}
+      {statusFilter === "rejected" && (
+        <div className="grid gap-3">
+          {rejectedApprovals.map((approval) => (
+            <ApprovalCard
+              key={approval.id}
+              approval={approval}
+              requesterAgent={
+                approval.requestedByAgentId
+                  ? agentList.find((a) => a.id === approval.requestedByAgentId) ?? null
+                  : null
+              }
+              onApprove={() => {}}
+              onReject={() => {}}
+              detailLink={`/approvals/${approval.id}`}
+              isPending={false}
+            />
+          ))}
+          {founderRejectedIssues.map((issue) => (
+            <ResolvedIssueCard key={issue.id} issue={issue} agents={agentList} resolution="rejected" />
           ))}
         </div>
       )}
@@ -900,24 +958,112 @@ export function Approvals() {
         </>
       )}
 
-      {/* ── Empty state ── */}
-      {filtered.length === 0 &&
-        (!showBlockedSection || blockedIssues.length === 0) && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <ShieldCheck className="h-8 w-8 text-muted-foreground/30 mb-3" />
-            <p className="text-sm text-muted-foreground">
-              {statusFilter === "pending"
-                ? t("approval.noPending")
-                : statusFilter === "blocked"
-                  ? "Nessuna issue bloccata."
-                  : statusFilter === "approved"
-                    ? "Nessuna approvazione completata."
-                    : statusFilter === "rejected"
-                      ? "Nessuna richiesta rifiutata."
-                      : t("approval.none")}
-            </p>
+      {/* ── All tab: also show resolved issues ── */}
+      {statusFilter === "all" && (founderApprovedIssues.length > 0 || founderRejectedIssues.length > 0) && (
+        <>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-6 mb-2">
+            Task risolti ({founderApprovedIssues.length + founderRejectedIssues.length})
+          </h3>
+          <div className="grid gap-3">
+            {[...founderApprovedIssues, ...founderRejectedIssues]
+              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+              .map((issue) => (
+                <ResolvedIssueCard
+                  key={issue.id}
+                  issue={issue}
+                  agents={agentList}
+                  resolution={issue.status === "done" ? "approved" : "rejected"}
+                />
+              ))}
           </div>
-        )}
+        </>
+      )}
+
+      {/* ── Empty state ── */}
+      {statusFilter === "pending" && pendingCount === 0 && filtered.length === 0 && (
+        <EmptyState message={t("approval.noPending")} />
+      )}
+      {statusFilter === "approved" && totalApproved === 0 && (
+        <EmptyState message="Nessuna approvazione completata." />
+      )}
+      {statusFilter === "rejected" && totalRejected === 0 && (
+        <EmptyState message="Nessuna richiesta rifiutata." />
+      )}
+      {statusFilter === "blocked" && blockedIssues.length === 0 && (
+        <EmptyState message="Nessuna issue bloccata." />
+      )}
+      {statusFilter === "all" && approvals.length === 0 && founderApprovedIssues.length === 0 && founderRejectedIssues.length === 0 && (
+        <EmptyState message={t("approval.none")} />
+      )}
+    </div>
+  );
+}
+
+// ── Resolved issue card (for approved/rejected tabs) ───────────
+
+function ResolvedIssueCard({
+  issue,
+  agents,
+  resolution,
+}: {
+  issue: Issue;
+  agents: Agent[];
+  resolution: "approved" | "rejected";
+}) {
+  const assignee = issue.assigneeAgentId
+    ? agents.find((a) => a.id === issue.assigneeAgentId)
+    : null;
+
+  const borderColor = resolution === "approved" ? "border-green-500/20" : "border-red-500/20";
+  const bgColor = resolution === "approved" ? "bg-green-500/[0.03]" : "bg-red-500/[0.03]";
+  const StatusIcon = resolution === "approved" ? CheckCircle2 : XCircle;
+  const iconColor = resolution === "approved" ? "text-green-500" : "text-red-500";
+  const label = resolution === "approved" ? "Approvata" : "Rifiutata";
+
+  return (
+    <div className={cn("border rounded-lg px-4 py-3", borderColor, bgColor)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <StatusIcon className={cn("h-4 w-4 shrink-0", iconColor)} />
+            <Link
+              to={`/issues/${issue.identifier ?? issue.id}`}
+              className="font-medium text-sm hover:underline"
+            >
+              {issue.identifier && (
+                <span className="text-muted-foreground mr-1.5">{issue.identifier}</span>
+              )}
+              {issue.title}
+            </Link>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            {assignee && (
+              <span className="flex items-center gap-1">
+                <Identity name={assignee.name} size="sm" className="inline-flex" />
+              </span>
+            )}
+            <span className={cn("font-medium", iconColor)}>{label}</span>
+            <span>{timeAgo(issue.updatedAt)}</span>
+          </div>
+        </div>
+        <Link
+          to={`/issues/${issue.identifier ?? issue.id}`}
+          className="text-[11px] text-muted-foreground hover:text-foreground shrink-0"
+        >
+          Dettagli
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ── Empty state ────────────────────────────────────────────────
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <ShieldCheck className="h-8 w-8 text-muted-foreground/30 mb-3" />
+      <p className="text-sm text-muted-foreground">{message}</p>
     </div>
   );
 }
