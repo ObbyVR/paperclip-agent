@@ -12,17 +12,15 @@ import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
-import { MetricCard } from "../components/MetricCard";
 import { EmptyState } from "../components/EmptyState";
 import { StatusIcon } from "../components/StatusIcon";
-
 import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
+import { Bot, Check, ChevronDown, CircleDot, Code, DollarSign, Pause, PenTool, Play, Search, ShieldCheck, Sparkles, LayoutDashboard, PauseCircle, Square, Zap } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
-import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
+import { WorkflowVisualizer, type StepStatus, type SubProcess, type WorkflowEvent, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
@@ -73,12 +71,6 @@ export function Dashboard() {
   const { data: projects } = useQuery({
     queryKey: queryKeys.projects.list(selectedCompanyId!),
     queryFn: () => projectsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
-
-  const { data: runs } = useQuery({
-    queryKey: queryKeys.heartbeats(selectedCompanyId!),
-    queryFn: () => heartbeatsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
 
@@ -165,6 +157,24 @@ export function Dashboard() {
     return agents.find((a) => a.id === id)?.name ?? null;
   };
 
+  // ── All hooks MUST be above conditional returns ──
+  const [showDetails, setShowDetails] = useState(false);
+
+  const { data: liveRuns } = useQuery({
+    queryKey: [...queryKeys.liveRuns(selectedCompanyId ?? ""), "dashboard-wf"],
+    queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!, 4),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 60000,
+  });
+  const activeRuns = (liveRuns ?? []).filter((r) => r.status === "running" || r.status === "queued");
+
+  const [demoLanes, setDemoLanes] = useState<WorkflowLane[] | null>(null);
+  const [demoMerges, setDemoMerges] = useState<Array<{ fromAgent: string; toAgent: string; label?: string; afterLane: number }>>([]);
+  const [demoEvents, setDemoEvents] = useState<WorkflowEvent[]>([]);
+  const [demoStats, setDemoStats] = useState<WorkflowStats | null>(null);
+  const [demoRunning, setDemoRunning] = useState(false);
+  const demoTimersRef = useRef<number[]>([]);
+
   if (!selectedCompanyId) {
     if (companies.length === 0) {
       return (
@@ -187,8 +197,175 @@ export function Dashboard() {
 
   const hasNoAgents = agents !== undefined && agents.length === 0;
 
+  const handleCancelRun = async (runId: string) => {
+    try { await heartbeatsApi.cancel(runId); } catch { /* ignore */ }
+  };
+
+  const designerName = "Web Designer";
+  const copywriterName = "Copywriter";
+
+  const makeLanes = (
+    d: StepStatus[], dL: (string | undefined)[], dS: (SubProcess[] | undefined)[],
+    c: StepStatus[], cL: (string | undefined)[], cS: (SubProcess[] | undefined)[],
+  ): WorkflowLane[] => [
+    {
+      agentName: designerName,
+      agentLink: agents?.[0] ? `/agents/${agents[0].id}` : undefined,
+      steps: [
+        { id: "brand", label: "Brand Analysis", icon: Search, status: d[0], statusLabel: dL[0], subProcesses: dS[0] },
+        { id: "scene", label: "Scene Generation", icon: Sparkles, status: d[1], statusLabel: dL[1], subProcesses: dS[1] },
+        { id: "build", label: "Website Build", icon: Code, status: d[2], statusLabel: dL[2], subProcesses: dS[2], waitingFor: d[2] === "waiting" ? "copy-write" : undefined },
+        { id: "deploy", label: "Deploy", icon: Zap, status: d[3], statusLabel: dL[3], subProcesses: dS[3] },
+      ],
+    },
+    {
+      agentName: copywriterName,
+      steps: [
+        { id: "copy-research", label: "Research", icon: Search, status: c[0], statusLabel: cL[0], subProcesses: cS[0] },
+        { id: "copy-write", label: "Write Copy", icon: PenTool, status: c[1], statusLabel: cL[1], subProcesses: cS[1] },
+        { id: "copy-review", label: "Review", icon: Check, status: c[2], statusLabel: cL[2], subProcesses: cS[2] },
+      ],
+    },
+  ];
+
+  const launchDemo = () => {
+    for (const t of demoTimersRef.current) window.clearTimeout(t);
+    demoTimersRef.current = [];
+    setDemoEvents([]);
+    setDemoMerges([]);
+
+    type S = StepStatus;
+    type L = (string | undefined)[];
+    type SP = (SubProcess[] | undefined)[];
+    type Frame = {
+      d: S[]; dL: L; dS: SP;
+      c: S[]; cL: L; cS: SP;
+      merges?: Array<{ fromAgent: string; toAgent: string; label?: string; afterLane: number }>;
+      event?: WorkflowEvent;
+    };
+
+    const p: S = "pending"; const a: S = "active"; const dn: S = "done"; const w: S = "waiting";
+    const _: undefined = undefined;
+
+    const frames: Frame[] = [
+      // 0: Both start
+      { d: [p,p,p,p], dL: [], dS: [], c: [p,p,p], cL: [], cS: [],
+        event: { id: "e0", ts: "00:00", type: "info", agentName: "CEO", message: "Lancio redesign: Web Designer e Copywriter in parallelo" } },
+      // 1: Designer brand analysis + Copywriter research
+      { d: [a,p,p,p], dL: ["Analisi brand...",_,_,_], dS: [[
+          { label: "Fetch sito", status: "running" }, { label: "Palette colori", status: "pending" }, { label: "Analisi font", status: "pending" },
+        ],_,_,_],
+        c: [a,p,p], cL: ["Ricerca settore...",_,_], cS: [[
+          { label: "Analisi competitor", status: "running" }, { label: "Keyword research", status: "pending" },
+        ],_,_],
+        event: { id: "e1", ts: "00:02", type: "info", agentName: designerName, stepLabel: "Brand Analysis", message: "Inizio analisi brand — fetch sito web..." } },
+      // 2: Designer subs advance + Copywriter subs advance
+      { d: [a,p,p,p], dL: ["Analisi brand...",_,_,_], dS: [[
+          { label: "Fetch sito", status: "done" }, { label: "Palette colori", status: "running" }, { label: "Analisi font", status: "pending" },
+        ],_,_,_],
+        c: [a,p,p], cL: ["Ricerca settore...",_,_], cS: [[
+          { label: "Analisi competitor", status: "done" }, { label: "Keyword research", status: "running" },
+        ],_,_],
+        event: { id: "e2", ts: "00:05", type: "output", agentName: copywriterName, stepLabel: "Research", message: "3 competitor analizzati — keyword identificate", outputLink: "#" } },
+      // 3: Designer done brand → scene gen | Copywriter done research → writing
+      { d: [dn,a,p,p], dL: [_,"Generazione scene...",_,_], dS: [_,[
+          { label: "Prompt scene", status: "running" }, { label: "AI Image Gen", status: "pending" },
+        ],_,_],
+        c: [dn,a,p], cL: [_,"Scrittura testi...",_], cS: [_,[
+          { label: "Hero copy", status: "running" }, { label: "Sezioni", status: "pending" }, { label: "CTA", status: "pending" },
+        ],_],
+        event: { id: "e3", ts: "00:08", type: "output", agentName: designerName, stepLabel: "Brand Analysis", message: "Brand completata — palette: #1a1a2e, #e94560, #0f3460", outputLink: "#" } },
+      // 4: Designer scene gen continues | Copywriter writing continues
+      { d: [dn,a,p,p], dL: [_,"Generazione scene...",_,_], dS: [_,[
+          { label: "Prompt scene", status: "done" }, { label: "AI Image Gen", status: "running" },
+        ],_,_],
+        c: [dn,a,p], cL: [_,"Scrittura testi...",_], cS: [_,[
+          { label: "Hero copy", status: "done" }, { label: "Sezioni", status: "running" }, { label: "CTA", status: "pending" },
+        ],_],
+        event: { id: "e4", ts: "00:12", type: "info", agentName: designerName, stepLabel: "Scene Generation", message: "Generazione immagini con Flux Pro — 4 scene" } },
+      // 5: Designer done scene → build WAITING for copy | Copywriter still writing
+      { d: [dn,dn,w,p], dL: [_,_,"In attesa testi...",_], dS: [_,_,[
+          { label: "HTML structure", status: "done" }, { label: "Inserimento testi", status: "pending" }, { label: "CSS + GSAP", status: "pending" },
+        ],_],
+        c: [dn,a,p], cL: [_,"Scrittura testi...",_], cS: [_,[
+          { label: "Hero copy", status: "done" }, { label: "Sezioni", status: "done" }, { label: "CTA", status: "running" },
+        ],_],
+        event: { id: "e5", ts: "00:16", type: "info", agentName: designerName, stepLabel: "Website Build", message: "Struttura HTML pronta — in attesa dei testi dal Copywriter" } },
+      // 6: Copywriter done writing → review | Designer still waiting
+      { d: [dn,dn,w,p], dL: [_,_,"In attesa review testi",_], dS: [_,_,[
+          { label: "HTML structure", status: "done" }, { label: "Inserimento testi", status: "pending" }, { label: "CSS + GSAP", status: "pending" },
+        ],_],
+        c: [dn,dn,a], cL: [_,_,"Review testi..."], cS: [_,_,[
+          { label: "Controllo tono", status: "running" }, { label: "SEO check", status: "pending" },
+        ]],
+        event: { id: "e6", ts: "00:20", type: "output", agentName: copywriterName, stepLabel: "Write Copy", message: "Testi completati — hero, 4 sezioni, 3 CTA", outputLink: "#" } },
+      // 7: Copywriter done review → MERGE! Designer unblocked
+      { d: [dn,dn,a,p], dL: [_,_,"Build con testi...",_], dS: [_,_,[
+          { label: "HTML structure", status: "done" }, { label: "Inserimento testi", status: "running" }, { label: "CSS + GSAP", status: "pending" },
+        ],_],
+        c: [dn,dn,dn], cL: [], cS: [],
+        merges: [{ fromAgent: copywriterName, toAgent: designerName, label: "Testi consegnati → Website Build sbloccato", afterLane: 0 }],
+        event: { id: "e7", ts: "00:24", type: "merge", agentName: copywriterName, stepLabel: "Review", message: "Testi approvati e consegnati al Web Designer — build sbloccato" } },
+      // 8: Designer build completes → approval
+      { d: [dn,dn,w,p], dL: [_,_,"Approvazione richiesta",_], dS: [_,_,[
+          { label: "HTML structure", status: "done" }, { label: "Inserimento testi", status: "done" }, { label: "CSS + GSAP", status: "done" },
+        ],_],
+        c: [dn,dn,dn], cL: [], cS: [],
+        merges: [{ fromAgent: copywriterName, toAgent: designerName, label: "Testi consegnati", afterLane: 0 }],
+        event: { id: "e8", ts: "00:28", type: "approval", agentName: designerName, stepLabel: "Website Build", message: "Sito completo — richiesta approvazione per il deploy", outputLink: "#" } },
+      // 9: Deploy
+      { d: [dn,dn,dn,a], dL: [_,_,_,"Deploy..."], dS: [_,_,_,[
+          { label: "Upload assets", status: "running" }, { label: "DNS config", status: "pending" },
+        ]],
+        c: [dn,dn,dn], cL: [], cS: [],
+        merges: [{ fromAgent: copywriterName, toAgent: designerName, label: "Testi consegnati", afterLane: 0 }],
+        event: { id: "e9", ts: "00:32", type: "info", agentName: designerName, stepLabel: "Deploy", message: "Approvato — avvio deploy..." } },
+      // 10: Done
+      { d: [dn,dn,dn,dn], dL: [], dS: [], c: [dn,dn,dn], cL: [], cS: [],
+        merges: [{ fromAgent: copywriterName, toAgent: designerName, label: "Testi consegnati", afterLane: 0 }],
+        event: { id: "e10", ts: "00:35", type: "output", stepLabel: "Deploy", message: "Sito live! Workflow completato.", outputLink: "#" } },
+    ];
+
+    setDemoRunning(true);
+    frames.forEach((frame, i) => {
+      const timer = window.setTimeout(() => {
+        setDemoLanes(makeLanes(frame.d, frame.dL, frame.dS, frame.c, frame.cL, frame.cS));
+        setDemoMerges(frame.merges ?? []);
+        if (frame.event) setDemoEvents((prev) => [frame.event!, ...prev]);
+        // Compute stats from current frame
+        const allStatuses = [...frame.d, ...frame.c];
+        const completed = allStatuses.filter((s) => s === "done").length;
+        const active = allStatuses.filter((s) => s === "active").length;
+        const elapsed = `${String(Math.floor(i * 2.5 / 60)).padStart(2, "0")}:${String(Math.round(i * 2.5) % 60).padStart(2, "0")}`;
+        const costUsd = (completed * 0.012 + active * 0.005).toFixed(3);
+        const costEur = (parseFloat(costUsd) * 0.92).toFixed(3);
+        setDemoStats({
+          totalSteps: allStatuses.length,
+          completedSteps: completed,
+          activeSteps: active,
+          agents: 2,
+          elapsedTime: elapsed,
+          estimatedCostEur: `€${costEur}`,
+          estimatedCostUsd: `$${costUsd}`,
+        });
+        if (i === frames.length - 1) setDemoRunning(false);
+      }, i * 2500);
+      demoTimersRef.current.push(timer);
+    });
+  };
+
+  const stopDemo = () => {
+    for (const t of demoTimersRef.current) window.clearTimeout(t);
+    demoTimersRef.current = [];
+    setDemoLanes(null);
+    setDemoMerges([]);
+    setDemoEvents([]);
+    setDemoStats(null);
+    setDemoRunning(false);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
       {hasNoAgents && (
@@ -208,128 +385,137 @@ export function Dashboard() {
         </div>
       )}
 
-      <ActiveAgentsPanel companyId={selectedCompanyId!} />
-
+      {/* ── Stats inline header bar ─────────────── */}
       {data && (
-        <>
-          {data.budgets.activeIncidents > 0 ? (
-            <div className="flex items-start justify-between gap-3 rounded-xl border border-red-500/20 bg-[linear-gradient(180deg,rgba(255,80,80,0.12),rgba(255,255,255,0.02))] px-4 py-3">
-              <div className="flex items-start gap-2.5">
-                <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" />
-                <div>
-                  <p className="text-sm font-medium text-red-50">
-                    {t(data.budgets.activeIncidents === 1 ? "dashboard.activeBudgetIncident" : "dashboard.activeBudgetIncidents", { count: data.budgets.activeIncidents })}
-                  </p>
-                  <p className="text-xs text-red-100/70">
-                    {t("dashboard.agentsPaused", { count: data.budgets.pausedAgents })} · {t("dashboard.projectsPaused", { count: data.budgets.pausedProjects })} · {t("dashboard.pendingBudgetApprovals", { count: data.budgets.pendingApprovals })}
-                  </p>
-                </div>
-              </div>
-              <Link to="/costs" className="text-sm underline underline-offset-2 text-red-100">
-                {t("dashboard.openBudgets")}
-              </Link>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground -mt-1">
+          {data.budgets.activeIncidents > 0 && (
+            <Link to="/costs" className="flex items-center gap-1 font-medium text-red-400 hover:text-red-300">
+              <PauseCircle className="h-3 w-3" />
+              {data.budgets.activeIncidents} incidenti
+            </Link>
+          )}
+          <Link to="/agents" className="flex items-center gap-1 hover:text-foreground">
+            <Bot className="h-3 w-3" />
+            <span className="font-semibold text-foreground">{data.agents.active + data.agents.running + data.agents.paused + data.agents.error}</span>
+            agenti
+            {data.agents.running > 0 && <span className="text-emerald-400 text-[10px]">({data.agents.running} attivi)</span>}
+          </Link>
+          <Link to="/issues" className="flex items-center gap-1 hover:text-foreground">
+            <CircleDot className="h-3 w-3" />
+            <span className="font-semibold text-foreground">{data.tasks.inProgress}</span>
+            in corso
+          </Link>
+          <Link to="/costs" className="flex items-center gap-1 hover:text-foreground">
+            <DollarSign className="h-3 w-3" />
+            <span className="font-semibold text-foreground">{formatCents(data.costs.monthSpendCents)}</span>
+            mese
+          </Link>
+          <Link to="/approvals" className="flex items-center gap-1 hover:text-foreground">
+            <ShieldCheck className="h-3 w-3" />
+            <span className="font-semibold text-foreground">{data.pendingApprovals + data.budgets.pendingApprovals}</span>
+            approvazioni
+          </Link>
+        </div>
+      )}
+
+      {/* ── Workflow Visualizer ──────────────────── */}
+      <div className="space-y-2">
+        <WorkflowVisualizer
+          lanes={demoLanes ?? [
+            { agentName: agents?.[0]?.name ?? "Agent", steps: [
+              { id: "s1", label: "—", icon: Search, status: "pending" as StepStatus },
+            ]},
+          ]}
+          merges={demoMerges}
+          events={demoEvents.length > 0 ? demoEvents : undefined}
+          stats={demoStats ?? undefined}
+        />
+        <div className="flex items-center gap-2">
+          {!demoRunning ? (
+            <button
+              onClick={launchDemo}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
+            >
+              <Play className="h-3 w-3" />
+              Lancia workflow demo
+            </button>
+          ) : (
+            <button
+              onClick={stopDemo}
+              className="flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+            >
+              <Square className="h-3 w-3" />
+              Ferma demo
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Workflow controls ───────────────────── */}
+      {activeRuns.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {activeRuns.map((run) => (
+            <div key={run.id} className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-1.5 text-xs">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
+              </span>
+              <Link to={`/agents/${run.agentId}`} className="font-medium text-foreground hover:underline">{run.agentName}</Link>
+              {run.issueId && <span className="text-muted-foreground">su task</span>}
+              <button
+                onClick={() => handleCancelRun(run.id)}
+                className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+              >
+                <Square className="h-2.5 w-2.5" />
+                Stop
+              </button>
             </div>
-          ) : null}
+          ))}
+        </div>
+      )}
 
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-1 sm:gap-2">
-            <MetricCard
-              icon={Bot}
-              value={data.agents.active + data.agents.running + data.agents.paused + data.agents.error}
-              label={t("settings.agentsEnabled")}
-              to="/agents"
-              description={
-                <span>
-                  {data.agents.running} {t("dashboard.running")}{", "}
-                  {data.agents.paused} {t("dashboard.paused")}{", "}
-                  {data.agents.error} {t("dashboard.errors")}
-                </span>
-              }
-            />
-            <MetricCard
-              icon={CircleDot}
-              value={data.tasks.inProgress}
-              label={t("dashboard.tasksInProgress")}
-              to="/issues"
-              description={
-                <span>
-                  {data.tasks.open} {t("dashboard.open")}{", "}
-                  {data.tasks.blocked} {t("dashboard.blocked")}
-                </span>
-              }
-            />
-            <MetricCard
-              icon={DollarSign}
-              value={formatCents(data.costs.monthSpendCents)}
-              label={t("dashboard.monthSpend")}
-              to="/costs"
-              description={
-                <span>
-                  {data.costs.monthBudgetCents > 0
-                    ? `${data.costs.monthUtilizationPercent}% of ${formatCents(data.costs.monthBudgetCents)} budget`
-                    : t("cost.unlimitedBudget")}
-                </span>
-              }
-            />
-            <MetricCard
-              icon={ShieldCheck}
-              value={data.pendingApprovals + data.budgets.pendingApprovals}
-              label={t("approval.pending")}
-              to="/approvals"
-              description={
-                <span>
-                  {data.budgets.pendingApprovals > 0
-                    ? `${data.budgets.pendingApprovals} ${t("dashboard.budgetOverridesAwaiting")}`
-                    : t("status.awaitingReview")}
-                </span>
-              }
-            />
+      {/* ── Activity feed sotto il workflow ──────── */}
+      {recentActivity.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            {t("activity.title")}
+          </h3>
+          <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">
+            {recentActivity.slice(0, 6).map((event) => (
+              <ActivityRow
+                key={event.id}
+                event={event}
+                agentMap={agentMap}
+                entityNameMap={entityNameMap}
+                entityTitleMap={entityTitleMap}
+                className={animatedActivityIds.has(event.id) ? "activity-row-enter" : undefined}
+              />
+            ))}
           </div>
+        </div>
+      )}
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <ChartCard title={t("dashboard.runActivity")} subtitle={t("dashboard.last14days")}>
-              <RunActivityChart runs={runs ?? []} />
-            </ChartCard>
-            <ChartCard title={t("dashboard.issuesByPriority")} subtitle={t("dashboard.last14days")}>
-              <PriorityChart issues={issues ?? []} />
-            </ChartCard>
-            <ChartCard title={t("dashboard.issuesByStatus")} subtitle={t("dashboard.last14days")}>
-              <IssueStatusChart issues={issues ?? []} />
-            </ChartCard>
-            <ChartCard title={t("dashboard.successRate")} subtitle={t("dashboard.last14days")}>
-              <SuccessRateChart runs={runs ?? []} />
-            </ChartCard>
-          </div>
+      <PluginSlotOutlet
+        slotTypes={["dashboardWidget"]}
+        context={{ companyId: selectedCompanyId }}
+        className="grid gap-4 md:grid-cols-2"
+        itemClassName="rounded-lg border bg-card p-4 shadow-sm"
+      />
 
-          <PluginSlotOutlet
-            slotTypes={["dashboardWidget"]}
-            context={{ companyId: selectedCompanyId }}
-            className="grid gap-4 md:grid-cols-2"
-            itemClassName="rounded-lg border bg-card p-4 shadow-sm"
-          />
+      {/* ── Dettagli (collapsible) — agenti, task recenti ── */}
+      <div>
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showDetails && "rotate-180")} />
+          {showDetails ? "Nascondi dettagli" : "Mostra dettagli (agenti, task recenti)"}
+        </button>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* Recent Activity */}
-            {recentActivity.length > 0 && (
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                  {t("activity.title")}
-                </h3>
-                <div className="border border-border divide-y divide-border overflow-hidden">
-                  {recentActivity.map((event) => (
-                    <ActivityRow
-                      key={event.id}
-                      event={event}
-                      agentMap={agentMap}
-                      entityNameMap={entityNameMap}
-                      entityTitleMap={entityTitleMap}
-                      className={animatedActivityIds.has(event.id) ? "activity-row-enter" : undefined}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+        {showDetails && (
+          <div className="mt-3 space-y-4">
+            <ActiveAgentsPanel companyId={selectedCompanyId!} />
 
-            {/* Recent Tasks */}
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                 {t("dashboard.recentTasks")}
@@ -339,7 +525,7 @@ export function Dashboard() {
                   <p className="text-sm text-muted-foreground">{t("dashboard.noTasksYet")}</p>
                 </div>
               ) : (
-                <div className="border border-border divide-y divide-border overflow-hidden">
+                <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">
                   {recentIssues.slice(0, 10).map((issue) => (
                     <Link
                       key={issue.id}
@@ -347,12 +533,9 @@ export function Dashboard() {
                       className="px-4 py-3 text-sm cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit block"
                     >
                       <div className="flex items-start gap-2 sm:items-center sm:gap-3">
-                        {/* Status icon - left column on mobile */}
                         <span className="shrink-0 sm:hidden">
                           <StatusIcon status={issue.status} />
                         </span>
-
-                        {/* Right column on mobile: title + metadata stacked */}
                         <span className="flex min-w-0 flex-1 flex-col gap-1 sm:contents">
                           <span className="line-clamp-2 text-sm sm:order-2 sm:flex-1 sm:min-w-0 sm:line-clamp-none sm:truncate">
                             {issue.title}
@@ -381,9 +564,8 @@ export function Dashboard() {
               )}
             </div>
           </div>
-
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
