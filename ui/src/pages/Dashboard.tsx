@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
-import { activityApi } from "../api/activity";
+// activityApi removed — activity feed moved out of dashboard
 import { approvalsApi } from "../api/approvals";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
@@ -15,13 +15,13 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
 import { StatusIcon } from "../components/StatusIcon";
-import { ActivityRow } from "../components/ActivityRow";
+// ActivityRow removed — activity feed moved out of dashboard
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
 import { Bot, ChevronDown, CircleDot, DollarSign, LayoutDashboard, PauseCircle, Play, ShieldCheck, Square, Zap } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
-import { WorkflowVisualizer, type WorkflowEvent, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
+// WorkflowVisualizer removed — replaced by WorkflowGraph
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
@@ -63,10 +63,7 @@ export function Dashboard() {
   const { selectedCompanyId, companies } = useCompany();
   const { openOnboarding } = useDialog();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const [animatedActivityIds, setAnimatedActivityIds] = useState<Set<string>>(new Set());
-  const seenActivityIdsRef = useRef<Set<string>>(new Set());
-  const hydratedActivityRef = useRef(false);
-  const activityAnimationTimersRef = useRef<number[]>([]);
+  // Activity animation state removed — feed no longer on dashboard
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -84,11 +81,7 @@ export function Dashboard() {
     enabled: !!selectedCompanyId,
   });
 
-  const { data: activity } = useQuery({
-    queryKey: queryKeys.activity(selectedCompanyId!),
-    queryFn: () => activityApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
+  // Activity query removed — no longer on dashboard
 
   const { data: issues } = useQuery({
     queryKey: queryKeys.issues.list(selectedCompanyId!),
@@ -96,69 +89,10 @@ export function Dashboard() {
     enabled: !!selectedCompanyId,
   });
 
-  const { data: projects } = useQuery({
-    queryKey: queryKeys.projects.list(selectedCompanyId!),
-    queryFn: () => projectsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
+  // projects query removed — no longer needed on dashboard
 
   const recentIssues = issues ? getRecentIssues(issues) : [];
-  const recentActivity = useMemo(() => (activity ?? []).slice(0, 10), [activity]);
-
-  useEffect(() => {
-    for (const timer of activityAnimationTimersRef.current) {
-      window.clearTimeout(timer);
-    }
-    activityAnimationTimersRef.current = [];
-    seenActivityIdsRef.current = new Set();
-    hydratedActivityRef.current = false;
-    setAnimatedActivityIds(new Set());
-  }, [selectedCompanyId]);
-
-  useEffect(() => {
-    if (recentActivity.length === 0) return;
-
-    const seen = seenActivityIdsRef.current;
-    const currentIds = recentActivity.map((event) => event.id);
-
-    if (!hydratedActivityRef.current) {
-      for (const id of currentIds) seen.add(id);
-      hydratedActivityRef.current = true;
-      return;
-    }
-
-    const newIds = currentIds.filter((id) => !seen.has(id));
-    if (newIds.length === 0) {
-      for (const id of currentIds) seen.add(id);
-      return;
-    }
-
-    setAnimatedActivityIds((prev) => {
-      const next = new Set(prev);
-      for (const id of newIds) next.add(id);
-      return next;
-    });
-
-    for (const id of newIds) seen.add(id);
-
-    const timer = window.setTimeout(() => {
-      setAnimatedActivityIds((prev) => {
-        const next = new Set(prev);
-        for (const id of newIds) next.delete(id);
-        return next;
-      });
-      activityAnimationTimersRef.current = activityAnimationTimersRef.current.filter((t) => t !== timer);
-    }, 980);
-    activityAnimationTimersRef.current.push(timer);
-  }, [recentActivity]);
-
-  useEffect(() => {
-    return () => {
-      for (const timer of activityAnimationTimersRef.current) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, []);
+  // Activity animation effects removed — feed no longer on dashboard
 
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>();
@@ -166,19 +100,7 @@ export function Dashboard() {
     return map;
   }, [agents]);
 
-  const entityNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.identifier ?? i.id.slice(0, 8));
-    for (const a of agents ?? []) map.set(`agent:${a.id}`, a.name);
-    for (const p of projects ?? []) map.set(`project:${p.id}`, p.name);
-    return map;
-  }, [issues, agents, projects]);
-
-  const entityTitleMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.title);
-    return map;
-  }, [issues]);
+  // entityNameMap, entityTitleMap removed — ActivityRow no longer used
 
   const agentName = (id: string | null) => {
     if (!id || !agents) return null;
@@ -186,7 +108,6 @@ export function Dashboard() {
   };
 
   // ── All hooks MUST be above conditional returns ──
-  const [showDetails, setShowDetails] = useState(false);
 
   const { data: liveRuns } = useQuery({
     queryKey: [...queryKeys.liveRuns(selectedCompanyId ?? ""), "dashboard-wf"],
@@ -345,60 +266,47 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ── Activity + Task recenti — 2 colonne ── */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Activity feed */}
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            {t("activity.title")}
-          </h3>
-          {recentActivity.length > 0 ? (
-            <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">
-              {recentActivity.slice(0, 6).map((event) => (
-                <ActivityRow
-                  key={event.id}
-                  event={event}
-                  agentMap={agentMap}
-                  entityNameMap={entityNameMap}
-                  entityTitleMap={entityTitleMap}
-                  className={animatedActivityIds.has(event.id) ? "activity-row-enter" : undefined}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground/50 py-4">Nessuna attivita' recente</p>
-          )}
-        </div>
+      {/* ── Fallback: recent issues only when no workflow graph visible ── */}
+      {issues && agents && (() => {
+        // Check if WorkflowGraph would render (same logic as buildTree)
+        const childIds = new Set(issues.filter((i) => i.parentId).map((i) => i.parentId!));
+        const hasWorkflowRoots = issues.some((i) =>
+          !i.parentId && childIds.has(i.id) &&
+          (i.status === "in_progress" || i.status === "blocked" || i.status === "todo" ||
+           (i.status === "done" && issues.some((c) => c.parentId === i.id && c.status !== "done" && c.status !== "cancelled")))
+        );
+        if (hasWorkflowRoots) return null;
 
-        {/* Recent tasks */}
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            {t("dashboard.recentTasks")}
-          </h3>
-          {recentIssues.length > 0 ? (
-            <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">
-              {recentIssues.slice(0, 6).map((issue) => (
-                <Link
-                  key={issue.id}
-                  to={`/issues/${issue.identifier ?? issue.id}`}
-                  className="px-3 py-2 text-xs cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit flex items-center gap-2"
-                >
-                  <StatusIcon status={issue.status} />
-                  <span className="font-mono text-muted-foreground shrink-0">{issue.identifier ?? issue.id.slice(0, 8)}</span>
-                  <span className="truncate flex-1">{issue.title}</span>
-                  {issue.assigneeAgentId && (() => {
-                    const name = agentName(issue.assigneeAgentId);
-                    return name ? <Identity name={name} size="xs" className="shrink-0" /> : null;
-                  })()}
-                  <span className="text-muted-foreground shrink-0">{timeAgo(issue.updatedAt)}</span>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground/50 py-4">{t("dashboard.noTasksYet")}</p>
-          )}
-        </div>
-      </div>
+        return (
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Issue recenti
+            </h3>
+            {recentIssues.length > 0 ? (
+              <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">
+                {recentIssues.slice(0, 8).map((issue) => (
+                  <Link
+                    key={issue.id}
+                    to={`/issues/${issue.identifier ?? issue.id}`}
+                    className="px-3 py-2 text-xs cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit flex items-center gap-2"
+                  >
+                    <StatusIcon status={issue.status} />
+                    <span className="font-mono text-muted-foreground shrink-0">{issue.identifier ?? issue.id.slice(0, 8)}</span>
+                    <span className="truncate flex-1">{issue.title}</span>
+                    {issue.assigneeAgentId && (() => {
+                      const name = agentName(issue.assigneeAgentId);
+                      return name ? <Identity name={name} size="xs" className="shrink-0" /> : null;
+                    })()}
+                    <span className="text-muted-foreground shrink-0">{timeAgo(issue.updatedAt)}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground/50 py-4">{t("dashboard.noTasksYet")}</p>
+            )}
+          </div>
+        );
+      })()}
 
       <PluginSlotOutlet
         slotTypes={["dashboardWidget"]}

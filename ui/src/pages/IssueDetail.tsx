@@ -25,13 +25,12 @@ import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
 import { IssueProperties } from "../components/IssueProperties";
 import { IssueWorkspaceCard } from "../components/IssueWorkspaceCard";
 import { IssueActivityTab } from "../components/IssueActivityTab";
-import { IssueSubIssuesTab } from "../components/IssueSubIssuesTab";
-import { IssueResultsTab } from "../components/IssueResultsTab";
+import { IssueResultsInline } from "../components/IssueResultsInline";
 import { LiveRunWidget } from "../components/LiveRunWidget";
 import type { MentionOption } from "../components/MarkdownEditor";
 import { ScrollToBottom } from "../components/ScrollToBottom";
 import { StatusIcon } from "../components/StatusIcon";
-import { PriorityIcon } from "../components/PriorityIcon";
+// PriorityIcon moved to side panel only
 import { StatusBadge } from "../components/StatusBadge";
 import { Identity } from "../components/Identity";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
@@ -52,7 +51,7 @@ import {
   EyeOff,
   FileText,
   Hexagon,
-  ListTree,
+  // ListTree removed — sub-issues inline
   MessageSquare,
   MoreHorizontal,
   Paperclip,
@@ -131,7 +130,7 @@ export function IssueDetail() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState("overview");
+  const [detailTab, setDetailTab] = useState("comments");
   const [secondaryOpen, setSecondaryOpen] = useState({
     approvals: false,
   });
@@ -671,8 +670,11 @@ export function IssueDetail() {
     </>
   );
 
+  const assigneeAgent = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId) : null;
+  const isBlocked = issue.status === "blocked";
+
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-5">
       {/* Parent chain breadcrumb */}
       {ancestors.length > 0 && (
         <nav className="flex items-center gap-1 text-xs text-muted-foreground flex-wrap">
@@ -701,15 +703,12 @@ export function IssueDetail() {
         </div>
       )}
 
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+      {/* ── Header: clean, minimal ── */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 min-w-0">
           <StatusIcon
             status={issue.status}
             onChange={(status) => updateIssue.mutate({ status })}
-          />
-          <PriorityIcon
-            priority={issue.priority}
-            onChange={(priority) => updateIssue.mutate({ priority })}
           />
           <span className="text-sm font-mono text-muted-foreground shrink-0">{issue.identifier ?? issue.id.slice(0, 8)}</span>
 
@@ -723,72 +722,14 @@ export function IssueDetail() {
             </span>
           )}
 
-          {issue.originKind === "routine_execution" && issue.originId && (
-            <Link
-              to={`/routines/${issue.originId}`}
-              className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0 hover:bg-violet-500/20 transition-colors"
-            >
-              <Repeat className="h-3 w-3" />
-              Routine
-            </Link>
-          )}
-
-          {issue.projectId ? (
-            <Link
-              to={`/projects/${issue.projectId}`}
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded px-1 -mx-1 py-0.5 min-w-0"
-            >
-              <Hexagon className="h-3 w-3 shrink-0" />
-              <span className="truncate">{(projects ?? []).find((p) => p.id === issue.projectId)?.name ?? issue.projectId.slice(0, 8)}</span>
-            </Link>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground opacity-50 px-1 -mx-1 py-0.5">
-              <Hexagon className="h-3 w-3 shrink-0" />
-              {t("issueDetail.noProject")}
+          {assigneeAgent && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Identity name={assigneeAgent.name} size="xs" />
+              <span className="truncate max-w-[140px]">{assigneeAgent.name}</span>
             </span>
           )}
 
-          {(issue.labels ?? []).length > 0 && (
-            <div className="hidden sm:flex items-center gap-1">
-              {(issue.labels ?? []).slice(0, 4).map((label) => (
-                <span
-                  key={label.id}
-                  className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium"
-                  style={{
-                    borderColor: label.color,
-                    color: pickTextColorForPillBg(label.color, 0.12),
-                    backgroundColor: `${label.color}1f`,
-                  }}
-                >
-                  {label.name}
-                </span>
-              ))}
-              {(issue.labels ?? []).length > 4 && (
-                <span className="text-[10px] text-muted-foreground">+{(issue.labels ?? []).length - 4}</span>
-              )}
-            </div>
-          )}
-
-          <div className="ml-auto flex items-center gap-0.5 md:hidden shrink-0">
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={copyIssueToClipboard}
-              title="Copy issue as markdown"
-            >
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => setMobilePropsOpen(true)}
-              title="Properties"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="hidden md:flex items-center md:ml-auto shrink-0">
+          <div className="ml-auto flex items-center gap-0.5 shrink-0">
             <Button
               variant="ghost"
               size="icon-xs"
@@ -801,11 +742,17 @@ export function IssueDetail() {
               variant="ghost"
               size="icon-xs"
               className={cn(
-                "shrink-0 transition-opacity duration-200",
+                "shrink-0 transition-opacity duration-200 md:inline-flex",
                 panelVisible ? "opacity-0 pointer-events-none w-0 overflow-hidden" : "opacity-100",
               )}
-              onClick={() => setPanelVisible(true)}
-              title="Show properties"
+              onClick={() => {
+                if (window.innerWidth < 768) {
+                  setMobilePropsOpen(true);
+                } else {
+                  setPanelVisible(true);
+                }
+              }}
+              title="Properties"
             >
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
@@ -816,21 +763,21 @@ export function IssueDetail() {
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </PopoverTrigger>
-            <PopoverContent className="w-44 p-1" align="end">
-              <button
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-destructive"
-                onClick={() => {
-                  updateIssue.mutate(
-                    { hiddenAt: new Date().toISOString() },
-                    { onSuccess: () => navigate("/issues/all") },
-                  );
-                  setMoreOpen(false);
-                }}
-              >
-                <EyeOff className="h-3 w-3" />
-                {t("issueDetail.hideIssue")}
-              </button>
-            </PopoverContent>
+              <PopoverContent className="w-44 p-1" align="end">
+                <button
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-destructive"
+                  onClick={() => {
+                    updateIssue.mutate(
+                      { hiddenAt: new Date().toISOString() },
+                      { onSuccess: () => navigate("/issues/all") },
+                    );
+                    setMoreOpen(false);
+                  }}
+                >
+                  <EyeOff className="h-3 w-3" />
+                  {t("issueDetail.hideIssue")}
+                </button>
+              </PopoverContent>
             </Popover>
           </div>
         </div>
@@ -843,55 +790,135 @@ export function IssueDetail() {
         />
       </div>
 
+      {/* ── Action bar: prominent when blocked ── */}
+      {isBlocked && (
+        <div className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/[0.04] px-4 py-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-red-400">Approvazione richiesta</p>
+            {assigneeAgent && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Completata da {assigneeAgent.name}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => updateIssue.mutate({ status: "done" }, {
+                onSuccess: () => {
+                  issuesApi.addComment(issueId!, "Approvato dal founder.");
+                },
+              })}
+            >
+              <Check className="h-3.5 w-3.5 mr-1" />
+              Approva
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
+              onClick={() => {
+                issuesApi.addComment(issueId!, "Revisione richiesta dal founder.");
+                updateIssue.mutate({ status: "in_progress" });
+              }}
+            >
+              <Repeat className="h-3.5 w-3.5 mr-1" />
+              Revisione
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-red-500/30 text-red-400 hover:bg-red-500/10"
+              onClick={() => {
+                issuesApi.addComment(issueId!, "Rifiutato dal founder.");
+                updateIssue.mutate({ status: "cancelled" });
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Rifiuta
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Description ── */}
+      {(issue.description || runResults.length === 0) && (
+        <InlineEditor
+          value={issue.description ?? ""}
+          onSave={(description) => updateIssue.mutateAsync({ description })}
+          as="p"
+          className="text-[15px] leading-7 text-foreground"
+          placeholder="Add a description..."
+          multiline
+          mentions={mentionOptions}
+          imageUploadHandler={async (file) => {
+            const attachment = await uploadAttachment.mutateAsync(file);
+            return attachment.contentPath;
+          }}
+        />
+      )}
+
+      {/* ── Results / Output — inline, prominent ── */}
+      {runResults.length > 0 && (
+        <IssueResultsInline runResults={runResults} />
+      )}
+
+      {/* ── Sub-issues — inline compact list ── */}
+      {childIssues.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Sub-issue ({childIssues.length})
+          </h3>
+          <div className="border border-border rounded-lg divide-y divide-border">
+            {childIssues.map((child) => (
+              <Link
+                key={child.id}
+                to={`/issues/${child.identifier ?? child.id}`}
+                state={location.state}
+                className="flex items-center justify-between px-3 py-2 text-sm hover:bg-accent/20 transition-colors"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <StatusIcon status={child.status} />
+                  <span className="font-mono text-muted-foreground shrink-0 text-xs">
+                    {child.identifier ?? child.id.slice(0, 8)}
+                  </span>
+                  <span className="truncate">{child.title}</span>
+                </div>
+                {child.assigneeAgentId && (() => {
+                  const name = agentMap.get(child.assigneeAgentId)?.name;
+                  return name
+                    ? <Identity name={name} size="sm" />
+                    : null;
+                })()}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Secondary: Comments & Activity tabs ── */}
       <Tabs value={detailTab} onValueChange={setDetailTab} className="space-y-3">
-        <TabsList variant="line" className="w-full justify-start gap-1 -mt-1 sticky top-0 z-10 bg-background pb-1 overflow-x-auto flex-nowrap">
-          <TabsTrigger value="overview" className="gap-1.5">
-            <FileText className="h-3.5 w-3.5" />
-            {t("issueDetail.overview")}
-          </TabsTrigger>
+        <TabsList variant="line" className="w-full justify-start gap-1 sticky top-0 z-10 bg-background pb-1 overflow-x-auto flex-nowrap">
           <TabsTrigger value="comments" className="gap-1.5">
             <MessageSquare className="h-3.5 w-3.5" />
             {t("issueDetail.comments")}
-          </TabsTrigger>
-          <TabsTrigger value="subissues" className="gap-1.5">
-            <ListTree className="h-3.5 w-3.5" />
-            {t("issueDetail.subIssues")}
+            {(commentsWithRunMeta.length > 0) && (
+              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {commentsWithRunMeta.length}
+              </span>
+            )}
           </TabsTrigger>
           <TabsTrigger value="activity" className="gap-1.5">
             <ActivityIcon className="h-3.5 w-3.5" />
             {t("issueDetail.activity")}
           </TabsTrigger>
-          {runResults.length > 0 && (
-            <TabsTrigger value="results" className="gap-1.5">
-              <FileText className="h-3.5 w-3.5" />
-              {t("issueDetail.results")}
-              <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                {runResults.length}
-              </span>
-            </TabsTrigger>
-          )}
           {issuePluginTabItems.map((item) => (
             <TabsTrigger key={item.value} value={item.value}>
               {item.label}
             </TabsTrigger>
           ))}
         </TabsList>
-
-        <TabsContent value="overview" className="space-y-4">
-          <InlineEditor
-            value={issue.description ?? ""}
-            onSave={(description) => updateIssue.mutateAsync({ description })}
-            as="p"
-            className="text-[15px] leading-7 text-foreground"
-            placeholder="Add a description..."
-            multiline
-            mentions={mentionOptions}
-            imageUploadHandler={async (file) => {
-              const attachment = await uploadAttachment.mutateAsync(file);
-              return attachment.contentPath;
-            }}
-          />
-        </TabsContent>
 
         <TabsContent value="comments">
           <CommentThread
@@ -928,16 +955,12 @@ export function IssueDetail() {
           />
         </TabsContent>
 
-        <IssueSubIssuesTab childIssues={childIssues} agentMap={agentMap} />
-
         <IssueActivityTab
           activity={activity}
           hasLinkedRuns={!!(linkedRuns && linkedRuns.length > 0)}
           issueCostSummary={issueCostSummary}
           agentMap={agentMap}
         />
-
-        <IssueResultsTab runResults={runResults} />
 
         {activePluginTab && (
           <TabsContent value={activePluginTab.value}>
