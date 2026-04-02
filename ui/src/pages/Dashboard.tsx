@@ -315,204 +315,24 @@ export function Dashboard() {
         />
       )}
 
-      {/* ── Workflow Visualizer — real data from liveRuns ── */}
-      {(() => {
-        const runs = liveRuns ?? [];
-        if (runs.length === 0) {
-          return (
-            <div className="relative overflow-hidden rounded-xl border border-border bg-[#0c0e14] px-6 py-10 text-center">
-              <div className="flex flex-col items-center gap-2">
-                <Play className="h-6 w-6 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground/50">Nessun workflow eseguito</p>
-                <p className="text-xs text-muted-foreground/30">Assegna un task a un agente per vedere il workflow qui</p>
-              </div>
-            </div>
-          );
-        }
-        // Deduplicate runs: keep only the most recent run per (agent, issueId) combo
-        const runKey = (r: typeof runs[0]) => `${r.agentId}::${r.issueId ?? r.id}`;
-        const bestRuns = new Map<string, typeof runs[0]>();
-        for (const run of [...runs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())) {
-          const key = runKey(run);
-          if (!bestRuns.has(key)) bestRuns.set(key, run);
-        }
-        const dedupedRuns = Array.from(bestRuns.values());
-
-        // Group by agent
-        const agentRuns = new Map<string, typeof runs>();
-        for (const run of dedupedRuns) {
-          const key = run.agentName ?? run.agentId;
-          if (!agentRuns.has(key)) agentRuns.set(key, []);
-          agentRuns.get(key)!.push(run);
-        }
-        // Build issue title map for better labels
-        const issueTitleMap = new Map<string, string>();
-        for (const issue of (issues ?? [])) {
-          issueTitleMap.set(issue.id, issue.identifier ? `${issue.identifier}` : issue.title.substring(0, 30));
-        }
-        const runLabel = (run: typeof runs[0]) => {
-          if (run.issueId) {
-            const issue = (issues ?? []).find((i) => i.id === run.issueId);
-            if (issue) return issue.title.length > 35 ? issue.title.substring(0, 35) + "…" : issue.title;
-          }
-          if (run.invocationSource === "timer") return "Heartbeat";
-          return run.triggerDetail ?? "Run";
-        };
-        const lanes: WorkflowLane[] = Array.from(agentRuns.entries()).map(([name, agentRunList]) => {
-          const sorted = [...agentRunList].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          return {
-            agentName: name,
-            agentLink: `/agents/${sorted[0].agentId}`,
-            steps: sorted.map((run) => ({
-              id: run.id,
-              label: runLabel(run),
-              icon: Zap,
-              status: run.status === "running" ? "active" as const
-                : run.status === "queued" ? "waiting" as const
-                : run.status === "succeeded" ? "done" as const
-                : run.status === "failed" || run.status === "error" ? "error" as const
-                : run.finishedAt ? "done" as const
-                : "pending" as const,
-              statusLabel: run.status === "running" ? "In esecuzione..."
-                : run.status === "failed" ? "Fallito"
-                : undefined,
-            })),
-          };
-        });
-        const allSteps = lanes.flatMap((l) => l.steps);
-        const completed = allSteps.filter((s) => s.status === "done").length;
-        const active = allSteps.filter((s) => s.status === "active").length;
-        const errored = allSteps.filter((s) => s.status === "error").length;
-        const stats: WorkflowStats = {
-          totalSteps: allSteps.length,
-          completedSteps: completed,
-          activeSteps: active,
-          agents: lanes.length,
-        };
-
-        // Build events from activity feed + pending approvals + blocked issues
-        const events: WorkflowEvent[] = [];
-
-        // Action translations
-        const actionLabels: Record<string, string> = {
-          "issue.comment_added": "Nuovo commento",
-          "issue.updated": "Stato aggiornato",
-          "issue.document_created": "Documento creato",
-          "issue.document_updated": "Documento aggiornato",
-          "issue.checked_out": "Presa in carico",
-          "issue.created": "Issue creata",
-          "issue.assigned": "Assegnata",
-          "agent.hired": "Agente assunto",
-          "agent.created": "Agente creato",
-          "run.started": "Run avviato",
-          "run.completed": "Run completato",
-          "run.failed": "Run fallito",
-        };
-        const noiseActions = new Set(["issue.read_marked", "agent.key_created", "issue.document_updated"]);
-
-        // 1. Pending approvals
-        for (const approval of (pendingApprovalsList ?? [])) {
-          const title = approval.payload?.title ?? approval.payload?.name ?? "Approvazione richiesta";
-          const agName = approval.requestedByAgentId
-            ? (agents ?? []).find((a) => a.id === approval.requestedByAgentId)?.name
-            : undefined;
-          events.push({
-            id: `approval-${approval.id}`,
-            ts: new Date(approval.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-            type: "approval" as const,
-            agentName: agName ?? "Board",
-            message: String(title),
-            outputLink: `/approvals/${approval.id}`,
-          });
-        }
-
-        // 2. Blocked issues = waiting for founder review (only recent, last 7 days)
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const blockedIssues = (issues ?? []).filter((i) => i.status === "blocked" && new Date(i.updatedAt) > sevenDaysAgo);
-        for (const issue of blockedIssues) {
-          const assigneeName = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId)?.name : undefined;
-          events.push({
-            id: `blocked-${issue.id}`,
-            ts: new Date(issue.updatedAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-            type: "approval" as const,
-            agentName: assigneeName,
-            stepLabel: "In attesa di review",
-            message: `${issue.identifier ?? ""} ${issue.title}`.trim(),
-            outputLink: `/issues/${issue.identifier ?? issue.id}`,
-          });
-        }
-
-        // 3. Recent activity (filtered, translated, agent-only unless important)
-        for (const event of recentActivity) {
-          if (noiseActions.has(event.action)) continue;
-          // Skip board-only events unless they're agent hires or important
-          if (!event.agentId && !event.action.includes("hired") && !event.action.includes("created")) continue;
-          const agName = event.agentId ? agentMap.get(event.agentId)?.name : undefined;
-          const label = actionLabels[event.action] ?? event.action.replace(/\./g, " ").replace(/_/g, " ");
-          const isOutput = event.action.includes("comment") || event.action.includes("document") || event.action.includes("completed");
-          const isError = event.action.includes("failed") || event.action.includes("error");
-          // Get issue title if entity is an issue
-          const issueTitle = event.entityType === "issue"
-            ? (issues ?? []).find((i) => i.id === event.entityId)
-            : undefined;
-          const entityDesc = issueTitle
-            ? `${issueTitle.identifier ?? ""} ${issueTitle.title}`.trim()
-            : entityNameMap.get(`${event.entityType}:${event.entityId}`) ?? "";
-          const issueLink = event.entityType === "issue"
-            ? `/issues/${entityNameMap.get(`issue:${event.entityId}`) ?? event.entityId}`
-            : undefined;
-          // Extract useful detail
-          const detail = event.details as Record<string, unknown> | null;
-          const prev = detail?._previous as Record<string, unknown> | undefined;
-          const statusChange = prev ? ` (${String(prev.status ?? "")} → ${String(detail?.status ?? "")})` : "";
-          const docTitle = detail?.title ? ` — ${String(detail.title).substring(0, 40)}` : "";
-
-          events.push({
-            id: `activity-${event.id}`,
-            ts: new Date(event.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-            type: isError ? "error" as const : isOutput ? "output" as const : "info" as const,
-            agentName: agName,
-            message: `${label}${statusChange}${docTitle} — ${entityDesc}`.substring(0, 120),
-            outputLink: issueLink,
-          });
-        }
-
-        // 4. Failed runs
-        for (const run of runs.filter((r) => r.status === "failed")) {
-          const issueTitle = run.issueId ? (issues ?? []).find((i) => i.id === run.issueId) : undefined;
-          events.push({
-            id: `run-fail-${run.id}`,
-            ts: new Date(run.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-            type: "error" as const,
-            agentName: run.agentName,
-            message: issueTitle ? `Run fallito — ${issueTitle.identifier ?? ""} ${issueTitle.title}`.trim() : `Run fallito (${run.invocationSource})`,
-          });
-        }
-
-        // Sort by time descending, deduplicate by id prefix, limit
-        events.sort((a, b) => b.ts.localeCompare(a.ts));
-        const seen = new Set<string>();
-        const deduped = events.filter((e) => {
-          const key = e.message.substring(0, 50);
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-
-        return <WorkflowVisualizer lanes={lanes} stats={stats} events={deduped.length > 0 ? deduped.slice(0, 15) : undefined} />;
-      })()}
-
-      {/* ── Workflow controls ───────────────────── */}
+      {/* ── Active runs banner ──────────────────── */}
       {activeRuns.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {activeRuns.map((run) => (
-            <div key={run.id} className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-1.5 text-xs">
+            <div key={run.id} className="flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] px-3 py-1.5 text-xs">
               <span className="relative flex h-2 w-2 shrink-0">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
               </span>
               <Link to={`/agents/${run.agentId}`} className="font-medium text-foreground hover:underline">{run.agentName}</Link>
-              {run.issueId && <span className="text-muted-foreground">su task</span>}
+              {run.issueId && (() => {
+                const issue = (issues ?? []).find((i) => i.id === run.issueId);
+                return issue ? (
+                  <span className="text-muted-foreground truncate max-w-[200px]">
+                    su {issue.identifier} {issue.title}
+                  </span>
+                ) : null;
+              })()}
               <button
                 onClick={() => handleCancelRun(run.id)}
                 className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
@@ -525,26 +345,60 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ── Activity feed sotto il workflow ──────── */}
-      {recentActivity.length > 0 && (
+      {/* ── Activity + Task recenti — 2 colonne ── */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Activity feed */}
         <div>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
             {t("activity.title")}
           </h3>
-          <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">
-            {recentActivity.slice(0, 6).map((event) => (
-              <ActivityRow
-                key={event.id}
-                event={event}
-                agentMap={agentMap}
-                entityNameMap={entityNameMap}
-                entityTitleMap={entityTitleMap}
-                className={animatedActivityIds.has(event.id) ? "activity-row-enter" : undefined}
-              />
-            ))}
-          </div>
+          {recentActivity.length > 0 ? (
+            <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">
+              {recentActivity.slice(0, 6).map((event) => (
+                <ActivityRow
+                  key={event.id}
+                  event={event}
+                  agentMap={agentMap}
+                  entityNameMap={entityNameMap}
+                  entityTitleMap={entityTitleMap}
+                  className={animatedActivityIds.has(event.id) ? "activity-row-enter" : undefined}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground/50 py-4">Nessuna attivita' recente</p>
+          )}
         </div>
-      )}
+
+        {/* Recent tasks */}
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            {t("dashboard.recentTasks")}
+          </h3>
+          {recentIssues.length > 0 ? (
+            <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">
+              {recentIssues.slice(0, 6).map((issue) => (
+                <Link
+                  key={issue.id}
+                  to={`/issues/${issue.identifier ?? issue.id}`}
+                  className="px-3 py-2 text-xs cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit flex items-center gap-2"
+                >
+                  <StatusIcon status={issue.status} />
+                  <span className="font-mono text-muted-foreground shrink-0">{issue.identifier ?? issue.id.slice(0, 8)}</span>
+                  <span className="truncate flex-1">{issue.title}</span>
+                  {issue.assigneeAgentId && (() => {
+                    const name = agentName(issue.assigneeAgentId);
+                    return name ? <Identity name={name} size="xs" className="shrink-0" /> : null;
+                  })()}
+                  <span className="text-muted-foreground shrink-0">{timeAgo(issue.updatedAt)}</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground/50 py-4">{t("dashboard.noTasksYet")}</p>
+          )}
+        </div>
+      </div>
 
       <PluginSlotOutlet
         slotTypes={["dashboardWidget"]}
@@ -552,71 +406,6 @@ export function Dashboard() {
         className="grid gap-4 md:grid-cols-2"
         itemClassName="rounded-lg border bg-card p-4 shadow-sm"
       />
-
-      {/* ── Dettagli (collapsible) — agenti, task recenti ── */}
-      <div>
-        <button
-          onClick={() => setShowDetails(!showDetails)}
-          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showDetails && "rotate-180")} />
-          {showDetails ? "Nascondi dettagli" : "Mostra dettagli (agenti, task recenti)"}
-        </button>
-
-        {showDetails && (
-          <div className="mt-3 space-y-4">
-            <ActiveAgentsPanel companyId={selectedCompanyId!} />
-
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                {t("dashboard.recentTasks")}
-              </h3>
-              {recentIssues.length === 0 ? (
-                <div className="border border-border p-4">
-                  <p className="text-sm text-muted-foreground">{t("dashboard.noTasksYet")}</p>
-                </div>
-              ) : (
-                <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">
-                  {recentIssues.slice(0, 10).map((issue) => (
-                    <Link
-                      key={issue.id}
-                      to={`/issues/${issue.identifier ?? issue.id}`}
-                      className="px-4 py-3 text-sm cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit block"
-                    >
-                      <div className="flex items-start gap-2 sm:items-center sm:gap-3">
-                        <span className="shrink-0 sm:hidden">
-                          <StatusIcon status={issue.status} />
-                        </span>
-                        <span className="flex min-w-0 flex-1 flex-col gap-1 sm:contents">
-                          <span className="line-clamp-2 text-sm sm:order-2 sm:flex-1 sm:min-w-0 sm:line-clamp-none sm:truncate">
-                            {issue.title}
-                          </span>
-                          <span className="flex items-center gap-2 sm:order-1 sm:shrink-0">
-                            <span className="hidden sm:inline-flex"><StatusIcon status={issue.status} /></span>
-                            <span className="text-xs font-mono text-muted-foreground">
-                              {issue.identifier ?? issue.id.slice(0, 8)}
-                            </span>
-                            {issue.assigneeAgentId && (() => {
-                              const name = agentName(issue.assigneeAgentId);
-                              return name
-                                ? <span className="hidden sm:inline-flex"><Identity name={name} size="sm" /></span>
-                                : null;
-                            })()}
-                            <span className="text-xs text-muted-foreground sm:hidden">&middot;</span>
-                            <span className="text-xs text-muted-foreground shrink-0 sm:order-last">
-                              {timeAgo(issue.updatedAt)}
-                            </span>
-                          </span>
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
