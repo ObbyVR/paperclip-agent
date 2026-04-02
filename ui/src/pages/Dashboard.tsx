@@ -4,6 +4,7 @@ import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
 import { activityApi } from "../api/activity";
+import { approvalsApi } from "../api/approvals";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
@@ -20,7 +21,7 @@ import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
 import { Bot, ChevronDown, CircleDot, DollarSign, LayoutDashboard, PauseCircle, Play, ShieldCheck, Square, Zap } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
-import { WorkflowVisualizer, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
+import { WorkflowVisualizer, type WorkflowEvent, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
@@ -168,6 +169,13 @@ export function Dashboard() {
   });
   const activeRuns = (liveRuns ?? []).filter((r) => r.status === "running" || r.status === "queued");
 
+  const { data: pendingApprovalsList } = useQuery({
+    queryKey: [...queryKeys.approvals.list(selectedCompanyId ?? ""), "pending"],
+    queryFn: () => approvalsApi.list(selectedCompanyId!, "pending"),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 30000,
+  });
+
 
   if (!selectedCompanyId) {
     if (companies.length === 0) {
@@ -309,13 +317,70 @@ export function Dashboard() {
         const allSteps = lanes.flatMap((l) => l.steps);
         const completed = allSteps.filter((s) => s.status === "done").length;
         const active = allSteps.filter((s) => s.status === "active").length;
+        const errored = allSteps.filter((s) => s.status === "error").length;
         const stats: WorkflowStats = {
           totalSteps: allSteps.length,
           completedSteps: completed,
           activeSteps: active,
           agents: lanes.length,
         };
-        return <WorkflowVisualizer lanes={lanes} stats={stats} />;
+
+        // Build events from activity feed + pending approvals
+        const events: WorkflowEvent[] = [];
+
+        // Add pending approvals as approval events
+        for (const approval of (pendingApprovalsList ?? [])) {
+          const title = approval.payload?.title ?? approval.payload?.name ?? "Approvazione richiesta";
+          const agName = approval.requestedByAgentId
+            ? (agents ?? []).find((a) => a.id === approval.requestedByAgentId)?.name
+            : undefined;
+          events.push({
+            id: `approval-${approval.id}`,
+            ts: new Date(approval.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+            type: "approval" as const,
+            agentName: agName ?? "Board",
+            message: String(title),
+            outputLink: `/approvals/${approval.id}`,
+          });
+        }
+
+        // Add recent activity as info/output events
+        for (const event of recentActivity.slice(0, 8)) {
+          const agName = event.agentId ? agentMap.get(event.agentId)?.name : undefined;
+          const isOutput = event.action.includes("comment") || event.action.includes("completed") || event.action.includes("status");
+          const isError = event.action.includes("failed") || event.action.includes("error");
+          const entityLabel = event.entityType === "issue"
+            ? entityNameMap.get(`issue:${event.entityId}`) ?? event.entityId.slice(0, 8)
+            : event.entityType;
+          const issueLink = event.entityType === "issue"
+            ? `/issues/${entityNameMap.get(`issue:${event.entityId}`) ?? event.entityId}`
+            : undefined;
+          events.push({
+            id: `activity-${event.id}`,
+            ts: new Date(event.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+            type: isError ? "error" as const : isOutput ? "output" as const : "info" as const,
+            agentName: agName,
+            message: `${event.action.replace(/_/g, " ")} — ${entityLabel}`,
+            outputLink: issueLink,
+          });
+        }
+
+        // Add failed runs as error events
+        for (const run of runs.filter((r) => r.status === "failed")) {
+          events.push({
+            id: `run-fail-${run.id}`,
+            ts: new Date(run.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+            type: "error" as const,
+            agentName: run.agentName,
+            message: `Run fallito (${run.invocationSource})`,
+          });
+        }
+
+        // Sort by time descending, limit to 12
+        events.sort((a, b) => b.ts.localeCompare(a.ts));
+        const limitedEvents = events.slice(0, 12);
+
+        return <WorkflowVisualizer lanes={lanes} stats={stats} events={limitedEvents.length > 0 ? limitedEvents : undefined} />;
       })()}
 
       {/* ── Workflow controls ───────────────────── */}
