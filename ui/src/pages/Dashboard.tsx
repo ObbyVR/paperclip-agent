@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-// WorkflowVisualizer component preserved in components/WorkflowVisualizer.tsx — ready for real data integration
 import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
@@ -19,10 +18,9 @@ import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, ChevronDown, CircleDot, DollarSign, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
+import { Bot, ChevronDown, CircleDot, DollarSign, LayoutDashboard, PauseCircle, Play, ShieldCheck, Square, Zap } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
-// WorkflowVisualizer ready for real data integration — currently hidden until backend provides step-level data
-// import { WorkflowVisualizer, type StepStatus, type SubProcess, type WorkflowEvent, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
+import { WorkflowVisualizer, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
@@ -252,6 +250,57 @@ export function Dashboard() {
         </div>
       )}
 
+
+      {/* ── Workflow Visualizer — real data from liveRuns ── */}
+      {(() => {
+        const runs = liveRuns ?? [];
+        if (runs.length === 0) {
+          return (
+            <div className="relative overflow-hidden rounded-xl border border-border bg-[#0c0e14] px-6 py-10 text-center">
+              <div className="flex flex-col items-center gap-2">
+                <Play className="h-6 w-6 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground/50">Nessun workflow eseguito</p>
+                <p className="text-xs text-muted-foreground/30">Assegna un task a un agente per vedere il workflow qui</p>
+              </div>
+            </div>
+          );
+        }
+        // Group runs by agent, most recent first
+        const agentRuns = new Map<string, typeof runs>();
+        for (const run of runs) {
+          const key = run.agentName ?? run.agentId;
+          if (!agentRuns.has(key)) agentRuns.set(key, []);
+          agentRuns.get(key)!.push(run);
+        }
+        const lanes: WorkflowLane[] = Array.from(agentRuns.entries()).map(([name, agentRunList]) => {
+          const sorted = [...agentRunList].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          return {
+            agentName: name,
+            agentLink: `/agents/${sorted[0].agentId}`,
+            steps: sorted.map((run, i) => ({
+              id: run.id,
+              label: run.issueId ? `Task #${i + 1}` : (run.triggerDetail ?? `Run #${i + 1}`),
+              icon: Zap,
+              status: run.status === "running" ? "active" as const
+                : run.status === "queued" ? "waiting" as const
+                : run.finishedAt ? "done" as const
+                : run.status === "error" || run.status === "failed" ? "error" as const
+                : "pending" as const,
+              statusLabel: run.status === "running" ? "In esecuzione..." : undefined,
+            })),
+          };
+        });
+        const allSteps = lanes.flatMap((l) => l.steps);
+        const completed = allSteps.filter((s) => s.status === "done").length;
+        const active = allSteps.filter((s) => s.status === "active").length;
+        const stats: WorkflowStats = {
+          totalSteps: allSteps.length,
+          completedSteps: completed,
+          activeSteps: active,
+          agents: lanes.length,
+        };
+        return <WorkflowVisualizer lanes={lanes} stats={stats} />;
+      })()}
 
       {/* ── Workflow controls ───────────────────── */}
       {activeRuns.length > 0 && (
