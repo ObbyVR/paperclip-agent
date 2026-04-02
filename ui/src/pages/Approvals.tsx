@@ -21,6 +21,7 @@ import { ApprovalCard } from "../components/ApprovalCard";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { MarkdownBody } from "../components/MarkdownBody";
 import type { Issue, Agent } from "@paperclipai/shared";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "blocked" | "all";
@@ -170,78 +171,164 @@ function BlockedIssueCard({
 // ── Expanded details: description + output preview ─────────────
 
 function BlockedIssueDetails({ issue }: { issue: Issue }) {
-  const { data: runs, isLoading } = useQuery({
-    queryKey: queryKeys.issues.runs(issue.id),
-    queryFn: () => activityApi.runsForIssue(issue.id),
-    enabled: !!issue.id,
-  });
-
-  const { data: documents } = useQuery({
+  const { data: documents, isLoading: docsLoading } = useQuery({
     queryKey: queryKeys.issues.documents(issue.id),
     queryFn: () => issuesApi.listDocuments(issue.id),
     enabled: !!issue.id,
   });
 
-  const completedRuns = useMemo(
-    () =>
-      (runs ?? [])
-        .filter((r) => r.status === "succeeded" || r.status === "completed")
-        .sort(
-          (a, b) =>
-            new Date(b.finishedAt ?? b.createdAt).getTime() -
-            new Date(a.finishedAt ?? a.createdAt).getTime(),
-        ),
-    [runs],
-  );
+  const { data: comments } = useQuery({
+    queryKey: queryKeys.issues.comments(issue.id),
+    queryFn: () => issuesApi.listComments(issue.id),
+    enabled: !!issue.id,
+  });
+
+  const { data: runs } = useQuery({
+    queryKey: queryKeys.issues.runs(issue.id),
+    queryFn: () => activityApi.runsForIssue(issue.id),
+    enabled: !!issue.id,
+  });
+
+  // Agent's last comment (the summary posted when marking blocked)
+  const agentSummary = useMemo(() => {
+    if (!comments) return null;
+    const agentComments = comments.filter((c) => c.authorAgentId);
+    return agentComments.length > 0 ? agentComments[agentComments.length - 1] : null;
+  }, [comments]);
+
+  // Run output (fallback if no documents)
+  const runContent = useMemo(() => {
+    if (!runs) return null;
+    const completed = runs
+      .filter((r) => r.status === "succeeded" || r.status === "completed")
+      .sort(
+        (a, b) =>
+          new Date(b.finishedAt ?? b.createdAt).getTime() -
+          new Date(a.finishedAt ?? a.createdAt).getTime(),
+      );
+    for (const run of completed) {
+      const content = extractRunContent(run);
+      if (content) return content;
+    }
+    return null;
+  }, [runs]);
+
+  const isLoading = docsLoading;
 
   return (
-    <div className="border-t border-amber-500/10 bg-amber-500/[0.01] px-4 py-3 space-y-3">
-      {/* Description */}
+    <div className="border-t border-amber-500/10 bg-amber-500/[0.01] px-4 py-4 space-y-4">
+      {/* What was requested */}
       {issue.description && (
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-            Descrizione
+            Task assegnato
           </p>
           <p className="text-sm text-foreground/90 whitespace-pre-wrap">{issue.description}</p>
         </div>
       )}
 
-      {/* Documents */}
-      {documents && documents.length > 0 && (
+      {/* Agent summary comment */}
+      {agentSummary && (
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-            Documenti ({documents.length})
+            Riepilogo agente
           </p>
-          <div className="space-y-1">
-            {documents.map((doc) => (
-              <Link
-                key={doc.key}
-                to={`/issues/${issue.identifier ?? issue.id}`}
-                className="block text-xs text-blue-400 hover:underline"
-              >
-                {doc.key}
-              </Link>
-            ))}
+          <div className="text-sm bg-muted/20 rounded-md p-3 border border-border/40">
+            <MarkdownBody className="prose-sm">{agentSummary.body}</MarkdownBody>
           </div>
         </div>
       )}
 
-      {/* Output preview from runs */}
+      {/* Loading */}
       {isLoading && (
         <div className="animate-pulse bg-muted/30 rounded h-16 flex items-center justify-center">
           <span className="text-xs text-muted-foreground">Caricamento output...</span>
         </div>
       )}
 
-      {completedRuns.map((run) => {
-        const content = extractRunContent(run);
-        if (!content) return null;
-        return <InlineOutputPreview key={run.runId} content={content} title={issue.title} />;
-      })}
-
-      {!isLoading && completedRuns.length === 0 && !issue.description && (!documents || documents.length === 0) && (
-        <p className="text-xs text-muted-foreground italic">Nessun dettaglio disponibile.</p>
+      {/* Document output — the actual deliverable to review */}
+      {documents && documents.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Output da approvare
+          </p>
+          {documents.map((doc) => (
+            <DocumentPreview key={doc.key} doc={doc} issue={issue} />
+          ))}
+        </div>
       )}
+
+      {/* Run output fallback (for issues where output is in resultJson) */}
+      {(!documents || documents.length === 0) && runContent && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Output da approvare
+          </p>
+          <InlineOutputPreview content={runContent} title={issue.title} />
+        </div>
+      )}
+
+      {/* Nothing found */}
+      {!isLoading &&
+        (!documents || documents.length === 0) &&
+        !runContent &&
+        !agentSummary &&
+        !issue.description && (
+          <p className="text-xs text-muted-foreground italic">Nessun dettaglio disponibile.</p>
+        )}
+    </div>
+  );
+}
+
+// ── Document preview (markdown rendered inline) ────────────────
+
+function DocumentPreview({ doc, issue }: { doc: { key: string; body: string; format?: string; title?: string | null }; issue: Issue }) {
+  const [collapsed, setCollapsed] = useState(doc.body.length > 2000);
+  const maxPreview = 2000;
+
+  if (doc.format === "markdown" || !doc.format) {
+    return (
+      <div className="border border-border/50 rounded-lg overflow-hidden mb-2">
+        <div className="flex items-center justify-between px-3 py-2 bg-muted/20 border-b border-border/40">
+          <span className="text-xs font-medium text-foreground/80">
+            {doc.title ?? doc.key}
+          </span>
+          <div className="flex items-center gap-2">
+            {doc.body.length > maxPreview && (
+              <button
+                type="button"
+                className="text-[11px] text-blue-400 hover:underline"
+                onClick={() => setCollapsed((v) => !v)}
+              >
+                {collapsed ? "Espandi tutto" : "Riduci"}
+              </button>
+            )}
+            <Link
+              to={`/issues/${issue.identifier ?? issue.id}`}
+              className="text-[11px] text-blue-400 hover:underline"
+            >
+              Apri issue
+            </Link>
+          </div>
+        </div>
+        <div className="px-4 py-3 max-h-[500px] overflow-y-auto">
+          <MarkdownBody className="prose-sm dark:prose-invert max-w-none">
+            {collapsed ? doc.body.slice(0, maxPreview) + "\n\n..." : doc.body}
+          </MarkdownBody>
+        </div>
+      </div>
+    );
+  }
+
+  // Non-markdown: show as text
+  return (
+    <div className="border border-border/50 rounded-lg overflow-hidden mb-2">
+      <div className="px-3 py-2 bg-muted/20 border-b border-border/40">
+        <span className="text-xs font-medium">{doc.title ?? doc.key}</span>
+      </div>
+      <div className="px-4 py-3 text-sm whitespace-pre-wrap max-h-[500px] overflow-y-auto">
+        {collapsed ? doc.body.slice(0, maxPreview) + "..." : doc.body}
+      </div>
     </div>
   );
 }
@@ -669,13 +756,16 @@ export function Approvals() {
             {Array.from(blockedGroups.entries()).map(([key, group]) => (
               <div key={key}>
                 {blockedGroups.size > 1 && (
-                  <div className="flex items-center gap-2 mb-2 mt-2">
+                  <div className="flex items-center gap-2 mt-4 mb-3 pb-2 border-b border-border/50">
                     <Identity
                       name={group.agent?.name ?? "Non assegnato"}
-                      size="sm"
+                      size="default"
                     />
-                    <span className="text-[11px] text-muted-foreground">
-                      ({group.issues.length})
+                    <span className="text-sm font-medium text-foreground/80">
+                      {group.agent?.name ?? "Non assegnato"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {group.issues.length} {group.issues.length === 1 ? "issue" : "issues"}
                     </span>
                   </div>
                 )}
