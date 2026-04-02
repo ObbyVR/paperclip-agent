@@ -672,6 +672,8 @@ export function IssueDetail() {
 
   const assigneeAgent = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId) : null;
   const isBlocked = issue.status === "blocked";
+  const hasDocuments = (issue.documentSummaries ?? []).length > 0;
+  const hasDocumentsOrResults = hasDocuments || runResults.length > 0;
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -842,24 +844,19 @@ export function IssueDetail() {
         </div>
       )}
 
-      {/* ── Description ── */}
-      {(issue.description || runResults.length === 0) && (
-        <InlineEditor
-          value={issue.description ?? ""}
-          onSave={(description) => updateIssue.mutateAsync({ description })}
-          as="p"
-          className="text-[15px] leading-7 text-foreground"
-          placeholder="Add a description..."
-          multiline
-          mentions={mentionOptions}
-          imageUploadHandler={async (file) => {
-            const attachment = await uploadAttachment.mutateAsync(file);
-            return attachment.contentPath;
-          }}
-        />
-      )}
+      {/* ── OUTPUT FIRST: Documents (the agent's deliverable) ── */}
+      <IssueDocumentsSection
+        issue={issue}
+        canDeleteDocuments={Boolean(session?.user?.id)}
+        mentions={mentionOptions}
+        imageUploadHandler={async (file) => {
+          const attachment = await uploadAttachment.mutateAsync(file);
+          return attachment.contentPath;
+        }}
+        extraActions={!hasAttachments ? attachmentUploadButton : undefined}
+      />
 
-      {/* ── Results / Output — inline, prominent ── */}
+      {/* ── Results / Output — inline run results ── */}
       {runResults.length > 0 && (
         <IssueResultsInline runResults={runResults} />
       )}
@@ -895,6 +892,33 @@ export function IssueDetail() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* ── Description (collapsible — this is the task spec, not the output) ── */}
+      {issue.description && (
+        <Collapsible defaultOpen={!hasDocumentsOrResults}>
+          <CollapsibleTrigger className="flex w-full items-center gap-2 text-left group">
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Briefing / Descrizione
+            </h3>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <InlineEditor
+              value={issue.description ?? ""}
+              onSave={(description) => updateIssue.mutateAsync({ description })}
+              as="p"
+              className="text-[15px] leading-7 text-foreground"
+              placeholder="Add a description..."
+              multiline
+              mentions={mentionOptions}
+              imageUploadHandler={async (file) => {
+                const attachment = await uploadAttachment.mutateAsync(file);
+                return attachment.contentPath;
+              }}
+            />
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
       {/* ── Secondary: Comments & Activity tabs ── */}
@@ -1019,16 +1043,7 @@ export function IssueDetail() {
         missingBehavior="placeholder"
       />
 
-      <IssueDocumentsSection
-        issue={issue}
-        canDeleteDocuments={Boolean(session?.user?.id)}
-        mentions={mentionOptions}
-        imageUploadHandler={async (file) => {
-          const attachment = await uploadAttachment.mutateAsync(file);
-          return attachment.contentPath;
-        }}
-        extraActions={!hasAttachments ? attachmentUploadButton : undefined}
-      />
+      {/* Documents section is now at the top — see "OUTPUT FIRST" block */}
 
       {hasAttachments ? (
         <div
