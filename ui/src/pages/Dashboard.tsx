@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+// WorkflowVisualizer component preserved in components/WorkflowVisualizer.tsx — ready for real data integration
 import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
@@ -18,9 +19,10 @@ import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, Check, ChevronDown, CircleDot, Code, DollarSign, Pause, PenTool, Play, Search, ShieldCheck, Sparkles, LayoutDashboard, PauseCircle, Square, Zap } from "lucide-react";
+import { Bot, ChevronDown, CircleDot, DollarSign, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
-import { WorkflowVisualizer, type StepStatus, type SubProcess, type WorkflowEvent, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
+// WorkflowVisualizer ready for real data integration — currently hidden until backend provides step-level data
+// import { WorkflowVisualizer, type StepStatus, type SubProcess, type WorkflowEvent, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
@@ -168,12 +170,6 @@ export function Dashboard() {
   });
   const activeRuns = (liveRuns ?? []).filter((r) => r.status === "running" || r.status === "queued");
 
-  const [demoLanes, setDemoLanes] = useState<WorkflowLane[] | null>(null);
-  const [demoMerges, setDemoMerges] = useState<Array<{ fromAgent: string; toAgent: string; label?: string; afterLane: number }>>([]);
-  const [demoEvents, setDemoEvents] = useState<WorkflowEvent[]>([]);
-  const [demoStats, setDemoStats] = useState<WorkflowStats | null>(null);
-  const [demoRunning, setDemoRunning] = useState(false);
-  const demoTimersRef = useRef<number[]>([]);
 
   if (!selectedCompanyId) {
     if (companies.length === 0) {
@@ -201,168 +197,6 @@ export function Dashboard() {
     try { await heartbeatsApi.cancel(runId); } catch { /* ignore */ }
   };
 
-  const designerName = "Web Designer";
-  const copywriterName = "Copywriter";
-
-  const makeLanes = (
-    d: StepStatus[], dL: (string | undefined)[], dS: (SubProcess[] | undefined)[],
-    c: StepStatus[], cL: (string | undefined)[], cS: (SubProcess[] | undefined)[],
-  ): WorkflowLane[] => [
-    {
-      agentName: designerName,
-      agentLink: agents?.[0] ? `/agents/${agents[0].id}` : undefined,
-      steps: [
-        { id: "brand", label: "Brand Analysis", icon: Search, status: d[0], statusLabel: dL[0], subProcesses: dS[0] },
-        { id: "scene", label: "Scene Generation", icon: Sparkles, status: d[1], statusLabel: dL[1], subProcesses: dS[1] },
-        { id: "build", label: "Website Build", icon: Code, status: d[2], statusLabel: dL[2], subProcesses: dS[2], waitingFor: d[2] === "waiting" ? "copy-write" : undefined },
-        { id: "deploy", label: "Deploy", icon: Zap, status: d[3], statusLabel: dL[3], subProcesses: dS[3] },
-      ],
-    },
-    {
-      agentName: copywriterName,
-      steps: [
-        { id: "copy-research", label: "Research", icon: Search, status: c[0], statusLabel: cL[0], subProcesses: cS[0] },
-        { id: "copy-write", label: "Write Copy", icon: PenTool, status: c[1], statusLabel: cL[1], subProcesses: cS[1] },
-        { id: "copy-review", label: "Review", icon: Check, status: c[2], statusLabel: cL[2], subProcesses: cS[2] },
-      ],
-    },
-  ];
-
-  const launchDemo = () => {
-    for (const t of demoTimersRef.current) window.clearTimeout(t);
-    demoTimersRef.current = [];
-    setDemoEvents([]);
-    setDemoMerges([]);
-
-    type S = StepStatus;
-    type L = (string | undefined)[];
-    type SP = (SubProcess[] | undefined)[];
-    type Frame = {
-      d: S[]; dL: L; dS: SP;
-      c: S[]; cL: L; cS: SP;
-      merges?: Array<{ fromAgent: string; toAgent: string; label?: string; afterLane: number }>;
-      event?: WorkflowEvent;
-    };
-
-    const p: S = "pending"; const a: S = "active"; const dn: S = "done"; const w: S = "waiting";
-    const _: undefined = undefined;
-
-    const frames: Frame[] = [
-      // 0: Both start
-      { d: [p,p,p,p], dL: [], dS: [], c: [p,p,p], cL: [], cS: [],
-        event: { id: "e0", ts: "00:00", type: "info", agentName: "CEO", message: "Lancio redesign: Web Designer e Copywriter in parallelo" } },
-      // 1: Designer brand analysis + Copywriter research
-      { d: [a,p,p,p], dL: ["Analisi brand...",_,_,_], dS: [[
-          { label: "Fetch sito", status: "running" }, { label: "Palette colori", status: "pending" }, { label: "Analisi font", status: "pending" },
-        ],_,_,_],
-        c: [a,p,p], cL: ["Ricerca settore...",_,_], cS: [[
-          { label: "Analisi competitor", status: "running" }, { label: "Keyword research", status: "pending" },
-        ],_,_],
-        event: { id: "e1", ts: "00:02", type: "info", agentName: designerName, stepLabel: "Brand Analysis", message: "Inizio analisi brand — fetch sito web..." } },
-      // 2: Designer subs advance + Copywriter subs advance
-      { d: [a,p,p,p], dL: ["Analisi brand...",_,_,_], dS: [[
-          { label: "Fetch sito", status: "done" }, { label: "Palette colori", status: "running" }, { label: "Analisi font", status: "pending" },
-        ],_,_,_],
-        c: [a,p,p], cL: ["Ricerca settore...",_,_], cS: [[
-          { label: "Analisi competitor", status: "done" }, { label: "Keyword research", status: "running" },
-        ],_,_],
-        event: { id: "e2", ts: "00:05", type: "output", agentName: copywriterName, stepLabel: "Research", message: "3 competitor analizzati — keyword identificate", outputLink: "#" } },
-      // 3: Designer done brand → scene gen | Copywriter done research → writing
-      { d: [dn,a,p,p], dL: [_,"Generazione scene...",_,_], dS: [_,[
-          { label: "Prompt scene", status: "running" }, { label: "AI Image Gen", status: "pending" },
-        ],_,_],
-        c: [dn,a,p], cL: [_,"Scrittura testi...",_], cS: [_,[
-          { label: "Hero copy", status: "running" }, { label: "Sezioni", status: "pending" }, { label: "CTA", status: "pending" },
-        ],_],
-        event: { id: "e3", ts: "00:08", type: "output", agentName: designerName, stepLabel: "Brand Analysis", message: "Brand completata — palette: #1a1a2e, #e94560, #0f3460", outputLink: "#" } },
-      // 4: Designer scene gen continues | Copywriter writing continues
-      { d: [dn,a,p,p], dL: [_,"Generazione scene...",_,_], dS: [_,[
-          { label: "Prompt scene", status: "done" }, { label: "AI Image Gen", status: "running" },
-        ],_,_],
-        c: [dn,a,p], cL: [_,"Scrittura testi...",_], cS: [_,[
-          { label: "Hero copy", status: "done" }, { label: "Sezioni", status: "running" }, { label: "CTA", status: "pending" },
-        ],_],
-        event: { id: "e4", ts: "00:12", type: "info", agentName: designerName, stepLabel: "Scene Generation", message: "Generazione immagini con Flux Pro — 4 scene" } },
-      // 5: Designer done scene → build WAITING for copy | Copywriter still writing
-      { d: [dn,dn,w,p], dL: [_,_,"In attesa testi...",_], dS: [_,_,[
-          { label: "HTML structure", status: "done" }, { label: "Inserimento testi", status: "pending" }, { label: "CSS + GSAP", status: "pending" },
-        ],_],
-        c: [dn,a,p], cL: [_,"Scrittura testi...",_], cS: [_,[
-          { label: "Hero copy", status: "done" }, { label: "Sezioni", status: "done" }, { label: "CTA", status: "running" },
-        ],_],
-        event: { id: "e5", ts: "00:16", type: "info", agentName: designerName, stepLabel: "Website Build", message: "Struttura HTML pronta — in attesa dei testi dal Copywriter" } },
-      // 6: Copywriter done writing → review | Designer still waiting
-      { d: [dn,dn,w,p], dL: [_,_,"In attesa review testi",_], dS: [_,_,[
-          { label: "HTML structure", status: "done" }, { label: "Inserimento testi", status: "pending" }, { label: "CSS + GSAP", status: "pending" },
-        ],_],
-        c: [dn,dn,a], cL: [_,_,"Review testi..."], cS: [_,_,[
-          { label: "Controllo tono", status: "running" }, { label: "SEO check", status: "pending" },
-        ]],
-        event: { id: "e6", ts: "00:20", type: "output", agentName: copywriterName, stepLabel: "Write Copy", message: "Testi completati — hero, 4 sezioni, 3 CTA", outputLink: "#" } },
-      // 7: Copywriter done review → MERGE! Designer unblocked
-      { d: [dn,dn,a,p], dL: [_,_,"Build con testi...",_], dS: [_,_,[
-          { label: "HTML structure", status: "done" }, { label: "Inserimento testi", status: "running" }, { label: "CSS + GSAP", status: "pending" },
-        ],_],
-        c: [dn,dn,dn], cL: [], cS: [],
-        merges: [{ fromAgent: copywriterName, toAgent: designerName, label: "Testi consegnati → Website Build sbloccato", afterLane: 0 }],
-        event: { id: "e7", ts: "00:24", type: "merge", agentName: copywriterName, stepLabel: "Review", message: "Testi approvati e consegnati al Web Designer — build sbloccato" } },
-      // 8: Designer build completes → approval
-      { d: [dn,dn,w,p], dL: [_,_,"Approvazione richiesta",_], dS: [_,_,[
-          { label: "HTML structure", status: "done" }, { label: "Inserimento testi", status: "done" }, { label: "CSS + GSAP", status: "done" },
-        ],_],
-        c: [dn,dn,dn], cL: [], cS: [],
-        merges: [{ fromAgent: copywriterName, toAgent: designerName, label: "Testi consegnati", afterLane: 0 }],
-        event: { id: "e8", ts: "00:28", type: "approval", agentName: designerName, stepLabel: "Website Build", message: "Sito completo — richiesta approvazione per il deploy", outputLink: "#" } },
-      // 9: Deploy
-      { d: [dn,dn,dn,a], dL: [_,_,_,"Deploy..."], dS: [_,_,_,[
-          { label: "Upload assets", status: "running" }, { label: "DNS config", status: "pending" },
-        ]],
-        c: [dn,dn,dn], cL: [], cS: [],
-        merges: [{ fromAgent: copywriterName, toAgent: designerName, label: "Testi consegnati", afterLane: 0 }],
-        event: { id: "e9", ts: "00:32", type: "info", agentName: designerName, stepLabel: "Deploy", message: "Approvato — avvio deploy..." } },
-      // 10: Done
-      { d: [dn,dn,dn,dn], dL: [], dS: [], c: [dn,dn,dn], cL: [], cS: [],
-        merges: [{ fromAgent: copywriterName, toAgent: designerName, label: "Testi consegnati", afterLane: 0 }],
-        event: { id: "e10", ts: "00:35", type: "output", stepLabel: "Deploy", message: "Sito live! Workflow completato.", outputLink: "#" } },
-    ];
-
-    setDemoRunning(true);
-    frames.forEach((frame, i) => {
-      const timer = window.setTimeout(() => {
-        setDemoLanes(makeLanes(frame.d, frame.dL, frame.dS, frame.c, frame.cL, frame.cS));
-        setDemoMerges(frame.merges ?? []);
-        if (frame.event) setDemoEvents((prev) => [frame.event!, ...prev]);
-        // Compute stats from current frame
-        const allStatuses = [...frame.d, ...frame.c];
-        const completed = allStatuses.filter((s) => s === "done").length;
-        const active = allStatuses.filter((s) => s === "active").length;
-        const elapsed = `${String(Math.floor(i * 2.5 / 60)).padStart(2, "0")}:${String(Math.round(i * 2.5) % 60).padStart(2, "0")}`;
-        const costUsd = (completed * 0.012 + active * 0.005).toFixed(3);
-        const costEur = (parseFloat(costUsd) * 0.92).toFixed(3);
-        setDemoStats({
-          totalSteps: allStatuses.length,
-          completedSteps: completed,
-          activeSteps: active,
-          agents: 2,
-          elapsedTime: elapsed,
-          estimatedCostEur: `€${costEur}`,
-          estimatedCostUsd: `$${costUsd}`,
-        });
-        if (i === frames.length - 1) setDemoRunning(false);
-      }, i * 2500);
-      demoTimersRef.current.push(timer);
-    });
-  };
-
-  const stopDemo = () => {
-    for (const t of demoTimersRef.current) window.clearTimeout(t);
-    demoTimersRef.current = [];
-    setDemoLanes(null);
-    setDemoMerges([]);
-    setDemoEvents([]);
-    setDemoStats(null);
-    setDemoRunning(false);
-  };
 
   return (
     <div className="space-y-4">
@@ -418,38 +252,6 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ── Workflow Visualizer ──────────────────── */}
-      <div className="space-y-2">
-        <WorkflowVisualizer
-          lanes={demoLanes ?? [
-            { agentName: agents?.[0]?.name ?? "Agent", steps: [
-              { id: "s1", label: "—", icon: Search, status: "pending" as StepStatus },
-            ]},
-          ]}
-          merges={demoMerges}
-          events={demoEvents.length > 0 ? demoEvents : undefined}
-          stats={demoStats ?? undefined}
-        />
-        <div className="flex items-center gap-2">
-          {!demoRunning ? (
-            <button
-              onClick={launchDemo}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
-            >
-              <Play className="h-3 w-3" />
-              Lancia workflow demo
-            </button>
-          ) : (
-            <button
-              onClick={stopDemo}
-              className="flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
-            >
-              <Square className="h-3 w-3" />
-              Ferma demo
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* ── Workflow controls ───────────────────── */}
       {activeRuns.length > 0 && (
