@@ -325,10 +325,27 @@ export function Dashboard() {
           agents: lanes.length,
         };
 
-        // Build events from activity feed + pending approvals
+        // Build events from activity feed + pending approvals + blocked issues
         const events: WorkflowEvent[] = [];
 
-        // Add pending approvals as approval events
+        // Action translations
+        const actionLabels: Record<string, string> = {
+          "issue.comment_added": "Nuovo commento",
+          "issue.updated": "Stato aggiornato",
+          "issue.document_created": "Documento creato",
+          "issue.document_updated": "Documento aggiornato",
+          "issue.checked_out": "Presa in carico",
+          "issue.created": "Issue creata",
+          "issue.assigned": "Assegnata",
+          "agent.hired": "Agente assunto",
+          "agent.created": "Agente creato",
+          "run.started": "Run avviato",
+          "run.completed": "Run completato",
+          "run.failed": "Run fallito",
+        };
+        const noiseActions = new Set(["issue.read_marked", "agent.key_created"]);
+
+        // 1. Pending approvals
         for (const approval of (pendingApprovalsList ?? [])) {
           const title = approval.payload?.title ?? approval.payload?.name ?? "Approvazione richiesta";
           const agName = approval.requestedByAgentId
@@ -344,43 +361,77 @@ export function Dashboard() {
           });
         }
 
-        // Add recent activity as info/output events
-        for (const event of recentActivity.slice(0, 8)) {
+        // 2. Blocked issues = waiting for founder review (show as approval-like)
+        const blockedIssues = (issues ?? []).filter((i) => i.status === "blocked");
+        for (const issue of blockedIssues) {
+          const assigneeName = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId)?.name : undefined;
+          events.push({
+            id: `blocked-${issue.id}`,
+            ts: new Date(issue.updatedAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+            type: "approval" as const,
+            agentName: assigneeName,
+            stepLabel: "In attesa di review",
+            message: `${issue.identifier ?? ""} ${issue.title}`.trim(),
+            outputLink: `/issues/${issue.identifier ?? issue.id}`,
+          });
+        }
+
+        // 3. Recent activity (filtered, translated)
+        for (const event of recentActivity) {
+          if (noiseActions.has(event.action)) continue;
           const agName = event.agentId ? agentMap.get(event.agentId)?.name : undefined;
-          const isOutput = event.action.includes("comment") || event.action.includes("completed") || event.action.includes("status");
+          const label = actionLabels[event.action] ?? event.action.replace(/\./g, " ").replace(/_/g, " ");
+          const isOutput = event.action.includes("comment") || event.action.includes("document") || event.action.includes("completed");
           const isError = event.action.includes("failed") || event.action.includes("error");
-          const entityLabel = event.entityType === "issue"
-            ? entityNameMap.get(`issue:${event.entityId}`) ?? event.entityId.slice(0, 8)
-            : event.entityType;
+          // Get issue title if entity is an issue
+          const issueTitle = event.entityType === "issue"
+            ? (issues ?? []).find((i) => i.id === event.entityId)
+            : undefined;
+          const entityDesc = issueTitle
+            ? `${issueTitle.identifier ?? ""} ${issueTitle.title}`.trim()
+            : entityNameMap.get(`${event.entityType}:${event.entityId}`) ?? "";
           const issueLink = event.entityType === "issue"
             ? `/issues/${entityNameMap.get(`issue:${event.entityId}`) ?? event.entityId}`
             : undefined;
+          // Extract useful detail
+          const detail = event.details as Record<string, unknown> | null;
+          const prev = detail?._previous as Record<string, unknown> | undefined;
+          const statusChange = prev ? ` (${String(prev.status ?? "")} → ${String(detail?.status ?? "")})` : "";
+          const docTitle = detail?.title ? ` — ${String(detail.title).substring(0, 40)}` : "";
+
           events.push({
             id: `activity-${event.id}`,
             ts: new Date(event.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
             type: isError ? "error" as const : isOutput ? "output" as const : "info" as const,
             agentName: agName,
-            message: `${event.action.replace(/_/g, " ")} — ${entityLabel}`,
+            message: `${label}${statusChange}${docTitle} — ${entityDesc}`.substring(0, 120),
             outputLink: issueLink,
           });
         }
 
-        // Add failed runs as error events
+        // 4. Failed runs
         for (const run of runs.filter((r) => r.status === "failed")) {
+          const issueTitle = run.issueId ? (issues ?? []).find((i) => i.id === run.issueId) : undefined;
           events.push({
             id: `run-fail-${run.id}`,
             ts: new Date(run.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
             type: "error" as const,
             agentName: run.agentName,
-            message: `Run fallito (${run.invocationSource})`,
+            message: issueTitle ? `Run fallito — ${issueTitle.identifier ?? ""} ${issueTitle.title}`.trim() : `Run fallito (${run.invocationSource})`,
           });
         }
 
-        // Sort by time descending, limit to 12
+        // Sort by time descending, deduplicate by id prefix, limit
         events.sort((a, b) => b.ts.localeCompare(a.ts));
-        const limitedEvents = events.slice(0, 12);
+        const seen = new Set<string>();
+        const deduped = events.filter((e) => {
+          const key = e.message.substring(0, 50);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
 
-        return <WorkflowVisualizer lanes={lanes} stats={stats} events={limitedEvents.length > 0 ? limitedEvents : undefined} />;
+        return <WorkflowVisualizer lanes={lanes} stats={stats} events={deduped.length > 0 ? deduped.slice(0, 15) : undefined} />;
       })()}
 
       {/* ── Workflow controls ───────────────────── */}
