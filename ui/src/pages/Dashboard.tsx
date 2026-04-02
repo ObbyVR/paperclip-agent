@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
 import { activityApi } from "../api/activity";
 import { approvalsApi } from "../api/approvals";
@@ -22,6 +22,7 @@ import { cn, formatCents } from "../lib/utils";
 import { Bot, ChevronDown, CircleDot, DollarSign, LayoutDashboard, PauseCircle, Play, ShieldCheck, Square, Zap } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { WorkflowVisualizer, type WorkflowEvent, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
+import { WorkflowGraph } from "../components/WorkflowGraph";
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
@@ -203,6 +204,23 @@ export function Dashboard() {
     try { await heartbeatsApi.cancel(runId); } catch { /* ignore */ }
   };
 
+  const queryClient = useQueryClient();
+  const unblockMutation = useMutation({
+    mutationFn: async ({ issueId, action }: { issueId: string; action: "approve" | "reject" | "revision" }) => {
+      if (action === "revision") {
+        await issuesApi.addComment(issueId, "🔄 Revisione richiesta dal founder.");
+        return issuesApi.update(issueId, { status: "in_progress" });
+      }
+      const newStatus = action === "approve" ? "done" : "cancelled";
+      const comment = action === "approve" ? "✅ Approvato dal founder." : "❌ Rifiutato dal founder.";
+      await issuesApi.addComment(issueId, comment);
+      return issuesApi.update(issueId, { status: newStatus });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+    },
+  });
+
 
   return (
     <div className="space-y-4">
@@ -258,6 +276,18 @@ export function Dashboard() {
         </div>
       )}
 
+
+      {/* ── Workflow Graph — issue tree visualization ── */}
+      {issues && agents && (
+        <WorkflowGraph
+          issues={issues}
+          agents={agents}
+          onApprove={(id) => unblockMutation.mutate({ issueId: id, action: "approve" })}
+          onReject={(id) => unblockMutation.mutate({ issueId: id, action: "reject" })}
+          onRevision={(id) => unblockMutation.mutate({ issueId: id, action: "revision" })}
+          isPending={unblockMutation.isPending}
+        />
+      )}
 
       {/* ── Workflow Visualizer — real data from liveRuns ── */}
       {(() => {
