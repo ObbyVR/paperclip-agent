@@ -28,7 +28,7 @@ type StatusFilter = "pending" | "approved" | "rejected" | "blocked" | "all";
 
 const VALID_TABS: StatusFilter[] = ["pending", "approved", "rejected", "blocked", "all"];
 
-// ── Expandable blocked issue card ──────────────────────────────
+// ── Blocked issue card — flat layout, no double-expand ────────
 
 function BlockedIssueCard({
   issue,
@@ -47,7 +47,6 @@ function BlockedIssueCard({
   onRevision: () => void;
   isPending: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const assignee = issue.assigneeAgentId
     ? agents.find((a) => a.id === issue.assigneeAgentId)
     : null;
@@ -70,12 +69,16 @@ function BlockedIssueCard({
     return chain;
   }, [issue, allIssues]);
 
+  // Parse task description into structured fields
+  const taskFields = useMemo(() => parseTaskDescription(issue.description ?? ""), [issue.description]);
+
   return (
     <div className="border border-amber-500/20 bg-amber-500/[0.03] rounded-lg overflow-hidden">
-      <div className="p-4 space-y-3">
+      {/* ── Header ── */}
+      <div className="p-4 pb-3">
         {/* Parent chain breadcrumb */}
         {parentChain.length > 0 && (
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap">
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap mb-2">
             {parentChain.map((parent, i) => (
               <span key={parent.id} className="flex items-center gap-1">
                 {i > 0 && <ChevronRight className="h-2.5 w-2.5" />}
@@ -148,30 +151,50 @@ function BlockedIssueCard({
             </Button>
           </div>
         </div>
-
-        {/* Expand toggle */}
-        <button
-          type="button"
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          onClick={() => setExpanded((v) => !v)}
-        >
-          <ChevronRight
-            className={cn("h-3 w-3 transition-transform", expanded && "rotate-90")}
-          />
-          {expanded ? "Nascondi dettagli" : "Mostra dettagli"}
-        </button>
       </div>
 
-      {/* Expanded details */}
-      {expanded && <BlockedIssueDetails issue={issue} />}
+      {/* ── Task summary (compact) ── */}
+      {taskFields.objective && (
+        <div className="px-4 pb-3 border-t border-amber-500/10">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mt-3 mb-1">
+            Obiettivo
+          </p>
+          <p className="text-sm text-foreground/80">{taskFields.objective}</p>
+        </div>
+      )}
+
+      {/* ── Output: directly visible ── */}
+      <BlockedIssueOutput issue={issue} />
     </div>
   );
 }
 
-// ── Expanded details: description + output preview ─────────────
+// ── Parse structured task description ──────────────────────────
 
-function BlockedIssueDetails({ issue }: { issue: Issue }) {
-  const { data: documents, isLoading: docsLoading } = useQuery({
+function parseTaskDescription(desc: string): { objective: string; rest: string } {
+  if (!desc) return { objective: "", rest: "" };
+
+  // Try to extract "## Obiettivo" section
+  const objMatch = desc.match(/##\s*Obiettivo\s*\n+([\s\S]*?)(?=\n##\s|\n\*\*Output|$)/i);
+  if (objMatch) {
+    const objective = objMatch[1].trim();
+    const rest = desc.replace(objMatch[0], "").trim();
+    return { objective, rest };
+  }
+
+  // Fallback: first line or first paragraph
+  const firstPara = desc.split(/\n\n/)[0].trim();
+  if (firstPara.length < 300) {
+    return { objective: firstPara, rest: desc.slice(firstPara.length).trim() };
+  }
+
+  return { objective: "", rest: desc };
+}
+
+// ── Output section — loads data, shown flat ────────────────────
+
+function BlockedIssueOutput({ issue }: { issue: Issue }) {
+  const { data: documents, isLoading } = useQuery({
     queryKey: queryKeys.issues.documents(issue.id),
     queryFn: () => issuesApi.listDocuments(issue.id),
     enabled: !!issue.id,
@@ -189,146 +212,104 @@ function BlockedIssueDetails({ issue }: { issue: Issue }) {
     enabled: !!issue.id,
   });
 
-  // Agent's last comment (the summary posted when marking blocked)
+  // Agent's last comment
   const agentSummary = useMemo(() => {
     if (!comments) return null;
     const agentComments = comments.filter((c) => c.authorAgentId);
     return agentComments.length > 0 ? agentComments[agentComments.length - 1] : null;
   }, [comments]);
 
-  // Run output (fallback if no documents)
+  // Run output fallback
   const runContent = useMemo(() => {
     if (!runs) return null;
-    const completed = runs
-      .filter((r) => r.status === "succeeded" || r.status === "completed")
-      .sort(
-        (a, b) =>
-          new Date(b.finishedAt ?? b.createdAt).getTime() -
-          new Date(a.finishedAt ?? a.createdAt).getTime(),
-      );
-    for (const run of completed) {
+    for (const run of runs.filter((r) => r.status === "succeeded" || r.status === "completed")) {
       const content = extractRunContent(run);
       if (content) return content;
     }
     return null;
   }, [runs]);
 
-  const isLoading = docsLoading;
+  const hasOutput = (documents && documents.length > 0) || runContent;
 
-  return (
-    <div className="border-t border-amber-500/10 bg-amber-500/[0.01] px-4 py-4 space-y-4">
-      {/* What was requested */}
-      {issue.description && (
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-            Task assegnato
-          </p>
-          <p className="text-sm text-foreground/90 whitespace-pre-wrap">{issue.description}</p>
-        </div>
-      )}
-
-      {/* Agent summary comment */}
-      {agentSummary && (
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-            Riepilogo agente
-          </p>
-          <div className="text-sm bg-muted/20 rounded-md p-3 border border-border/40">
-            <MarkdownBody className="prose-sm">{agentSummary.body}</MarkdownBody>
-          </div>
-        </div>
-      )}
-
-      {/* Loading */}
-      {isLoading && (
+  if (isLoading) {
+    return (
+      <div className="px-4 py-3 border-t border-amber-500/10">
         <div className="animate-pulse bg-muted/30 rounded h-16 flex items-center justify-center">
           <span className="text-xs text-muted-foreground">Caricamento output...</span>
-        </div>
-      )}
-
-      {/* Document output — the actual deliverable to review */}
-      {documents && documents.length > 0 && (
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-            Output da approvare
-          </p>
-          {documents.map((doc) => (
-            <DocumentPreview key={doc.key} doc={doc} issue={issue} />
-          ))}
-        </div>
-      )}
-
-      {/* Run output fallback (for issues where output is in resultJson) */}
-      {(!documents || documents.length === 0) && runContent && (
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-            Output da approvare
-          </p>
-          <InlineOutputPreview content={runContent} title={issue.title} />
-        </div>
-      )}
-
-      {/* Nothing found */}
-      {!isLoading &&
-        (!documents || documents.length === 0) &&
-        !runContent &&
-        !agentSummary &&
-        !issue.description && (
-          <p className="text-xs text-muted-foreground italic">Nessun dettaglio disponibile.</p>
-        )}
-    </div>
-  );
-}
-
-// ── Document preview (markdown rendered inline) ────────────────
-
-function DocumentPreview({ doc, issue }: { doc: { key: string; body: string; format?: string; title?: string | null }; issue: Issue }) {
-  const [collapsed, setCollapsed] = useState(doc.body.length > 2000);
-  const maxPreview = 2000;
-
-  if (doc.format === "markdown" || !doc.format) {
-    return (
-      <div className="border border-border/50 rounded-lg overflow-hidden mb-2">
-        <div className="flex items-center justify-between px-3 py-2 bg-muted/20 border-b border-border/40">
-          <span className="text-xs font-medium text-foreground/80">
-            {doc.title ?? doc.key}
-          </span>
-          <div className="flex items-center gap-2">
-            {doc.body.length > maxPreview && (
-              <button
-                type="button"
-                className="text-[11px] text-blue-400 hover:underline"
-                onClick={() => setCollapsed((v) => !v)}
-              >
-                {collapsed ? "Espandi tutto" : "Riduci"}
-              </button>
-            )}
-            <Link
-              to={`/issues/${issue.identifier ?? issue.id}`}
-              className="text-[11px] text-blue-400 hover:underline"
-            >
-              Apri issue
-            </Link>
-          </div>
-        </div>
-        <div className="px-4 py-3 max-h-[500px] overflow-y-auto">
-          <MarkdownBody className="prose-sm dark:prose-invert max-w-none">
-            {collapsed ? doc.body.slice(0, maxPreview) + "\n\n..." : doc.body}
-          </MarkdownBody>
         </div>
       </div>
     );
   }
 
-  // Non-markdown: show as text
+  if (!hasOutput && !agentSummary) return null;
+
   return (
-    <div className="border border-border/50 rounded-lg overflow-hidden mb-2">
-      <div className="px-3 py-2 bg-muted/20 border-b border-border/40">
-        <span className="text-xs font-medium">{doc.title ?? doc.key}</span>
+    <div className="border-t border-amber-500/10">
+      {/* Agent summary — shown as compact banner */}
+      {agentSummary && (
+        <div className="px-4 py-2 bg-muted/10 border-b border-border/30">
+          <div className="text-xs text-foreground/70">
+            <MarkdownBody className="prose-xs [&_p]:my-0.5 [&_ul]:my-0.5 [&_strong]:text-foreground/90">{agentSummary.body}</MarkdownBody>
+          </div>
+        </div>
+      )}
+
+      {/* Document output — the actual deliverable */}
+      {documents && documents.length > 0 && documents.map((doc) => (
+        <DocumentInlinePreview key={doc.key} doc={doc} issue={issue} />
+      ))}
+
+      {/* Run output fallback */}
+      {(!documents || documents.length === 0) && runContent && (
+        <div className="px-4 py-3">
+          <InlineOutputPreview content={runContent} title={issue.title} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Document inline preview — scrollable, no nesting ───────────
+
+function DocumentInlinePreview({ doc, issue }: { doc: { key: string; body: string; format?: string; title?: string | null }; issue: Issue }) {
+  const [showFull, setShowFull] = useState(false);
+  const isLong = doc.body.length > 3000;
+  const previewLen = 3000;
+
+  const displayBody = showFull || !isLong ? doc.body : doc.body.slice(0, previewLen);
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Output da approvare
+        </span>
+        <Link
+          to={`/issues/${issue.identifier ?? issue.id}`}
+          className="text-[11px] text-blue-400 hover:underline"
+        >
+          Apri issue completa
+        </Link>
       </div>
-      <div className="px-4 py-3 text-sm whitespace-pre-wrap max-h-[500px] overflow-y-auto">
-        {collapsed ? doc.body.slice(0, maxPreview) + "..." : doc.body}
+      <div className={cn(
+        "prose prose-sm dark:prose-invert max-w-none",
+        "text-sm leading-relaxed",
+        !showFull && isLong && "max-h-[400px] overflow-hidden relative",
+      )}>
+        <MarkdownBody>{displayBody}</MarkdownBody>
+        {!showFull && isLong && (
+          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-amber-500/[0.03] to-transparent" />
+        )}
       </div>
+      {isLong && (
+        <button
+          type="button"
+          className="mt-2 text-xs text-blue-400 hover:underline font-medium"
+          onClick={() => setShowFull((v) => !v)}
+        >
+          {showFull ? "Mostra meno" : `Mostra tutto (${Math.round(doc.body.length / 1000)}k caratteri)`}
+        </button>
+      )}
     </div>
   );
 }
