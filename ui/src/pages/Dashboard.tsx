@@ -278,9 +278,10 @@ export function Dashboard() {
           issueTitleMap.set(issue.id, issue.identifier ? `${issue.identifier}` : issue.title.substring(0, 30));
         }
         const runLabel = (run: typeof runs[0]) => {
-          if (run.issueId && issueTitleMap.has(run.issueId)) return issueTitleMap.get(run.issueId)!;
-          if (run.invocationSource === "on_demand") return "Manuale";
-          if (run.invocationSource === "assignment") return "Assegnazione";
+          if (run.issueId) {
+            const issue = (issues ?? []).find((i) => i.id === run.issueId);
+            if (issue) return issue.title.length > 35 ? issue.title.substring(0, 35) + "…" : issue.title;
+          }
           if (run.invocationSource === "timer") return "Heartbeat";
           return run.triggerDetail ?? "Run";
         };
