@@ -23,6 +23,32 @@ import { Bot, ChevronDown, CircleDot, DollarSign, LayoutDashboard, PauseCircle, 
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { WorkflowVisualizer, type WorkflowEvent, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
 import { WorkflowGraph } from "../components/WorkflowGraph";
+import { Component, type ErrorInfo, type ReactNode } from "react";
+
+// Error boundary to prevent WorkflowGraph crashes from killing the whole dashboard
+class WorkflowGraphErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error("[WorkflowGraph]", error, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/[0.03] p-4 text-xs text-red-400">
+          Errore nel grafo workflow: {this.state.error.message}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function WorkflowGraphSafe(props: React.ComponentProps<typeof WorkflowGraph>) {
+  return (
+    <WorkflowGraphErrorBoundary>
+      <WorkflowGraph {...props} />
+    </WorkflowGraphErrorBoundary>
+  );
+}
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
@@ -177,6 +203,24 @@ export function Dashboard() {
     refetchInterval: 30000,
   });
 
+  const queryClient = useQueryClient();
+  const unblockMutation = useMutation({
+    mutationFn: async ({ issueId, action }: { issueId: string; action: "approve" | "reject" | "revision" }) => {
+      if (action === "revision") {
+        await issuesApi.addComment(issueId, "🔄 Revisione richiesta dal founder.");
+        return issuesApi.update(issueId, { status: "in_progress" });
+      }
+      const newStatus = action === "approve" ? "done" : "cancelled";
+      const comment = action === "approve" ? "✅ Approvato dal founder." : "❌ Rifiutato dal founder.";
+      await issuesApi.addComment(issueId, comment);
+      return issuesApi.update(issueId, { status: newStatus });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+    },
+  });
+
+  // ── All hooks MUST be above this line ──
 
   if (!selectedCompanyId) {
     if (companies.length === 0) {
@@ -203,24 +247,6 @@ export function Dashboard() {
   const handleCancelRun = async (runId: string) => {
     try { await heartbeatsApi.cancel(runId); } catch { /* ignore */ }
   };
-
-  const queryClient = useQueryClient();
-  const unblockMutation = useMutation({
-    mutationFn: async ({ issueId, action }: { issueId: string; action: "approve" | "reject" | "revision" }) => {
-      if (action === "revision") {
-        await issuesApi.addComment(issueId, "🔄 Revisione richiesta dal founder.");
-        return issuesApi.update(issueId, { status: "in_progress" });
-      }
-      const newStatus = action === "approve" ? "done" : "cancelled";
-      const comment = action === "approve" ? "✅ Approvato dal founder." : "❌ Rifiutato dal founder.";
-      await issuesApi.addComment(issueId, comment);
-      return issuesApi.update(issueId, { status: newStatus });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
-    },
-  });
-
 
   return (
     <div className="space-y-4">
@@ -279,7 +305,7 @@ export function Dashboard() {
 
       {/* ── Workflow Graph — issue tree visualization ── */}
       {issues && agents && (
-        <WorkflowGraph
+        <WorkflowGraphSafe
           issues={issues}
           agents={agents}
           onApprove={(id) => unblockMutation.mutate({ issueId: id, action: "approve" })}
