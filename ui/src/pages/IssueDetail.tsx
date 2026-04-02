@@ -26,6 +26,7 @@ import { IssueProperties } from "../components/IssueProperties";
 import { IssueWorkspaceCard } from "../components/IssueWorkspaceCard";
 import { IssueActivityTab } from "../components/IssueActivityTab";
 import { IssueResultsInline } from "../components/IssueResultsInline";
+import { IssueReviewLayout } from "../components/IssueReviewLayout";
 import { LiveRunWidget } from "../components/LiveRunWidget";
 import type { MentionOption } from "../components/MarkdownEditor";
 import { ScrollToBottom } from "../components/ScrollToBottom";
@@ -674,6 +675,51 @@ export function IssueDetail() {
   const isBlocked = issue.status === "blocked";
   const hasDocuments = (issue.documentSummaries ?? []).length > 0;
   const hasDocumentsOrResults = hasDocuments || runResults.length > 0;
+
+  // ── Review mode: dedicated layout for blocked issues ──
+  if (isBlocked) {
+    return (
+      <>
+        <IssueReviewLayout
+          issue={issue}
+          agents={agents ?? []}
+          agentMap={agentMap}
+          comments={commentsWithRunMeta}
+          childIssues={childIssues}
+          onApprove={() => {
+            issuesApi.addComment(issueId!, "Approvato dal founder.");
+            updateIssue.mutate({ status: "done" });
+          }}
+          onReject={() => {
+            issuesApi.addComment(issueId!, "Rifiutato dal founder.");
+            updateIssue.mutate({ status: "cancelled" });
+          }}
+          onRevision={(feedback) => {
+            const msg = feedback
+              ? `Revisione richiesta dal founder.\n\n${feedback}`
+              : "Revisione richiesta dal founder.";
+            issuesApi.addComment(issueId!, msg);
+            updateIssue.mutate({ status: "in_progress" });
+          }}
+          isPending={updateIssue.isPending}
+        />
+
+        {/* Mobile properties drawer */}
+        <Sheet open={mobilePropsOpen} onOpenChange={setMobilePropsOpen}>
+          <SheetContent side="bottom" className="max-h-[85dvh] pb-[env(safe-area-inset-bottom)]">
+            <SheetHeader>
+              <SheetTitle className="text-sm">Properties</SheetTitle>
+            </SheetHeader>
+            <ScrollArea className="flex-1 overflow-y-auto">
+              <div className="px-4 pb-4">
+                <IssueProperties issue={issue} onUpdate={(data) => updateIssue.mutate(data)} inline />
+              </div>
+            </ScrollArea>
+          </SheetContent>
+        </Sheet>
+      </>
+    );
+  }
 
   return (
     <div className="max-w-2xl space-y-5">
