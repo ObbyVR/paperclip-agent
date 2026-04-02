@@ -38,7 +38,7 @@ export function Sidebar() {
     enabled: !!selectedCompanyId,
     refetchInterval: 10_000,
   });
-  const liveRunCount = liveRuns?.length ?? 0;
+  const liveRunCount = (liveRuns ?? []).filter((r) => r.status === "running" || r.status === "queued").length;
 
   function openSearch() {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));
