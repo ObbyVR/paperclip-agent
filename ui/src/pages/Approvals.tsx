@@ -15,8 +15,9 @@ import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
   ShieldCheck, AlertCircle, CheckCircle2, XCircle, FileText,
-  ChevronRight, RotateCcw, Globe, Download, ExternalLink,
+  ChevronRight, RotateCcw, Globe, Download, ExternalLink, Maximize2, X,
 } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
@@ -295,6 +296,7 @@ function TabRiepilogo({ issueId }: { issueId: string }) {
 
 function TabOutput({ issue }: { issue: Issue }) {
   const [showFull, setShowFull] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const { data: documents, isLoading: docsLoading } = useQuery({
     queryKey: queryKeys.issues.documents(issue.id),
@@ -332,38 +334,82 @@ function TabOutput({ issue }: { issue: Issue }) {
     const displayBody = showFull || !isLong ? doc.body : doc.body.slice(0, 3000);
 
     return (
-      <div className="px-4 py-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] text-muted-foreground">
-            {doc.title ?? doc.key} — {Math.round(doc.body.length / 1000)}k caratteri
-          </span>
-          <Link
-            to={`/issues/${issue.identifier ?? issue.id}`}
-            className="text-[11px] text-blue-400 hover:underline"
-          >
-            Apri issue
-          </Link>
-        </div>
-        <div className={cn(
-          !showFull && isLong && "max-h-[500px] overflow-hidden relative",
-        )}>
-          <MarkdownBody className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed">
-            {displayBody}
-          </MarkdownBody>
-          {!showFull && isLong && (
-            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-amber-500/[0.05] to-transparent" />
+      <>
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] text-muted-foreground">
+              {doc.title ?? doc.key} — {Math.round(doc.body.length / 1000)}k caratteri
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setFullscreen(true)}
+                className="text-[11px] text-blue-400 hover:underline flex items-center gap-1"
+              >
+                <Maximize2 className="h-3 w-3" />
+                Schermo intero
+              </button>
+              <Link
+                to={`/issues/${issue.identifier ?? issue.id}`}
+                className="text-[11px] text-blue-400 hover:underline"
+              >
+                Apri issue
+              </Link>
+            </div>
+          </div>
+          <div className={cn(
+            !showFull && isLong && "max-h-[500px] overflow-hidden relative",
+          )}>
+            <MarkdownBody className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed">
+              {displayBody}
+            </MarkdownBody>
+            {!showFull && isLong && (
+              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-amber-500/[0.05] to-transparent" />
+            )}
+          </div>
+          {isLong && (
+            <button
+              type="button"
+              className="mt-2 text-xs text-blue-400 hover:underline font-medium"
+              onClick={() => setShowFull((v) => !v)}
+            >
+              {showFull ? "Mostra meno" : "Mostra tutto"}
+            </button>
           )}
         </div>
-        {isLong && (
-          <button
-            type="button"
-            className="mt-2 text-xs text-blue-400 hover:underline font-medium"
-            onClick={() => setShowFull((v) => !v)}
+
+        {/* Fullscreen dialog */}
+        <Dialog open={fullscreen} onOpenChange={setFullscreen}>
+          <DialogContent
+            showCloseButton={false}
+            className="max-w-[90vw] w-[90vw] h-[90vh] max-h-[90vh] p-0 overflow-hidden flex flex-col"
           >
-            {showFull ? "Mostra meno" : "Mostra tutto"}
-          </button>
-        )}
-      </div>
+            <div className="flex items-center justify-between px-6 py-3 border-b border-border shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold">
+                  {issue.identifier && <span className="text-muted-foreground mr-2">{issue.identifier}</span>}
+                  {issue.title}
+                </h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {doc.title ?? doc.key} — {Math.round(doc.body.length / 1000)}k caratteri
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFullscreen(false)}
+                className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              <MarkdownBody className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&_table]:w-full [&_table]:text-xs [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-1.5 [&_table]:border-collapse [&_th]:border [&_th]:border-border/50 [&_td]:border [&_td]:border-border/30 [&_th]:bg-muted/30 [&_th]:text-left [&_th]:font-semibold">
+                {doc.body}
+              </MarkdownBody>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
