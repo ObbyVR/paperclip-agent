@@ -294,6 +294,18 @@ function TabRiepilogo({ issueId }: { issueId: string }) {
 
 // ── Tab: Output — document or run result ───────────────────────
 
+// Pre-process markdown: ensure proper line breaks for **key:** value patterns
+// and other single-newline sequences that CommonMark collapses
+function fixMarkdownBreaks(md: string): string {
+  return md
+    // Single newline between **bold:** lines → double newline
+    .replace(/(\*\*[^*]+:\*\*[^\n]*)\n(\*\*[^*]+:\*\*)/g, "$1\n\n$2")
+    // Single newline after a line ending with text, before a **bold** line
+    .replace(/([^\n])\n(\*\*[^*]+:\*\*)/g, "$1\n\n$2")
+    // Ensure list items after paragraphs have spacing
+    .replace(/([^\n])\n(\* )/g, "$1\n\n$2");
+}
+
 function TabOutput({ issue }: { issue: Issue }) {
   const [showFull, setShowFull] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -330,8 +342,9 @@ function TabOutput({ issue }: { issue: Issue }) {
   // Document output (primary)
   const doc = documents?.[0];
   if (doc) {
-    const isLong = doc.body.length > 3000;
-    const displayBody = showFull || !isLong ? doc.body : doc.body.slice(0, 3000);
+    const fixedBody = fixMarkdownBreaks(doc.body);
+    const isLong = fixedBody.length > 3000;
+    const displayBody = showFull || !isLong ? fixedBody : fixedBody.slice(0, 3000);
 
     return (
       <>
@@ -404,7 +417,7 @@ function TabOutput({ issue }: { issue: Issue }) {
             </div>
             <div className="flex-1 overflow-y-auto px-8 py-6">
               <MarkdownBody className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&_table]:w-full [&_table]:text-xs [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-1.5 [&_table]:border-collapse [&_th]:border [&_th]:border-border/50 [&_td]:border [&_td]:border-border/30 [&_th]:bg-muted/30 [&_th]:text-left [&_th]:font-semibold">
-                {doc.body}
+                {fixedBody}
               </MarkdownBody>
             </div>
           </DialogContent>
