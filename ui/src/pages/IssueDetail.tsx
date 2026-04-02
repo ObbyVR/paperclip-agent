@@ -686,12 +686,18 @@ export function IssueDetail() {
           agentMap={agentMap}
           comments={commentsWithRunMeta}
           childIssues={childIssues}
-          onApprove={() => {
-            issuesApi.addComment(issueId!, "Approvato dal founder.");
+          onApprove={(feedback) => {
+            const msg = feedback
+              ? `Approvato dal founder.\n\n${feedback}`
+              : "Approvato dal founder.";
+            issuesApi.addComment(issueId!, msg);
             updateIssue.mutate({ status: "done" });
           }}
-          onReject={() => {
-            issuesApi.addComment(issueId!, "Rifiutato dal founder.");
+          onReject={(feedback) => {
+            const msg = feedback
+              ? `Rifiutato dal founder.\n\n${feedback}`
+              : "Rifiutato dal founder.";
+            issuesApi.addComment(issueId!, msg);
             updateIssue.mutate({ status: "cancelled" });
           }}
           onRevision={(feedback) => {

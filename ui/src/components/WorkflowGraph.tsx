@@ -424,42 +424,12 @@ function BlockedPopover({
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex-1"
-            onClick={onApprove}
-            disabled={isPending}
-          >
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Approva
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
-            onClick={onRevision}
-            disabled={isPending}
-          >
-            <RotateCcw className="h-3 w-3 mr-1" />
-            Revisione
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10"
-            onClick={onReject}
-            disabled={isPending}
-          >
-            <XCircle className="h-3 w-3 mr-1" />
-            Rifiuta
-          </Button>
-        </div>
         <Link
           to={`/issues/${issue.identifier ?? issue.id}`}
-          className="text-[11px] text-blue-400 hover:underline block"
+          className="inline-flex items-center justify-center w-full h-8 rounded-md text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
         >
-          Apri issue completa
+          <CheckCircle2 className="h-3 w-3 mr-1.5" />
+          Rivedi e approva
         </Link>
       </div>
     </div>

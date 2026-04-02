@@ -26,8 +26,8 @@ type Props = {
   agentMap: Map<string, Agent>;
   comments: IssueComment[] | undefined;
   childIssues: Issue[];
-  onApprove: () => void;
-  onReject: () => void;
+  onApprove: (feedback?: string) => void;
+  onReject: (feedback?: string) => void;
   onRevision: (feedback?: string) => void;
   isPending: boolean;
 };
@@ -328,7 +328,7 @@ export function IssueReviewLayout({
 }: Props) {
   const { t } = useTranslation();
   const [openSection, setOpenSection] = useState<AccordionSection>("output");
-  const [feedbackMode, setFeedbackMode] = useState(false);
+  const [actionMode, setActionMode] = useState<"approve" | "revision" | "reject" | null>(null);
   const [feedback, setFeedback] = useState("");
 
   const assignee = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId) : null;
@@ -337,10 +337,22 @@ export function IssueReviewLayout({
   // Build parent chain
   const ancestors = issue.ancestors ?? [];
 
-  const handleRevision = () => {
-    onRevision(feedback || undefined);
+  const handleConfirmAction = () => {
+    if (actionMode === "approve") onApprove(feedback || undefined);
+    else if (actionMode === "revision") onRevision(feedback || undefined);
+    else if (actionMode === "reject") onReject(feedback || undefined);
     setFeedback("");
-    setFeedbackMode(false);
+    setActionMode(null);
+  };
+
+  const openAction = (action: "approve" | "revision" | "reject") => {
+    if (actionMode === action) {
+      // Already open — confirm
+      handleConfirmAction();
+    } else {
+      setActionMode(action);
+      setFeedback("");
+    }
   };
 
   return (
@@ -395,14 +407,9 @@ export function IssueReviewLayout({
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
-                onClick={() => {
-                  if (feedbackMode) {
-                    handleRevision();
-                  } else {
-                    setFeedbackMode(true);
-                  }
-                }}
+                className={cn("h-8 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10",
+                  actionMode === "revision" && "bg-amber-500/10 ring-1 ring-amber-500/30")}
+                onClick={() => openAction("revision")}
                 disabled={isPending}
               >
                 <RotateCcw className="h-3 w-3 mr-1" />
@@ -411,8 +418,9 @@ export function IssueReviewLayout({
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10"
-                onClick={onReject}
+                className={cn("h-8 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10",
+                  actionMode === "reject" && "bg-red-500/10 ring-1 ring-red-500/30")}
+                onClick={() => openAction("reject")}
                 disabled={isPending}
               >
                 <XCircle className="h-3 w-3 mr-1" />
@@ -420,8 +428,9 @@ export function IssueReviewLayout({
               </Button>
               <Button
                 size="sm"
-                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={onApprove}
+                className={cn("h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white",
+                  actionMode === "approve" && "ring-2 ring-emerald-400/50")}
+                onClick={() => openAction("approve")}
                 disabled={isPending}
               >
                 <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -430,13 +439,22 @@ export function IssueReviewLayout({
             </div>
           </div>
 
-          {/* Feedback textarea (shown when Revisione clicked) */}
-          {feedbackMode && (
-            <div className="mt-3 space-y-2">
+          {/* Feedback + confirm — shown for any action */}
+          {actionMode && (
+            <div className="px-5 pb-4 space-y-2">
               <textarea
-                className="w-full rounded-lg border border-red-500/20 bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-red-500/30 resize-none"
-                rows={3}
-                placeholder="Scrivi il feedback per l'agente... (cosa deve migliorare?)"
+                className={cn(
+                  "w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 resize-none",
+                  actionMode === "approve" ? "border-emerald-500/20 focus:ring-emerald-500/30" :
+                  actionMode === "revision" ? "border-amber-500/20 focus:ring-amber-500/30" :
+                  "border-red-500/20 focus:ring-red-500/30",
+                )}
+                rows={2}
+                placeholder={
+                  actionMode === "approve" ? "Indicazioni per la fase successiva... (es. quale direzione scegli?)" :
+                  actionMode === "revision" ? "Cosa deve migliorare o rifare?" :
+                  "Motivo del rifiuto... (opzionale)"
+                }
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 autoFocus
@@ -446,17 +464,23 @@ export function IssueReviewLayout({
                   size="sm"
                   variant="ghost"
                   className="h-7 text-xs"
-                  onClick={() => { setFeedbackMode(false); setFeedback(""); }}
+                  onClick={() => { setActionMode(null); setFeedback(""); }}
                 >
                   Annulla
                 </Button>
                 <Button
                   size="sm"
-                  className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white"
-                  onClick={handleRevision}
+                  className={cn("h-7 text-xs text-white",
+                    actionMode === "approve" ? "bg-emerald-600 hover:bg-emerald-700" :
+                    actionMode === "revision" ? "bg-amber-600 hover:bg-amber-700" :
+                    "bg-red-600 hover:bg-red-700",
+                  )}
+                  onClick={handleConfirmAction}
                   disabled={isPending}
                 >
-                  Invia revisione
+                  {actionMode === "approve" ? "Conferma approvazione" :
+                   actionMode === "revision" ? "Invia revisione" :
+                   "Conferma rifiuto"}
                 </Button>
               </div>
             </div>
