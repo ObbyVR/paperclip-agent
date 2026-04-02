@@ -273,9 +273,18 @@ export function Dashboard() {
             </div>
           );
         }
-        // Group runs by agent, most recent first
+        // Deduplicate runs: keep only the most recent run per (agent, issueId) combo
+        const runKey = (r: typeof runs[0]) => `${r.agentId}::${r.issueId ?? r.id}`;
+        const bestRuns = new Map<string, typeof runs[0]>();
+        for (const run of [...runs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())) {
+          const key = runKey(run);
+          if (!bestRuns.has(key)) bestRuns.set(key, run);
+        }
+        const dedupedRuns = Array.from(bestRuns.values());
+
+        // Group by agent
         const agentRuns = new Map<string, typeof runs>();
-        for (const run of runs) {
+        for (const run of dedupedRuns) {
           const key = run.agentName ?? run.agentId;
           if (!agentRuns.has(key)) agentRuns.set(key, []);
           agentRuns.get(key)!.push(run);
@@ -343,7 +352,7 @@ export function Dashboard() {
           "run.completed": "Run completato",
           "run.failed": "Run fallito",
         };
-        const noiseActions = new Set(["issue.read_marked", "agent.key_created"]);
+        const noiseActions = new Set(["issue.read_marked", "agent.key_created", "issue.document_updated"]);
 
         // 1. Pending approvals
         for (const approval of (pendingApprovalsList ?? [])) {
@@ -361,8 +370,9 @@ export function Dashboard() {
           });
         }
 
-        // 2. Blocked issues = waiting for founder review (show as approval-like)
-        const blockedIssues = (issues ?? []).filter((i) => i.status === "blocked");
+        // 2. Blocked issues = waiting for founder review (only recent, last 7 days)
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const blockedIssues = (issues ?? []).filter((i) => i.status === "blocked" && new Date(i.updatedAt) > sevenDaysAgo);
         for (const issue of blockedIssues) {
           const assigneeName = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId)?.name : undefined;
           events.push({
@@ -376,9 +386,11 @@ export function Dashboard() {
           });
         }
 
-        // 3. Recent activity (filtered, translated)
+        // 3. Recent activity (filtered, translated, agent-only unless important)
         for (const event of recentActivity) {
           if (noiseActions.has(event.action)) continue;
+          // Skip board-only events unless they're agent hires or important
+          if (!event.agentId && !event.action.includes("hired") && !event.action.includes("created")) continue;
           const agName = event.agentId ? agentMap.get(event.agentId)?.name : undefined;
           const label = actionLabels[event.action] ?? event.action.replace(/\./g, " ").replace(/_/g, " ");
           const isOutput = event.action.includes("comment") || event.action.includes("document") || event.action.includes("completed");
