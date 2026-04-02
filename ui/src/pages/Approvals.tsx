@@ -28,7 +28,9 @@ type StatusFilter = "pending" | "approved" | "rejected" | "blocked" | "all";
 
 const VALID_TABS: StatusFilter[] = ["pending", "approved", "rejected", "blocked", "all"];
 
-// ── Blocked issue card — flat layout, no double-expand ────────
+// ── Blocked issue card — compact + accordion tabs ────────────
+
+type AccordionTab = "obiettivo" | "riepilogo" | "output" | null;
 
 function BlockedIssueCard({
   issue,
@@ -47,9 +49,12 @@ function BlockedIssueCard({
   onRevision: () => void;
   isPending: boolean;
 }) {
+  const [openTab, setOpenTab] = useState<AccordionTab>(null);
   const assignee = issue.assigneeAgentId
     ? agents.find((a) => a.id === issue.assigneeAgentId)
     : null;
+
+  const toggleTab = (tab: AccordionTab) => setOpenTab((prev) => (prev === tab ? null : tab));
 
   // Build parent chain breadcrumb
   const parentChain = useMemo(() => {
@@ -69,13 +74,10 @@ function BlockedIssueCard({
     return chain;
   }, [issue, allIssues]);
 
-  // Parse task description into structured fields
-  const taskFields = useMemo(() => parseTaskDescription(issue.description ?? ""), [issue.description]);
-
   return (
     <div className="border border-amber-500/20 bg-amber-500/[0.03] rounded-lg overflow-hidden">
-      {/* ── Header ── */}
-      <div className="p-4 pb-3">
+      {/* ── Compact header ── */}
+      <div className="px-4 py-3">
         {/* Parent chain breadcrumb */}
         {parentChain.length > 0 && (
           <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap mb-2">
@@ -99,20 +101,16 @@ function BlockedIssueCard({
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <FileText className="h-4 w-4 text-amber-500 shrink-0" />
-              <Link
-                to={`/issues/${issue.identifier ?? issue.id}`}
-                className="font-medium text-sm hover:underline"
-              >
+              <span className="font-medium text-sm">
                 {issue.identifier && (
                   <span className="text-muted-foreground mr-1.5">{issue.identifier}</span>
                 )}
                 {issue.title}
-              </Link>
+              </span>
             </div>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               {assignee && (
                 <span className="flex items-center gap-1">
-                  Completata da{" "}
                   <Identity name={assignee.name} size="sm" className="inline-flex" />
                 </span>
               )}
@@ -153,56 +151,154 @@ function BlockedIssueCard({
         </div>
       </div>
 
-      {/* ── Task summary (compact) ── */}
-      {taskFields.objective && (
-        <div className="px-4 pb-3 border-t border-amber-500/10">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mt-3 mb-1">
-            Obiettivo
-          </p>
-          <p className="text-sm text-foreground/80">{taskFields.objective}</p>
+      {/* ── Accordion tab buttons ── */}
+      <div className="flex border-t border-amber-500/10">
+        <AccordionTabButton
+          label="Obiettivo"
+          isOpen={openTab === "obiettivo"}
+          onClick={() => toggleTab("obiettivo")}
+        />
+        <AccordionTabButton
+          label="Riepilogo"
+          isOpen={openTab === "riepilogo"}
+          onClick={() => toggleTab("riepilogo")}
+        />
+        <AccordionTabButton
+          label="Output"
+          isOpen={openTab === "output"}
+          onClick={() => toggleTab("output")}
+        />
+      </div>
+
+      {/* ── Accordion content ── */}
+      {openTab && (
+        <div className="border-t border-amber-500/10">
+          {openTab === "obiettivo" && <TabObiettivo description={issue.description ?? ""} />}
+          {openTab === "riepilogo" && <TabRiepilogo issueId={issue.id} />}
+          {openTab === "output" && <TabOutput issue={issue} />}
         </div>
       )}
-
-      {/* ── Output: directly visible ── */}
-      <BlockedIssueOutput issue={issue} />
     </div>
   );
 }
 
-// ── Parse structured task description ──────────────────────────
-
-function parseTaskDescription(desc: string): { objective: string; rest: string } {
-  if (!desc) return { objective: "", rest: "" };
-
-  // Try to extract "## Obiettivo" section
-  const objMatch = desc.match(/##\s*Obiettivo\s*\n+([\s\S]*?)(?=\n##\s|\n\*\*Output|$)/i);
-  if (objMatch) {
-    const objective = objMatch[1].trim();
-    const rest = desc.replace(objMatch[0], "").trim();
-    return { objective, rest };
-  }
-
-  // Fallback: first line or first paragraph
-  const firstPara = desc.split(/\n\n/)[0].trim();
-  if (firstPara.length < 300) {
-    return { objective: firstPara, rest: desc.slice(firstPara.length).trim() };
-  }
-
-  return { objective: "", rest: desc };
+function AccordionTabButton({ label, isOpen, onClick }: { label: string; isOpen: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex-1 py-2 text-xs font-medium text-center transition-colors",
+        "hover:bg-amber-500/5",
+        "border-r last:border-r-0 border-amber-500/10",
+        isOpen
+          ? "text-amber-400 bg-amber-500/[0.06]"
+          : "text-muted-foreground",
+      )}
+    >
+      {label}
+    </button>
+  );
 }
 
-// ── Output section — loads data, shown flat ────────────────────
+// ── Tab: Obiettivo — parsed from task description ──────────────
 
-function BlockedIssueOutput({ issue }: { issue: Issue }) {
-  const { data: documents, isLoading } = useQuery({
-    queryKey: queryKeys.issues.documents(issue.id),
-    queryFn: () => issuesApi.listDocuments(issue.id),
-    enabled: !!issue.id,
+function TabObiettivo({ description }: { description: string }) {
+  if (!description) {
+    return <p className="px-4 py-3 text-xs text-muted-foreground italic">Nessuna descrizione.</p>;
+  }
+
+  // Extract structured sections
+  const sections = parseTaskSections(description);
+
+  return (
+    <div className="px-4 py-3 space-y-3">
+      {sections.map((section, i) => (
+        <div key={i}>
+          {section.heading && (
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+              {section.heading}
+            </p>
+          )}
+          <div className="text-sm text-foreground/80">
+            <MarkdownBody className="prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0.5">
+              {section.body}
+            </MarkdownBody>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function parseTaskSections(desc: string): Array<{ heading: string; body: string }> {
+  const sections: Array<{ heading: string; body: string }> = [];
+  const parts = desc.split(/^##\s+/m);
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+
+    const newlineIdx = trimmed.indexOf("\n");
+    if (newlineIdx > 0 && parts.indexOf(part) > 0) {
+      sections.push({
+        heading: trimmed.slice(0, newlineIdx).trim(),
+        body: trimmed.slice(newlineIdx + 1).trim(),
+      });
+    } else {
+      sections.push({ heading: "", body: trimmed });
+    }
+  }
+
+  return sections;
+}
+
+// ── Tab: Riepilogo — agent's last comment ──────────────────────
+
+function TabRiepilogo({ issueId }: { issueId: string }) {
+  const { data: comments, isLoading } = useQuery({
+    queryKey: queryKeys.issues.comments(issueId),
+    queryFn: () => issuesApi.listComments(issueId),
+    enabled: !!issueId,
   });
 
-  const { data: comments } = useQuery({
-    queryKey: queryKeys.issues.comments(issue.id),
-    queryFn: () => issuesApi.listComments(issue.id),
+  const agentSummary = useMemo(() => {
+    if (!comments) return null;
+    const agentComments = comments.filter((c) => c.authorAgentId);
+    return agentComments.length > 0 ? agentComments[agentComments.length - 1] : null;
+  }, [comments]);
+
+  if (isLoading) {
+    return (
+      <div className="px-4 py-3">
+        <div className="animate-pulse bg-muted/30 rounded h-12" />
+      </div>
+    );
+  }
+
+  if (!agentSummary) {
+    return <p className="px-4 py-3 text-xs text-muted-foreground italic">Nessun riepilogo disponibile.</p>;
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <div className="text-sm">
+        <MarkdownBody className="prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_strong]:text-foreground/90">
+          {agentSummary.body}
+        </MarkdownBody>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab: Output — document or run result ───────────────────────
+
+function TabOutput({ issue }: { issue: Issue }) {
+  const [showFull, setShowFull] = useState(false);
+
+  const { data: documents, isLoading: docsLoading } = useQuery({
+    queryKey: queryKeys.issues.documents(issue.id),
+    queryFn: () => issuesApi.listDocuments(issue.id),
     enabled: !!issue.id,
   });
 
@@ -212,14 +308,6 @@ function BlockedIssueOutput({ issue }: { issue: Issue }) {
     enabled: !!issue.id,
   });
 
-  // Agent's last comment
-  const agentSummary = useMemo(() => {
-    if (!comments) return null;
-    const agentComments = comments.filter((c) => c.authorAgentId);
-    return agentComments.length > 0 ? agentComments[agentComments.length - 1] : null;
-  }, [comments]);
-
-  // Run output fallback
   const runContent = useMemo(() => {
     if (!runs) return null;
     for (const run of runs.filter((r) => r.status === "succeeded" || r.status === "completed")) {
@@ -229,89 +317,66 @@ function BlockedIssueOutput({ issue }: { issue: Issue }) {
     return null;
   }, [runs]);
 
-  const hasOutput = (documents && documents.length > 0) || runContent;
-
-  if (isLoading) {
+  if (docsLoading) {
     return (
-      <div className="px-4 py-3 border-t border-amber-500/10">
-        <div className="animate-pulse bg-muted/30 rounded h-16 flex items-center justify-center">
-          <span className="text-xs text-muted-foreground">Caricamento output...</span>
-        </div>
+      <div className="px-4 py-3">
+        <div className="animate-pulse bg-muted/30 rounded h-20" />
       </div>
     );
   }
 
-  if (!hasOutput && !agentSummary) return null;
+  // Document output (primary)
+  const doc = documents?.[0];
+  if (doc) {
+    const isLong = doc.body.length > 3000;
+    const displayBody = showFull || !isLong ? doc.body : doc.body.slice(0, 3000);
 
-  return (
-    <div className="border-t border-amber-500/10">
-      {/* Agent summary — shown as compact banner */}
-      {agentSummary && (
-        <div className="px-4 py-2 bg-muted/10 border-b border-border/30">
-          <div className="text-xs text-foreground/70">
-            <MarkdownBody className="prose-xs [&_p]:my-0.5 [&_ul]:my-0.5 [&_strong]:text-foreground/90">{agentSummary.body}</MarkdownBody>
-          </div>
+    return (
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] text-muted-foreground">
+            {doc.title ?? doc.key} — {Math.round(doc.body.length / 1000)}k caratteri
+          </span>
+          <Link
+            to={`/issues/${issue.identifier ?? issue.id}`}
+            className="text-[11px] text-blue-400 hover:underline"
+          >
+            Apri issue
+          </Link>
         </div>
-      )}
-
-      {/* Document output — the actual deliverable */}
-      {documents && documents.length > 0 && documents.map((doc) => (
-        <DocumentInlinePreview key={doc.key} doc={doc} issue={issue} />
-      ))}
-
-      {/* Run output fallback */}
-      {(!documents || documents.length === 0) && runContent && (
-        <div className="px-4 py-3">
-          <InlineOutputPreview content={runContent} title={issue.title} />
+        <div className={cn(
+          !showFull && isLong && "max-h-[500px] overflow-hidden relative",
+        )}>
+          <MarkdownBody className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed">
+            {displayBody}
+          </MarkdownBody>
+          {!showFull && isLong && (
+            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-amber-500/[0.05] to-transparent" />
+          )}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ── Document inline preview — scrollable, no nesting ───────────
-
-function DocumentInlinePreview({ doc, issue }: { doc: { key: string; body: string; format?: string; title?: string | null }; issue: Issue }) {
-  const [showFull, setShowFull] = useState(false);
-  const isLong = doc.body.length > 3000;
-  const previewLen = 3000;
-
-  const displayBody = showFull || !isLong ? doc.body : doc.body.slice(0, previewLen);
-
-  return (
-    <div className="px-4 py-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Output da approvare
-        </span>
-        <Link
-          to={`/issues/${issue.identifier ?? issue.id}`}
-          className="text-[11px] text-blue-400 hover:underline"
-        >
-          Apri issue completa
-        </Link>
-      </div>
-      <div className={cn(
-        "prose prose-sm dark:prose-invert max-w-none",
-        "text-sm leading-relaxed",
-        !showFull && isLong && "max-h-[400px] overflow-hidden relative",
-      )}>
-        <MarkdownBody>{displayBody}</MarkdownBody>
-        {!showFull && isLong && (
-          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-amber-500/[0.03] to-transparent" />
+        {isLong && (
+          <button
+            type="button"
+            className="mt-2 text-xs text-blue-400 hover:underline font-medium"
+            onClick={() => setShowFull((v) => !v)}
+          >
+            {showFull ? "Mostra meno" : "Mostra tutto"}
+          </button>
         )}
       </div>
-      {isLong && (
-        <button
-          type="button"
-          className="mt-2 text-xs text-blue-400 hover:underline font-medium"
-          onClick={() => setShowFull((v) => !v)}
-        >
-          {showFull ? "Mostra meno" : `Mostra tutto (${Math.round(doc.body.length / 1000)}k caratteri)`}
-        </button>
-      )}
-    </div>
-  );
+    );
+  }
+
+  // Run output fallback
+  if (runContent) {
+    return (
+      <div className="px-4 py-3">
+        <InlineOutputPreview content={runContent} title={issue.title} />
+      </div>
+    );
+  }
+
+  return <p className="px-4 py-3 text-xs text-muted-foreground italic">Nessun output disponibile.</p>;
 }
 
 // ── Inline output preview (HTML, text) ─────────────────────────
