@@ -3,8 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
-import { activityApi } from "../api/activity";
-import { approvalsApi } from "../api/approvals";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
@@ -18,9 +16,7 @@ import { StatusIcon } from "../components/StatusIcon";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, ChevronDown, CircleDot, DollarSign, FolderOpen, LayoutDashboard, PauseCircle, Play, ShieldCheck, Square, Zap } from "lucide-react";
-import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
-import { WorkflowVisualizer, type WorkflowEvent, type WorkflowLane, type WorkflowStats } from "../components/WorkflowVisualizer";
+import { Bot, CircleDot, DollarSign, FolderOpen, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
@@ -80,12 +76,6 @@ export function Dashboard() {
     enabled: !!selectedCompanyId,
   });
 
-  const { data: activity } = useQuery({
-    queryKey: queryKeys.activity(selectedCompanyId!),
-    queryFn: () => activityApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
-
   const { data: issues } = useQuery({
     queryKey: queryKeys.issues.list(selectedCompanyId!),
     queryFn: () => issuesApi.list(selectedCompanyId!),
@@ -114,16 +104,6 @@ export function Dashboard() {
   }, [issues]);
 
   const recentIssues = filteredIssues.length > 0 ? getRecentIssues(filteredIssues) : [];
-  const recentActivity = useMemo(() => (activity ?? []).slice(0, 15), [activity]);
-
-  const agentMap = useMemo(() => {
-    const map = new Map<string, Agent>();
-    for (const a of agents ?? []) map.set(a.id, a);
-    return map;
-  }, [agents]);
-
-  // entityNameMap, entityTitleMap removed — ActivityRow no longer used
-
   const agentName = (id: string | null) => {
     if (!id || !agents) return null;
     return agents.find((a) => a.id === id)?.name ?? null;
@@ -171,13 +151,6 @@ export function Dashboard() {
     }
     return { failedIssueIds: ids, failedIssueErrors: errors };
   }, [allRuns]);
-
-  const { data: pendingApprovalsList } = useQuery({
-    queryKey: [...queryKeys.approvals.list(selectedCompanyId ?? ""), "pending"],
-    queryFn: () => approvalsApi.list(selectedCompanyId!, "pending"),
-    enabled: !!selectedCompanyId,
-    refetchInterval: 30000,
-  });
 
   const queryClient = useQueryClient();
   const unblockMutation = useMutation({
@@ -342,160 +315,59 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ── WorkflowVisualizer — multi-lane pipeline view ── */}
-      {allRuns && allRuns.length > 0 && agents && (() => {
-        const runs = allRuns;
-        const runKey = (r: typeof runs[0]) => `${r.agentId}::${(r as any).contextSnapshot?.issueId ?? r.id}`;
-        const bestRuns = new Map<string, typeof runs[0]>();
-        for (const run of [...runs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())) {
-          const key = runKey(run);
-          if (!bestRuns.has(key)) bestRuns.set(key, run);
-        }
-        const dedupedRuns = Array.from(bestRuns.values());
+      {/* ── Other projects — same WorkflowGraph style ── */}
+      {issues && agents && selectedProjectId && (() => {
+        const otherProjects = (projectsList ?? []).filter((p) => p.id !== selectedProjectId);
+        if (otherProjects.length === 0) return null;
 
-        const agentRuns = new Map<string, typeof runs>();
-        for (const run of dedupedRuns) {
-          const key = agentMap.get(run.agentId)?.name ?? run.agentId;
-          if (!agentRuns.has(key)) agentRuns.set(key, []);
-          agentRuns.get(key)!.push(run);
-        }
+        return otherProjects.map((project) => {
+          const projectIssues = issues.filter((i) => i.projectId === project.id);
+          if (projectIssues.length === 0) return null;
 
-        const runLabel = (run: typeof runs[0]) => {
-          const issueId = (run as any).contextSnapshot?.issueId;
-          if (issueId) {
-            const issue = filteredIssues.find((i) => i.id === issueId);
-            if (issue) return issue.title.length > 35 ? issue.title.substring(0, 35) + "…" : issue.title;
-          }
-          if (run.invocationSource === "timer") return "Heartbeat";
-          return run.triggerDetail ?? "Run";
-        };
-
-        const lanes: WorkflowLane[] = Array.from(agentRuns.entries()).map(([name, agentRunList]) => {
-          const sorted = [...agentRunList].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          return {
-            agentName: name,
-            agentLink: `/agents/${sorted[0].agentId}`,
-            steps: sorted.map((run) => ({
-              id: run.id,
-              label: runLabel(run),
-              icon: Zap,
-              status: run.status === "running" ? "active" as const
-                : run.status === "queued" ? "waiting" as const
-                : run.status === "succeeded" ? "done" as const
-                : run.status === "failed" || run.status === "timed_out" ? "error" as const
-                : run.finishedAt ? "done" as const
-                : "pending" as const,
-            })),
-          };
+          return (
+            <div key={project.id} className="space-y-1">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                {project.name}
+              </h3>
+              <WorkflowGraphSafe
+                issues={projectIssues}
+                agents={agents}
+                onApprove={(id) => unblockMutation.mutate({ issueId: id, action: "approve" })}
+                onReject={(id) => unblockMutation.mutate({ issueId: id, action: "reject" })}
+                onRevision={(id) => unblockMutation.mutate({ issueId: id, action: "revision" })}
+                isPending={unblockMutation.isPending}
+                failedIssueIds={failedIssueIds}
+                failedIssueErrors={failedIssueErrors}
+              />
+            </div>
+          );
         });
+      })()}
 
-        if (lanes.length === 0) return null;
+      {/* ── All projects view (no filter) — show per-project WorkflowGraphs ── */}
+      {issues && agents && !selectedProjectId && projectsList && projectsList.length > 1 && (() => {
+        // When viewing "all projects", the primary WorkflowGraph above already shows everything.
+        // Show unassigned issues separately if they exist.
+        const unassigned = issues.filter((i) => !i.projectId);
+        if (unassigned.length === 0) return null;
 
-        const allSteps = lanes.flatMap((l) => l.steps);
-        const completed = allSteps.filter((s) => s.status === "done").length;
-        const active = allSteps.filter((s) => s.status === "active").length;
-        const stats: WorkflowStats = {
-          totalSteps: allSteps.length,
-          completedSteps: completed,
-          activeSteps: active,
-          agents: lanes.length,
-        };
-
-        const actionLabels: Record<string, string> = {
-          "issue.comment_added": "Nuovo commento",
-          "issue.updated": "Stato aggiornato",
-          "issue.document_created": "Documento creato",
-          "issue.created": "Issue creata",
-          "issue.assigned": "Assegnata",
-          "agent.hired": "Agente assunto",
-          "agent.created": "Agente creato",
-        };
-        const noiseActions = new Set(["issue.read_marked", "agent.key_created", "issue.document_updated"]);
-
-        const events: WorkflowEvent[] = [];
-
-        for (const approval of (pendingApprovalsList ?? [])) {
-          const title = (approval.payload as any)?.title ?? (approval.payload as any)?.name ?? "Approvazione richiesta";
-          const agName = approval.requestedByAgentId
-            ? agents.find((a) => a.id === approval.requestedByAgentId)?.name
-            : undefined;
-          events.push({
-            id: `approval-${approval.id}`,
-            ts: new Date(approval.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-            type: "approval" as const,
-            agentName: agName ?? "Board",
-            message: String(title),
-            outputLink: `/approvals/${approval.id}`,
-          });
-        }
-
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const blockedIssues = filteredIssues.filter((i) => i.status === "blocked" && new Date(i.updatedAt) > sevenDaysAgo);
-        for (const issue of blockedIssues) {
-          const assigneeName = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId)?.name : undefined;
-          events.push({
-            id: `blocked-${issue.id}`,
-            ts: new Date(issue.updatedAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-            type: "approval" as const,
-            agentName: assigneeName,
-            stepLabel: "In attesa di review",
-            message: `${issue.identifier ?? ""} ${issue.title}`.trim(),
-            outputLink: `/issues/${issue.identifier ?? issue.id}`,
-          });
-        }
-
-        for (const event of recentActivity) {
-          if (noiseActions.has(event.action)) continue;
-          if (!event.agentId && !event.action.includes("hired") && !event.action.includes("created")) continue;
-          const agName = event.agentId ? agentMap.get(event.agentId)?.name : undefined;
-          const label = actionLabels[event.action] ?? event.action.replace(/\./g, " ").replace(/_/g, " ");
-          const isOutput = event.action.includes("comment") || event.action.includes("document") || event.action.includes("completed");
-          const isError = event.action.includes("failed") || event.action.includes("error");
-          const issueTitle = event.entityType === "issue"
-            ? filteredIssues.find((i) => i.id === event.entityId)
-            : undefined;
-          const entityDesc = issueTitle
-            ? `${issueTitle.identifier ?? ""} ${issueTitle.title}`.trim()
-            : "";
-          const issueLink = event.entityType === "issue" && issueTitle
-            ? `/issues/${issueTitle.identifier ?? event.entityId}`
-            : undefined;
-          const detail = event.details as Record<string, unknown> | null;
-          const prev = detail?._previous as Record<string, unknown> | undefined;
-          const statusChange = prev ? ` (${String(prev.status ?? "")} → ${String(detail?.status ?? "")})` : "";
-
-          events.push({
-            id: `activity-${event.id}`,
-            ts: new Date(event.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-            type: isError ? "error" as const : isOutput ? "output" as const : "info" as const,
-            agentName: agName,
-            message: `${label}${statusChange} — ${entityDesc}`.substring(0, 120),
-            outputLink: issueLink,
-          });
-        }
-
-        for (const run of runs.filter((r) => r.status === "failed")) {
-          const issueId = (run as any).contextSnapshot?.issueId;
-          const issueTitle = issueId ? filteredIssues.find((i) => i.id === issueId) : undefined;
-          events.push({
-            id: `run-fail-${run.id}`,
-            ts: new Date(run.createdAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-            type: "error" as const,
-            agentName: agentMap.get(run.agentId)?.name,
-            message: issueTitle ? `Run fallito — ${issueTitle.identifier ?? ""} ${issueTitle.title}`.trim() : `Run fallito (${run.invocationSource})`,
-          });
-        }
-
-        events.sort((a, b) => b.ts.localeCompare(a.ts));
-        const seen = new Set<string>();
-        const deduped = events.filter((e) => {
-          const key = e.message.substring(0, 50);
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-
-        return <WorkflowVisualizer lanes={lanes} stats={stats} events={deduped.length > 0 ? deduped.slice(0, 15) : undefined} />;
+        return (
+          <div className="space-y-1">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Senza progetto
+            </h3>
+            <WorkflowGraphSafe
+              issues={unassigned}
+              agents={agents}
+              onApprove={(id) => unblockMutation.mutate({ issueId: id, action: "approve" })}
+              onReject={(id) => unblockMutation.mutate({ issueId: id, action: "reject" })}
+              onRevision={(id) => unblockMutation.mutate({ issueId: id, action: "revision" })}
+              isPending={unblockMutation.isPending}
+              failedIssueIds={failedIssueIds}
+              failedIssueErrors={failedIssueErrors}
+            />
+          </div>
+        );
       })()}
 
       {/* ── Fallback: recent issues only when no workflow graph visible ── */}
