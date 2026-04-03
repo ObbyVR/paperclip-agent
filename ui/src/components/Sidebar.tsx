@@ -23,6 +23,7 @@ import { useCompany } from "../context/CompanyContext";
 import { heartbeatsApi } from "../api/heartbeats";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
+import { useBrowserNotifications } from "../hooks/useBrowserNotifications";
 import { Button } from "@/components/ui/button";
 import { PluginSlotOutlet } from "@/plugins/slots";
 import { useTranslation } from "react-i18next";
@@ -32,6 +33,7 @@ export function Sidebar() {
   const { openNewIssue } = useDialog();
   const { selectedCompanyId, selectedCompany } = useCompany();
   const inboxBadge = useInboxBadge(selectedCompanyId);
+  useBrowserNotifications(inboxBadge);
   const { data: liveRuns } = useQuery({
     queryKey: queryKeys.liveRuns(selectedCompanyId!),
     queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!),
@@ -101,7 +103,7 @@ export function Sidebar() {
         </div>
 
         <SidebarSection label={t("nav.work")}>
-          <SidebarNavItem to="/issues" label={t("nav.issues")} icon={CircleDot} />
+          <SidebarNavItem to="/issues" label={t("nav.issues")} icon={CircleDot} badge={inboxBadge.mineIssues > 0 ? inboxBadge.mineIssues : undefined} badgeTone="danger" />
           <SidebarNavItem
             to="/approvals"
             label={t("nav.approvals", "Approvazioni")}

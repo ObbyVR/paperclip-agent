@@ -517,6 +517,54 @@ export function agentRoutes(db: Db) {
     return details;
   }
 
+  /**
+   * Auto-sync all company skills to a newly created agent.
+   * If the agent was created without explicit desiredSkills, resolves all
+   * company skills and writes them to adapterConfig before triggering sync.
+   */
+  async function autoSyncSkillsForNewAgent(
+    agent: NonNullable<Awaited<ReturnType<typeof svc.getById>>>,
+    existingDesiredSkills: string[] | null,
+  ) {
+    try {
+      let desiredSkills = existingDesiredSkills;
+      let adapterConfig = agent.adapterConfig as Record<string, unknown>;
+
+      if (!desiredSkills || desiredSkills.length === 0) {
+        const allSkills = await companySkills.listRuntimeSkillEntries(agent.companyId, {
+          materializeMissing: shouldMaterializeRuntimeSkillsForAdapter(agent.adapterType),
+        });
+        desiredSkills = allSkills.map((s) => s.key);
+        if (desiredSkills.length === 0) return;
+        adapterConfig = writePaperclipSkillSyncPreference(adapterConfig, desiredSkills);
+        await svc.update(agent.id, { adapterConfig });
+      }
+
+      const adapter = findServerAdapter(agent.adapterType);
+      if (!adapter?.syncSkills) return;
+
+      const { config: runtimeConfig } = await secretsSvc.resolveAdapterConfigForRuntime(
+        agent.companyId,
+        adapterConfig,
+      );
+      const runtimeSkillEntries = await companySkills.listRuntimeSkillEntries(agent.companyId, {
+        materializeMissing: shouldMaterializeRuntimeSkillsForAdapter(agent.adapterType),
+      });
+      const runtimeSkillConfig = {
+        ...runtimeConfig,
+        paperclipRuntimeSkills: runtimeSkillEntries,
+      };
+      await adapter.syncSkills({
+        agentId: agent.id,
+        companyId: agent.companyId,
+        adapterType: agent.adapterType,
+        config: runtimeSkillConfig,
+      }, desiredSkills);
+    } catch {
+      // Non-fatal: skill sync failure should not block agent creation
+    }
+  }
+
   function buildUnsupportedSkillSnapshot(
     adapterType: string,
     desiredSkills: string[] = [],
@@ -1307,6 +1355,9 @@ export function agentRoutes(db: Db) {
       });
     }
 
+    // Auto-sync company skills to newly hired agent
+    await autoSyncSkillsForNewAgent(agent, desiredSkillAssignment.desiredSkills);
+
     res.status(201).json({ agent, approval });
   });
 
@@ -1387,6 +1438,9 @@ export function agentRoutes(db: Db) {
         actor.actorType === "user" ? actor.actorId : null,
       );
     }
+
+    // Auto-sync company skills to newly created agent
+    await autoSyncSkillsForNewAgent(agent, desiredSkillAssignment.desiredSkills);
 
     res.status(201).json(agent);
   });

@@ -123,13 +123,13 @@ function titleizeFilename(input: string) {
 
 type IssueAccordionTab = "output" | "briefing" | "commenti" | "attivita" | "sub-issues" | null;
 
-function AccordionBtn({ label, count, isOpen, onClick }: { label: string; count?: number; isOpen: boolean; onClick: () => void }) {
+function AccordionBtn({ label, count, isOpen, onClick, alert }: { label: string; count?: number; isOpen: boolean; onClick: () => void; alert?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center justify-center gap-1.5 flex-1 py-2.5 text-xs font-medium text-center transition-colors",
+        "relative flex items-center justify-center gap-1.5 flex-1 py-2.5 text-xs font-medium text-center transition-colors",
         "hover:bg-white/5",
         "border-r last:border-r-0 border-border/30",
         isOpen ? "text-cyan-400 bg-cyan-500/[0.06]" : "text-muted-foreground",
@@ -138,6 +138,9 @@ function AccordionBtn({ label, count, isOpen, onClick }: { label: string; count?
       {label}
       {count != null && count > 0 && (
         <span className="text-[10px] px-1 py-0.5 rounded-full bg-white/10">{count}</span>
+      )}
+      {alert && (
+        <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500" />
       )}
     </button>
   );
@@ -166,7 +169,7 @@ function IssueDetailAccordion({
       <div className="flex bg-card/30">
         <AccordionBtn label="Output" count={(issue.documents?.length ?? 0) + runResults.length} isOpen={openTab === "output"} onClick={() => toggle("output")} />
         {hasBriefing && <AccordionBtn label="Briefing" isOpen={openTab === "briefing"} onClick={() => toggle("briefing")} />}
-        <AccordionBtn label="Commenti" count={commentsWithRunMeta.length} isOpen={openTab === "commenti"} onClick={() => toggle("commenti")} />
+        <AccordionBtn label="Commenti" count={commentsWithRunMeta.length} isOpen={openTab === "commenti"} onClick={() => toggle("commenti")} alert={issue.isUnreadForMe && openTab !== "commenti"} />
         <AccordionBtn label="Attivita'" isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} />
         {hasSubIssues && <AccordionBtn label="Sub-issue" count={childIssues.length} isOpen={openTab === "sub-issues"} onClick={() => toggle("sub-issues")} />}
       </div>

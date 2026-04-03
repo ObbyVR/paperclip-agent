@@ -547,6 +547,7 @@ export function shouldResetTaskSessionForWake(
 
   const wakeReason = readNonEmptyString(contextSnapshot?.wakeReason);
   if (wakeReason === "issue_assigned") return true;
+  if (wakeReason === "child_issue_completed") return true;
   return false;
 }
 
@@ -564,6 +565,7 @@ function describeSessionResetReason(
 
   const wakeReason = readNonEmptyString(contextSnapshot?.wakeReason);
   if (wakeReason === "issue_assigned") return "wake reason is issue_assigned";
+  if (wakeReason === "child_issue_completed") return "all child issues completed (auto-unblocked)";
   return null;
 }
 
