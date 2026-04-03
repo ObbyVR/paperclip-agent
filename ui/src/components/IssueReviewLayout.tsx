@@ -17,6 +17,7 @@ import {
   MessageSquare, RotateCcw, X, XCircle,
 } from "lucide-react";
 import type { Agent, Issue, IssueComment } from "@paperclipai/shared";
+import { WorkspaceFileBrowser } from "./WorkspaceFileBrowser";
 
 /* ── Types ────────────────────────────────── */
 
@@ -173,6 +174,12 @@ function SectionOutput({ issue }: { issue: Issue }) {
           )}
         </div>
 
+        {issue.companyId && (
+          <div className="px-4 pb-4">
+            <WorkspaceFileBrowser companyId={issue.companyId} issueId={issue.id} />
+          </div>
+        )}
+
         <Dialog open={fullscreen} onOpenChange={setFullscreen}>
           <DialogContent
             showCloseButton={false}
@@ -214,6 +221,16 @@ function SectionOutput({ issue }: { issue: Issue }) {
         <div className="prose prose-sm dark:prose-invert max-w-none text-sm whitespace-pre-wrap">
           {runContent}
         </div>
+      </div>
+    );
+  }
+
+  // Show workspace files even if no doc/run content
+  if (issue.companyId) {
+    return (
+      <div className="px-4 py-4 space-y-4">
+        <p className="text-xs text-muted-foreground italic">Nessun documento o run output disponibile.</p>
+        <WorkspaceFileBrowser companyId={issue.companyId} issueId={issue.id} />
       </div>
     );
   }

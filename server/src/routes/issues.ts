@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import type { Db } from "@paperclipai/db";
+import { issues as issuesTable } from "@paperclipai/db";
+import { eq as eqOp } from "drizzle-orm";
 import {
   addIssueCommentSchema,
   createIssueAttachmentMetadataSchema,
@@ -884,6 +886,41 @@ export function issueRoutes(db: Db, storage: StorageService) {
       requestedByActorId: actor.actorId,
     });
 
+    // Auto-block parent when child is created for a different agent
+    if (issue.parentId && issue.assigneeAgentId) {
+      const parent = await svc.getById(issue.parentId);
+      if (
+        parent &&
+        parent.assigneeAgentId &&
+        parent.assigneeAgentId !== issue.assigneeAgentId &&
+        parent.status === "in_progress"
+      ) {
+        await svc.update(parent.id, { status: "blocked" });
+        await logActivity(db, {
+          companyId,
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+          action: "issue.updated",
+          entityType: "issue",
+          entityId: parent.id,
+          details: {
+            status: "blocked",
+            identifier: parent.identifier,
+            autoBlocked: true,
+            blockedByChildId: issue.id,
+            blockedByChildIdentifier: issue.identifier,
+            _previous: { status: "in_progress" },
+          },
+        });
+        logger.info(
+          { parentId: parent.id, childId: issue.id },
+          "auto-blocked parent issue: child assigned to different agent",
+        );
+      }
+    }
+
     res.status(201).json(issue);
   });
 
@@ -1085,6 +1122,68 @@ export function issueRoutes(db: Db, storage: StorageService) {
               source: "comment.mention",
             },
           });
+        }
+      }
+
+      // Auto-wake blocked parent when child completes
+      const childCompletedTerminal =
+        (issue.status === "done" || issue.status === "cancelled") &&
+        existing.status !== "done" &&
+        existing.status !== "cancelled" &&
+        existing.parentId;
+
+      if (childCompletedTerminal && existing.parentId) {
+        try {
+          const parent = await svc.getById(existing.parentId);
+          if (parent && parent.status === "blocked" && parent.assigneeAgentId) {
+            // Check if all other children are also terminal
+            const siblings = await db
+              .select({ id: issuesTable.id, status: issuesTable.status })
+              .from(issuesTable)
+              .where(eqOp(issuesTable.parentId, parent.id));
+            const allChildrenDone = siblings.every(
+              (s) => s.status === "done" || s.status === "cancelled",
+            );
+            if (allChildrenDone) {
+              await svc.update(parent.id, { status: "in_progress" });
+              await logActivity(db, {
+                companyId: issue.companyId,
+                actorType: "system",
+                actorId: "auto-wake",
+                agentId: null,
+                runId: null,
+                action: "issue.updated",
+                entityType: "issue",
+                entityId: parent.id,
+                details: {
+                  status: "in_progress",
+                  identifier: parent.identifier,
+                  autoUnblocked: true,
+                  unblockedByChildId: issue.id,
+                  unblockedByChildIdentifier: issue.identifier,
+                  _previous: { status: "blocked" },
+                },
+              });
+              // Wake the parent's agent
+              if (!wakeups.has(parent.assigneeAgentId)) {
+                wakeups.set(parent.assigneeAgentId, {
+                  source: "automation",
+                  triggerDetail: "system",
+                  reason: "child_issue_completed",
+                  payload: { issueId: parent.id, completedChildId: issue.id },
+                  requestedByActorType: actor.actorType,
+                  requestedByActorId: actor.actorId,
+                  contextSnapshot: { issueId: parent.id, source: "child_completed" },
+                });
+              }
+              logger.info(
+                { parentId: parent.id, childId: issue.id },
+                "auto-unblocked parent issue: all children completed",
+              );
+            }
+          }
+        } catch (err) {
+          logger.warn({ err, issueId: issue.id, parentId: existing.parentId }, "auto-wake parent failed");
         }
       }
 

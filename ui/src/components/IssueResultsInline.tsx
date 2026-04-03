@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Download, ExternalLink } from "lucide-react"
 import { relativeTime } from "../lib/utils";
 import { estimateRunCostEur, modelLabel, formatEur } from "../lib/modelPricing";
 import { cn } from "../lib/utils";
+import { FileOutputLinks } from "./FileOutputLinks";
 
 type RunResult = {
   runId: string;
@@ -87,6 +88,7 @@ export function IssueResultsInline({ runResults }: Props) {
               <div className="px-3 py-3 text-sm">
                 {htmlContent ? (
                   <div className="space-y-2">
+                    <FileOutputLinks content={r.content} />
                     <div className="flex items-center gap-1 justify-end">
                       <Button
                         variant="ghost"
@@ -126,8 +128,11 @@ export function IssueResultsInline({ runResults }: Props) {
                     </div>
                   </div>
                 ) : (
-                  <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                    {r.content}
+                  <div className="space-y-3">
+                    <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                      {r.content}
+                    </div>
+                    <FileOutputLinks content={r.content} />
                   </div>
                 )}
               </div>

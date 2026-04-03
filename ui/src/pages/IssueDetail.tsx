@@ -26,6 +26,7 @@ import { IssueProperties } from "../components/IssueProperties";
 import { IssueWorkspaceCard } from "../components/IssueWorkspaceCard";
 import { IssueActivityTab } from "../components/IssueActivityTab";
 import { IssueResultsInline } from "../components/IssueResultsInline";
+import { WorkspaceFileBrowser } from "../components/WorkspaceFileBrowser";
 import { IssueReviewLayout } from "../components/IssueReviewLayout";
 import { LiveRunWidget } from "../components/LiveRunWidget";
 import type { MentionOption } from "../components/MarkdownEditor";
@@ -186,6 +187,9 @@ function IssueDetailAccordion({
                 extraActions={!hasAttachments ? attachmentUploadButton : undefined}
               />
               {runResults.length > 0 && <IssueResultsInline runResults={runResults} />}
+              {issue.companyId && (
+                <WorkspaceFileBrowser companyId={issue.companyId} issueId={issue.id} />
+              )}
             </div>
           )}
 

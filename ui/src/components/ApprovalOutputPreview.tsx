@@ -7,6 +7,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Download, ExternalLink, Mail, Globe } from "lucide-react";
 import type { Issue } from "@paperclipai/shared";
+import { FileOutputLinks } from "./FileOutputLinks";
 
 type Props = {
   linkedIssues: Issue[];
@@ -61,48 +62,51 @@ function HtmlPreview({ content, title }: { content: string; title: string }) {
   const htmlContent = cleanHtml(content);
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border">
-        <div className="flex items-center gap-2 text-sm">
-          <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="font-medium">{t("approval.htmlPreview")}</span>
+    <div className="space-y-3">
+      <FileOutputLinks content={content} />
+      <div className="border border-border rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border">
+          <div className="flex items-center gap-2 text-sm">
+            <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="font-medium">{t("approval.htmlPreview")}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              title={t("approval.openInBrowser")}
+              onClick={() => {
+                const w = window.open("", "_blank");
+                if (w) { w.document.write(htmlContent); w.document.close(); }
+              }}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              title={t("approval.downloadHtml")}
+              onClick={() => {
+                const blob = new Blob([htmlContent], { type: "text/html" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${title.replace(/\s+/g, "-").toLowerCase()}.html`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            title={t("approval.openInBrowser")}
-            onClick={() => {
-              const w = window.open("", "_blank");
-              if (w) { w.document.write(htmlContent); w.document.close(); }
-            }}
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            title={t("approval.downloadHtml")}
-            onClick={() => {
-              const blob = new Blob([htmlContent], { type: "text/html" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `${title.replace(/\s+/g, "-").toLowerCase()}.html`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-          >
-            <Download className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        <iframe
+          srcDoc={htmlContent}
+          className="w-full h-[500px] rounded-b"
+          sandbox="allow-scripts"
+          title={`Preview: ${title}`}
+        />
       </div>
-      <iframe
-        srcDoc={htmlContent}
-        className="w-full h-[500px] rounded-b"
-        sandbox="allow-scripts"
-        title={`Preview: ${title}`}
-      />
     </div>
   );
 }
@@ -161,10 +165,13 @@ function AuditPreview({ content, title }: { content: string; title: string }) {
 
 function GenericPreview({ content }: { content: string }) {
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <div className="px-4 py-3 text-sm prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap max-h-[400px] overflow-y-auto">
-        {content}
+    <div className="space-y-3">
+      <div className="border border-border rounded-lg overflow-hidden">
+        <div className="px-4 py-3 text-sm prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap max-h-[400px] overflow-y-auto">
+          {content}
+        </div>
       </div>
+      <FileOutputLinks content={content} />
     </div>
   );
 }

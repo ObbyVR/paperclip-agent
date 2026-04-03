@@ -157,7 +157,7 @@ function buildTree(issues: Issue[], agents: Agent[], viewMode: ViewMode): TreeNo
 
 /* ── Layout algorithm ───────────────────────── */
 
-function layoutTree(root: TreeNode): { root: TreeNode; totalWidth: number; totalHeight: number; compactNodes: TreeNode[] } {
+function layoutTree(root: TreeNode): { root: TreeNode; totalWidth: number; totalHeight: number; treeHeight: number; compactNodes: TreeNode[] } {
   // Separate completed children into compact lane
   const compactNodes: TreeNode[] = [];
   separateCompactNodes(root, compactNodes);
@@ -181,21 +181,21 @@ function layoutTree(root: TreeNode): { root: TreeNode; totalWidth: number; total
     compactY += COMPACT_H + COMPACT_V_GAP;
   }
 
-  // Calculate total bounds
+  // Calculate total bounds — tree height drives layout, not compact nodes
   let maxX = 0;
-  let maxY = 0;
+  let treeMaxY = 0;
   function traverse(node: TreeNode) {
     maxX = Math.max(maxX, node.x + NODE_W);
-    maxY = Math.max(maxY, node.y + NODE_H);
+    treeMaxY = Math.max(treeMaxY, node.y + NODE_H);
     for (const child of node.children) traverse(child);
   }
   traverse(root);
 
-  for (const cn of compactNodes) {
-    maxY = Math.max(maxY, cn.y + COMPACT_H);
-  }
+  // Tree height is the authoritative height — compact column adapts to it
+  const treeHeight = treeMaxY - root.y + NODE_H;
+  const totalHeight = treeMaxY + 40;
 
-  return { root, totalWidth: maxX + 40, totalHeight: maxY + 40, compactNodes };
+  return { root, totalWidth: maxX + 40, totalHeight, treeHeight, compactNodes };
 }
 
 function separateCompactNodes(node: TreeNode, compactNodes: TreeNode[]) {
@@ -400,11 +400,11 @@ function CompactNodeCard({ node }: { node: TreeNode }) {
     <Link
       to={`/issues/${node.issue.identifier ?? node.issue.id}`}
       className={cn(
-        "absolute rounded border px-2 py-1 no-underline text-inherit block",
+        "rounded border px-2 py-1 no-underline text-inherit block",
         "hover:ring-1 hover:ring-white/10 transition-all",
         "border-border/30 bg-card/30 opacity-50 hover:opacity-80",
       )}
-      style={{ left: node.x, top: node.y, width: COMPACT_W, height: COMPACT_H }}
+      style={{ width: COMPACT_W, height: COMPACT_H }}
     >
       <div className="flex items-center gap-1 h-full">
         {isDone
@@ -761,7 +761,7 @@ export function WorkflowGraph({
 
   return (
     <div className="space-y-4">
-      {layouts.map(({ root, totalWidth, totalHeight, compactNodes }, idx) => {
+      {layouts.map(({ root, totalWidth, totalHeight, treeHeight, compactNodes }, idx) => {
         const edges = buildEdges(root, failedIssueIds);
         const nodes: TreeNode[] = [];
         function collectNodes(node: TreeNode) {
@@ -787,18 +787,27 @@ export function WorkflowGraph({
             </div>
 
             <div className="relative" style={{ width: totalWidth, height: totalHeight, minWidth: "100%" }}>
-              {/* Compact lane label */}
+              {/* Compact lane — scrollable, height constrained to tree */}
               {compactNodes.length > 0 && (
-                <div className="absolute text-[9px] text-muted-foreground/50 uppercase tracking-wider font-medium"
-                     style={{ left: 0, top: root.y - 16 }}>
-                  Completati ({compactNodes.length})
+                <div
+                  className="absolute"
+                  style={{ left: 0, top: root.y - 16, width: COMPACT_W }}
+                >
+                  <div className="text-[9px] text-muted-foreground/50 uppercase tracking-wider font-medium mb-1">
+                    Completati ({compactNodes.length})
+                  </div>
+                  <div
+                    className="overflow-y-auto pr-1"
+                    style={{ maxHeight: Math.max(treeHeight, NODE_H * 2) }}
+                  >
+                    <div className="space-y-1">
+                      {compactNodes.map((cn) => (
+                        <CompactNodeCard key={cn.issue.id} node={cn} />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
-
-              {/* Compact nodes in left lane */}
-              {compactNodes.map((cn) => (
-                <CompactNodeCard key={cn.issue.id} node={cn} />
-              ))}
 
               {/* SVG connectors layer */}
               <svg

@@ -25,9 +25,9 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { MarkdownBody } from "../components/MarkdownBody";
 import type { Issue, Agent } from "@paperclipai/shared";
 
-type StatusFilter = "pending" | "approved" | "rejected" | "blocked" | "all";
+type StatusFilter = "pending" | "in_review" | "approved" | "rejected" | "blocked" | "all";
 
-const VALID_TABS: StatusFilter[] = ["pending", "approved", "rejected", "blocked", "all"];
+const VALID_TABS: StatusFilter[] = ["pending", "in_review", "approved", "rejected", "blocked", "all"];
 
 // ── Blocked issue card — compact + accordion tabs ────────────
 
@@ -631,6 +631,14 @@ export function Approvals() {
     [issueList],
   );
 
+  const inReviewIssues = useMemo(
+    () =>
+      issueList
+        .filter((i) => i.status === "in_review")
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [issueList],
+  );
+
   const pendingApprovals = useMemo(
     () => approvals.filter((a) => a.status === "pending" || a.status === "revision_requested"),
     [approvals],
@@ -696,6 +704,7 @@ export function Approvals() {
   }, [statusFilter, pendingApprovals, approvedApprovals, rejectedApprovals, approvals]);
 
   const showBlockedSection = statusFilter === "pending" || statusFilter === "blocked";
+  const showInReviewSection = statusFilter === "in_review";
 
   // ── Mutations ──
 
@@ -810,6 +819,19 @@ export function Approvals() {
                     {totalRejected > 0 && (
                       <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-red-500/20 text-red-500">
                         {totalRejected}
+                      </span>
+                    )}
+                  </>
+                ),
+              },
+              {
+                value: "in_review",
+                label: (
+                  <>
+                    In revisione
+                    {inReviewIssues.length > 0 && (
+                      <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-blue-500/20 text-blue-500">
+                        {inReviewIssues.length}
                       </span>
                     )}
                   </>
@@ -958,6 +980,53 @@ export function Approvals() {
         </>
       )}
 
+      {/* ── In review issues section ── */}
+      {showInReviewSection && inReviewIssues.length > 0 && (
+        <div className="grid gap-3">
+          {(() => {
+            const inReviewGroups = groupByAgent(inReviewIssues, agentList);
+            return Array.from(inReviewGroups.entries()).map(([key, group]) => (
+              <div key={key}>
+                {inReviewGroups.size > 1 && (
+                  <div className="flex items-center gap-2 mt-4 mb-3 pb-2 border-b border-border/50">
+                    <Identity
+                      name={group.agent?.name ?? "Non assegnato"}
+                      size="default"
+                    />
+                    <span className="text-sm font-medium text-foreground/80">
+                      {group.agent?.name ?? "Non assegnato"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {group.issues.length} {group.issues.length === 1 ? "issue" : "issues"}
+                    </span>
+                  </div>
+                )}
+                <div className="grid gap-3">
+                  {group.issues.map((issue) => (
+                    <BlockedIssueCard
+                      key={issue.id}
+                      issue={issue}
+                      agents={agentList}
+                      allIssues={issueList}
+                      onApprove={() =>
+                        unblockMutation.mutate({ issueId: issue.id, action: "approve" })
+                      }
+                      onReject={() =>
+                        unblockMutation.mutate({ issueId: issue.id, action: "reject" })
+                      }
+                      onRevision={() =>
+                        unblockMutation.mutate({ issueId: issue.id, action: "revision" })
+                      }
+                      isPending={unblockMutation.isPending}
+                    />
+                  ))}
+                </div>
+              </div>
+            ));
+          })()}
+        </div>
+      )}
+
       {/* ── All tab: also show resolved issues ── */}
       {statusFilter === "all" && (founderApprovedIssues.length > 0 || founderRejectedIssues.length > 0) && (
         <>
@@ -988,6 +1057,9 @@ export function Approvals() {
       )}
       {statusFilter === "rejected" && totalRejected === 0 && (
         <EmptyState message="Nessuna richiesta rifiutata." />
+      )}
+      {statusFilter === "in_review" && inReviewIssues.length === 0 && (
+        <EmptyState message="Nessuna issue in revisione." />
       )}
       {statusFilter === "blocked" && blockedIssues.length === 0 && (
         <EmptyState message="Nessuna issue bloccata." />

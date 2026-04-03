@@ -12,6 +12,7 @@ import { StatusBadge } from "./StatusBadge";
 import { AgentIcon } from "./AgentIconPicker";
 import { formatDateTime } from "../lib/utils";
 import { PluginSlotOutlet } from "@/plugins/slots";
+import { FileOutputLinks } from "./FileOutputLinks";
 
 interface CommentWithRunMeta extends IssueComment {
   runId?: string | null;
@@ -249,6 +250,7 @@ const TimelineList = memo(function TimelineList({
                 </span>
               </div>
               <MarkdownBody className="text-sm">{comment.body}</MarkdownBody>
+              <FileOutputLinks content={comment.body} />
               {companyId ? (
                 <div className="mt-2 space-y-2">
                   <PluginSlotOutlet
@@ -321,7 +323,7 @@ export function CommentThread({
   const effectiveSuggestedAssigneeValue = suggestedAssigneeValue ?? currentAssigneeValue;
   const [reassignTarget, setReassignTarget] = useState(effectiveSuggestedAssigneeValue);
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
-  const [sortNewestFirst, setSortNewestFirst] = useState(false);
+  const [sortNewestFirst, setSortNewestFirst] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditorRef>(null);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
