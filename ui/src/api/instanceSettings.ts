@@ -15,4 +15,8 @@ export const instanceSettingsApi = {
     api.get<InstanceExperimentalSettings>("/instance/settings/experimental"),
   updateExperimental: (patch: PatchInstanceExperimentalSettings) =>
     api.patch<InstanceExperimentalSettings>("/instance/settings/experimental", patch),
+  getGlobalAiTier: () =>
+    api.get<{ globalAiTier: string | null }>("/instance/settings/global-ai-tier"),
+  setGlobalAiTier: (tier: string | null) =>
+    api.put<{ globalAiTier: string | null }>("/instance/settings/global-ai-tier", { tier }),
 };

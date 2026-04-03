@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,7 +19,7 @@ import { StatusIcon } from "../components/StatusIcon";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, ChevronDown, CircleDot, DollarSign, LayoutDashboard, PauseCircle, Play, ShieldCheck, Square, Zap } from "lucide-react";
+import { Bot, ChevronDown, CircleDot, DollarSign, FolderOpen, LayoutDashboard, PauseCircle, Play, ShieldCheck, Square, Zap } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 // WorkflowVisualizer removed — replaced by WorkflowGraph
 import { WorkflowGraph } from "../components/WorkflowGraph";
@@ -89,9 +89,28 @@ export function Dashboard() {
     enabled: !!selectedCompanyId,
   });
 
-  // projects query removed — no longer needed on dashboard
+  const { data: projectsList } = useQuery({
+    queryKey: queryKeys.projects.list(selectedCompanyId!),
+    queryFn: () => projectsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  const recentIssues = issues ? getRecentIssues(issues) : [];
+  // Filter issues by selected project (null = all, "__none__" = unassigned)
+  const filteredIssues = useMemo(() => {
+    if (!issues) return [];
+    if (!selectedProjectId) return issues;
+    if (selectedProjectId === "__none__") return issues.filter((i) => !i.projectId);
+    return issues.filter((i) => i.projectId === selectedProjectId);
+  }, [issues, selectedProjectId]);
+
+  // Count unassigned issues for the filter label
+  const unassignedCount = useMemo(() => {
+    if (!issues) return 0;
+    return issues.filter((i) => !i.projectId).length;
+  }, [issues]);
+
+  const recentIssues = filteredIssues.length > 0 ? getRecentIssues(filteredIssues) : [];
   // Activity animation effects removed — feed no longer on dashboard
 
   const agentMap = useMemo(() => {
@@ -116,6 +135,39 @@ export function Dashboard() {
     refetchInterval: 60000,
   });
   const activeRuns = (liveRuns ?? []).filter((r) => r.status === "running" || r.status === "queued");
+
+  // Fetch all runs to identify failed issues for WorkflowGraph coloring
+  const { data: allRuns } = useQuery({
+    queryKey: [...queryKeys.liveRuns(selectedCompanyId ?? ""), "all-runs"],
+    queryFn: () => heartbeatsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 60000,
+  });
+
+  // Build sets of failed issue IDs + error messages (only for issues that haven't succeeded since)
+  const { failedIssueIds, failedIssueErrors } = useMemo(() => {
+    const ids = new Set<string>();
+    const errors = new Map<string, string>();
+    if (!allRuns) return { failedIssueIds: ids, failedIssueErrors: errors };
+
+    // Group runs by issueId, check if latest run for each issue is a failure
+    const latestByIssue = new Map<string, { status: string; error: string }>();
+    for (const run of allRuns) {
+      const issueId = (run as any).contextSnapshot?.issueId;
+      if (!issueId) continue;
+      // Runs are ordered newest first — only keep the first (latest) per issue
+      if (!latestByIssue.has(issueId)) {
+        latestByIssue.set(issueId, { status: run.status, error: run.error ?? "" });
+      }
+    }
+    for (const [issueId, { status, error }] of latestByIssue) {
+      if (status === "failed") {
+        ids.add(issueId);
+        if (error) errors.set(issueId, error);
+      }
+    }
+    return { failedIssueIds: ids, failedIssueErrors: errors };
+  }, [allRuns]);
 
   const { data: pendingApprovalsList } = useQuery({
     queryKey: [...queryKeys.approvals.list(selectedCompanyId ?? ""), "pending"],
@@ -190,9 +242,28 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ── Stats inline header bar ─────────────── */}
+      {/* ── Project filter + Stats inline header bar ─────────────── */}
       {data && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground -mt-1">
+          {projectsList && projectsList.length > 1 && (
+            <div className="flex items-center gap-1.5 mr-2 pr-2 border-r border-border">
+              <FolderOpen className="h-3 w-3" />
+              <select
+                value={selectedProjectId ?? ""}
+                onChange={(e) => setSelectedProjectId(e.target.value || null)}
+                className="bg-transparent text-xs font-medium text-foreground border-none outline-none cursor-pointer appearance-none pr-4"
+                style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0 center" }}
+              >
+                <option value="">Tutti i progetti</option>
+                {projectsList.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+                {unassignedCount > 0 && (
+                  <option value="__none__">Senza progetto ({unassignedCount})</option>
+                )}
+              </select>
+            </div>
+          )}
           {data.budgets.activeIncidents > 0 && (
             <Link to="/costs" className="flex items-center gap-1 font-medium text-red-400 hover:text-red-300">
               <PauseCircle className="h-3 w-3" />
@@ -225,14 +296,16 @@ export function Dashboard() {
 
 
       {/* ── Workflow Graph — issue tree visualization ── */}
-      {issues && agents && (
+      {filteredIssues.length > 0 && agents && (
         <WorkflowGraphSafe
-          issues={issues}
+          issues={filteredIssues}
           agents={agents}
           onApprove={(id) => unblockMutation.mutate({ issueId: id, action: "approve" })}
           onReject={(id) => unblockMutation.mutate({ issueId: id, action: "reject" })}
           onRevision={(id) => unblockMutation.mutate({ issueId: id, action: "revision" })}
           isPending={unblockMutation.isPending}
+          failedIssueIds={failedIssueIds}
+          failedIssueErrors={failedIssueErrors}
         />
       )}
 
@@ -247,7 +320,7 @@ export function Dashboard() {
               </span>
               <Link to={`/agents/${run.agentId}`} className="font-medium text-foreground hover:underline">{run.agentName}</Link>
               {run.issueId && (() => {
-                const issue = (issues ?? []).find((i) => i.id === run.issueId);
+                const issue = filteredIssues.find((i) => i.id === run.issueId);
                 return issue ? (
                   <span className="text-muted-foreground truncate max-w-[200px]">
                     su {issue.identifier} {issue.title}
@@ -267,15 +340,20 @@ export function Dashboard() {
       )}
 
       {/* ── Fallback: recent issues only when no workflow graph visible ── */}
-      {issues && agents && (() => {
+      {filteredIssues.length > 0 && agents && (() => {
         // Check if WorkflowGraph would render (same logic as buildTree)
-        const childIds = new Set(issues.filter((i) => i.parentId).map((i) => i.parentId!));
-        const hasWorkflowRoots = issues.some((i) =>
+        const childIds = new Set(filteredIssues.filter((i) => i.parentId).map((i) => i.parentId!));
+        const hasWorkflowRoots = filteredIssues.some((i) =>
           !i.parentId && childIds.has(i.id) &&
           (i.status === "in_progress" || i.status === "blocked" || i.status === "todo" ||
-           (i.status === "done" && issues.some((c) => c.parentId === i.id && c.status !== "done" && c.status !== "cancelled")))
+           (i.status === "done" && filteredIssues.some((c) => c.parentId === i.id && c.status !== "done" && c.status !== "cancelled")))
         );
-        if (hasWorkflowRoots) return null;
+        // Also check for standalone active issues (no parent, no children)
+        const hasStandaloneRoots = filteredIssues.some((i) =>
+          !i.parentId && !childIds.has(i.id) &&
+          (i.status === "in_progress" || i.status === "blocked" || i.status === "todo" || i.status === "in_review")
+        );
+        if (hasWorkflowRoots || hasStandaloneRoots) return null;
 
         return (
           <div>

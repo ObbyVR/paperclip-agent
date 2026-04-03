@@ -18,10 +18,12 @@ function normalizeGeneralSettings(raw: unknown): InstanceGeneralSettings {
   if (parsed.success) {
     return {
       censorUsernameInLogs: parsed.data.censorUsernameInLogs ?? false,
+      globalAiTier: parsed.data.globalAiTier ?? null,
     };
   }
   return {
     censorUsernameInLogs: false,
+    globalAiTier: null,
   };
 }
 

@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import type { BillingType } from "@paperclipai/shared";
+import { tierToAdapterConfig } from "@paperclipai/shared";
 import {
   agents,
   agentRuntimeState,
@@ -2055,9 +2056,14 @@ export function heartbeatService(db: Db) {
       mode: executionWorkspaceMode,
       legacyUseProjectWorkspace: issueAssigneeOverrides?.useProjectWorkspace ?? null,
     });
-    const mergedConfig = issueAssigneeOverrides?.adapterConfig
-      ? { ...workspaceManagedConfig, ...issueAssigneeOverrides.adapterConfig }
-      : workspaceManagedConfig;
+    // Priority: issue override > global AI tier > agent default config
+    const globalAiTier = (await instanceSettings.getGeneral()).globalAiTier;
+    const globalTierFallback = globalAiTier ? tierToAdapterConfig(globalAiTier) : null;
+    const mergedConfig = {
+      ...workspaceManagedConfig,
+      ...(globalTierFallback ?? {}),
+      ...(issueAssigneeOverrides?.adapterConfig ?? {}),
+    };
     const { config: resolvedConfig, secretKeys } = await secretsSvc.resolveAdapterConfigForRuntime(
       agent.companyId,
       mergedConfig,

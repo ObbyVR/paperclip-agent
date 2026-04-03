@@ -536,6 +536,14 @@ export {
   type ListPluginState,
 } from "./validators/index.js";
 
+export {
+  AI_TIER_KEYS,
+  type AiTierKey,
+  type AiTierAdapterConfig,
+  tierToAdapterConfig,
+  isValidAiTierKey,
+} from "./ai-tiers.js";
+
 export { API_PREFIX, API } from "./api.js";
 export { normalizeAgentUrlKey, deriveAgentUrlKey, isUuidLike } from "./agent-url-key.js";
 export { deriveProjectUrlKey, normalizeProjectUrlKey } from "./project-url-key.js";

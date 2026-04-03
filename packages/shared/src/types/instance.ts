@@ -1,5 +1,6 @@
 export interface InstanceGeneralSettings {
   censorUsernameInLogs: boolean;
+  globalAiTier: string | null;
 }
 
 export interface InstanceExperimentalSettings {

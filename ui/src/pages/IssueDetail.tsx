@@ -17,8 +17,8 @@ import { assigneeValueFromSelection, suggestedCommentAssigneeValue } from "../li
 import { queryKeys } from "../lib/queryKeys";
 import { readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
 import { useProjectOrder } from "../hooks/useProjectOrder";
-import { relativeTime, cn, visibleRunCostUsd } from "../lib/utils";
-import { estimateRunCostEur } from "../lib/modelPricing";
+import { relativeTime, cn, visibleRunCostUsd, formatTokens } from "../lib/utils";
+import { estimateRunCostEur, modelLabel, formatEur } from "../lib/modelPricing";
 import { InlineEditor } from "../components/InlineEditor";
 import { CommentThread } from "../components/CommentThread";
 import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
@@ -117,6 +117,169 @@ function titleizeFilename(input: string) {
     .join(" ");
 }
 
+
+/* ── Unified accordion for issue detail sections ── */
+
+type IssueAccordionTab = "output" | "briefing" | "commenti" | "attivita" | "sub-issues" | null;
+
+function AccordionBtn({ label, count, isOpen, onClick }: { label: string; count?: number; isOpen: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center justify-center gap-1.5 flex-1 py-2.5 text-xs font-medium text-center transition-colors",
+        "hover:bg-white/5",
+        "border-r last:border-r-0 border-border/30",
+        isOpen ? "text-cyan-400 bg-cyan-500/[0.06]" : "text-muted-foreground",
+      )}
+    >
+      {label}
+      {count != null && count > 0 && (
+        <span className="text-[10px] px-1 py-0.5 rounded-full bg-white/10">{count}</span>
+      )}
+    </button>
+  );
+}
+
+function IssueDetailAccordion({
+  issue, session, mentionOptions, uploadAttachment, hasAttachments, attachmentUploadButton,
+  runResults, childIssues, agentMap, hasDocumentsOrResults, updateIssue,
+  commentsWithRunMeta, timelineRuns, commentReassignOptions,
+  actualAssigneeValue, suggestedAssigneeValue, addComment, addCommentAndReassign,
+  wakeupAgent, activity, linkedRuns, issueCostSummary,
+  detailTab, setDetailTab, issuePluginTabItems, activePluginTab,
+}: any) {
+  const { t } = useTranslation();
+  const location = useLocation();
+  const [openTab, setOpenTab] = useState<IssueAccordionTab>("output");
+  const toggle = (tab: IssueAccordionTab) => setOpenTab((prev: IssueAccordionTab) => prev === tab ? null : tab);
+
+  const hasOutput = (issue.documents?.length ?? 0) > 0 || runResults.length > 0 || hasAttachments;
+  const hasBriefing = !!issue.description;
+  const hasSubIssues = childIssues.length > 0;
+
+  return (
+    <div className="border border-border/50 rounded-lg overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex bg-card/30">
+        <AccordionBtn label="Output" count={(issue.documents?.length ?? 0) + runResults.length} isOpen={openTab === "output"} onClick={() => toggle("output")} />
+        {hasBriefing && <AccordionBtn label="Briefing" isOpen={openTab === "briefing"} onClick={() => toggle("briefing")} />}
+        <AccordionBtn label="Commenti" count={commentsWithRunMeta.length} isOpen={openTab === "commenti"} onClick={() => toggle("commenti")} />
+        <AccordionBtn label="Attivita'" isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} />
+        {hasSubIssues && <AccordionBtn label="Sub-issue" count={childIssues.length} isOpen={openTab === "sub-issues"} onClick={() => toggle("sub-issues")} />}
+      </div>
+
+      {/* Content */}
+      {openTab && (
+        <div className="border-t border-border/30 p-4">
+          {openTab === "output" && (
+            <div className="space-y-4">
+              <IssueDocumentsSection
+                issue={issue}
+                canDeleteDocuments={Boolean(session?.user?.id)}
+                mentions={mentionOptions}
+                imageUploadHandler={async (file: File) => {
+                  const attachment = await uploadAttachment.mutateAsync(file);
+                  return attachment.contentPath;
+                }}
+                extraActions={!hasAttachments ? attachmentUploadButton : undefined}
+              />
+              {runResults.length > 0 && <IssueResultsInline runResults={runResults} />}
+            </div>
+          )}
+
+          {openTab === "briefing" && (
+            <InlineEditor
+              value={issue.description ?? ""}
+              onSave={(description: string) => updateIssue.mutateAsync({ description })}
+              as="p"
+              className="text-[15px] leading-7 text-foreground"
+              placeholder="Add a description..."
+              multiline
+              mentions={mentionOptions}
+              imageUploadHandler={async (file: File) => {
+                const attachment = await uploadAttachment.mutateAsync(file);
+                return attachment.contentPath;
+              }}
+            />
+          )}
+
+          {openTab === "commenti" && (
+            <CommentThread
+              comments={commentsWithRunMeta}
+              linkedRuns={timelineRuns}
+              companyId={issue.companyId}
+              projectId={issue.projectId}
+              issueStatus={issue.status}
+              agentMap={agentMap}
+              draftKey={`paperclip:issue-comment-draft:${issue.id}`}
+              enableReassign
+              reassignOptions={commentReassignOptions}
+              currentAssigneeValue={actualAssigneeValue}
+              suggestedAssigneeValue={suggestedAssigneeValue}
+              mentions={mentionOptions}
+              assignedAgentId={issue.assigneeAgentId ?? null}
+              assignedAgentName={issue.assigneeAgentId ? (agentMap.get(issue.assigneeAgentId)?.name ?? null) : null}
+              onWakeupAgent={async (agentId: string) => { await wakeupAgent.mutateAsync(agentId); }}
+              onAdd={async (body: string, reopen?: boolean, reassignment?: any) => {
+                if (reassignment) {
+                  await addCommentAndReassign.mutateAsync({ body, reopen, reassignment });
+                  return;
+                }
+                await addComment.mutateAsync({ body, reopen });
+              }}
+              imageUploadHandler={async (file: File) => {
+                const attachment = await uploadAttachment.mutateAsync(file);
+                return attachment.contentPath;
+              }}
+              onAttachImage={async (file: File) => {
+                await uploadAttachment.mutateAsync(file);
+              }}
+              liveRunSlot={<LiveRunWidget issueId={issue.id} companyId={issue.companyId} />}
+            />
+          )}
+
+          {openTab === "attivita" && (
+            <Tabs value={detailTab} onValueChange={setDetailTab}>
+              <IssueActivityTab
+                activity={activity}
+                hasLinkedRuns={!!(linkedRuns && linkedRuns.length > 0)}
+                issueCostSummary={issueCostSummary}
+                agentMap={agentMap}
+              />
+            </Tabs>
+          )}
+
+          {openTab === "sub-issues" && (
+            <div className="border border-border rounded-lg divide-y divide-border">
+              {childIssues.map((child: any) => (
+                <Link
+                  key={child.id}
+                  to={`/issues/${child.identifier ?? child.id}`}
+                  state={location.state}
+                  className="flex items-center justify-between px-3 py-2 text-sm hover:bg-accent/20 transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <StatusIcon status={child.status} />
+                    <span className="font-mono text-muted-foreground shrink-0 text-xs">
+                      {child.identifier ?? child.id.slice(0, 8)}
+                    </span>
+                    <span className="truncate">{child.title}</span>
+                  </div>
+                  {child.assigneeAgentId && (() => {
+                    const name = agentMap.get(child.assigneeAgentId)?.name;
+                    return name ? <Identity name={name} size="sm" /> : null;
+                  })()}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function IssueDetail() {
   const { t } = useTranslation();
@@ -728,7 +891,7 @@ export function IssueDetail() {
   }
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="space-y-5">
       {/* Parent chain breadcrumb */}
       {ancestors.length > 0 && (
         <nav className="flex items-center gap-1 text-xs text-muted-foreground flex-wrap">
@@ -842,6 +1005,31 @@ export function IssueDetail() {
           as="h2"
           className="text-xl font-bold"
         />
+
+        {/* ── Model & token usage badge ── */}
+        {issueCostSummary.hasTokens && (
+          <div className="flex items-center gap-2 flex-wrap mt-1">
+            {issueCostSummary.models.map((m) => (
+              <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 text-[11px] font-medium">
+                {modelLabel(m)}
+              </span>
+            ))}
+            <span className="text-[11px] text-muted-foreground">
+              {formatTokens(issueCostSummary.totalTokens)} tokens
+              {issueCostSummary.cached > 0 && ` (${formatTokens(issueCostSummary.cached)} cached)`}
+            </span>
+            {issueCostSummary.estimatedEur !== null && (
+              <span className="text-[11px] text-muted-foreground">
+                · ~{formatEur(issueCostSummary.estimatedEur)}
+              </span>
+            )}
+            {issueCostSummary.hasCost && issueCostSummary.cost > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                · ${issueCostSummary.cost.toFixed(4)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Action bar: prominent when blocked ── */}
@@ -896,163 +1084,35 @@ export function IssueDetail() {
         </div>
       )}
 
-      {/* ── OUTPUT FIRST: Documents (the agent's deliverable) ── */}
-      <IssueDocumentsSection
+      {/* ── Unified accordion tab bar ── */}
+      <IssueDetailAccordion
         issue={issue}
-        canDeleteDocuments={Boolean(session?.user?.id)}
-        mentions={mentionOptions}
-        imageUploadHandler={async (file) => {
-          const attachment = await uploadAttachment.mutateAsync(file);
-          return attachment.contentPath;
-        }}
-        extraActions={!hasAttachments ? attachmentUploadButton : undefined}
+        session={session}
+        mentionOptions={mentionOptions}
+        uploadAttachment={uploadAttachment}
+        hasAttachments={hasAttachments}
+        attachmentUploadButton={attachmentUploadButton}
+        runResults={runResults}
+        childIssues={childIssues}
+        agentMap={agentMap}
+        hasDocumentsOrResults={hasDocumentsOrResults}
+        updateIssue={updateIssue}
+        commentsWithRunMeta={commentsWithRunMeta}
+        timelineRuns={timelineRuns}
+        commentReassignOptions={commentReassignOptions}
+        actualAssigneeValue={actualAssigneeValue}
+        suggestedAssigneeValue={suggestedAssigneeValue}
+        addComment={addComment}
+        addCommentAndReassign={addCommentAndReassign}
+        wakeupAgent={wakeupAgent}
+        activity={activity}
+        linkedRuns={linkedRuns}
+        issueCostSummary={issueCostSummary}
+        detailTab={detailTab}
+        setDetailTab={setDetailTab}
+        issuePluginTabItems={issuePluginTabItems}
+        activePluginTab={activePluginTab}
       />
-
-      {/* ── Results / Output — inline run results ── */}
-      {runResults.length > 0 && (
-        <IssueResultsInline runResults={runResults} />
-      )}
-
-      {/* ── Sub-issues — inline compact list ── */}
-      {childIssues.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Sub-issue ({childIssues.length})
-          </h3>
-          <div className="border border-border rounded-lg divide-y divide-border">
-            {childIssues.map((child) => (
-              <Link
-                key={child.id}
-                to={`/issues/${child.identifier ?? child.id}`}
-                state={location.state}
-                className="flex items-center justify-between px-3 py-2 text-sm hover:bg-accent/20 transition-colors"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <StatusIcon status={child.status} />
-                  <span className="font-mono text-muted-foreground shrink-0 text-xs">
-                    {child.identifier ?? child.id.slice(0, 8)}
-                  </span>
-                  <span className="truncate">{child.title}</span>
-                </div>
-                {child.assigneeAgentId && (() => {
-                  const name = agentMap.get(child.assigneeAgentId)?.name;
-                  return name
-                    ? <Identity name={name} size="sm" />
-                    : null;
-                })()}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Description (collapsible — this is the task spec, not the output) ── */}
-      {issue.description && (
-        <Collapsible defaultOpen={!hasDocumentsOrResults}>
-          <CollapsibleTrigger className="flex w-full items-center gap-2 text-left group">
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Briefing / Descrizione
-            </h3>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2">
-            <InlineEditor
-              value={issue.description ?? ""}
-              onSave={(description) => updateIssue.mutateAsync({ description })}
-              as="p"
-              className="text-[15px] leading-7 text-foreground"
-              placeholder="Add a description..."
-              multiline
-              mentions={mentionOptions}
-              imageUploadHandler={async (file) => {
-                const attachment = await uploadAttachment.mutateAsync(file);
-                return attachment.contentPath;
-              }}
-            />
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-
-      {/* ── Secondary: Comments & Activity tabs ── */}
-      <Tabs value={detailTab} onValueChange={setDetailTab} className="space-y-3">
-        <TabsList variant="line" className="w-full justify-start gap-1 sticky top-0 z-10 bg-background pb-1 overflow-x-auto flex-nowrap">
-          <TabsTrigger value="comments" className="gap-1.5">
-            <MessageSquare className="h-3.5 w-3.5" />
-            {t("issueDetail.comments")}
-            {(commentsWithRunMeta.length > 0) && (
-              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {commentsWithRunMeta.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="activity" className="gap-1.5">
-            <ActivityIcon className="h-3.5 w-3.5" />
-            {t("issueDetail.activity")}
-          </TabsTrigger>
-          {issuePluginTabItems.map((item) => (
-            <TabsTrigger key={item.value} value={item.value}>
-              {item.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <TabsContent value="comments">
-          <CommentThread
-            comments={commentsWithRunMeta}
-            linkedRuns={timelineRuns}
-            companyId={issue.companyId}
-            projectId={issue.projectId}
-            issueStatus={issue.status}
-            agentMap={agentMap}
-            draftKey={`paperclip:issue-comment-draft:${issue.id}`}
-            enableReassign
-            reassignOptions={commentReassignOptions}
-            currentAssigneeValue={actualAssigneeValue}
-            suggestedAssigneeValue={suggestedAssigneeValue}
-            mentions={mentionOptions}
-            assignedAgentId={issue.assigneeAgentId ?? null}
-            assignedAgentName={issue.assigneeAgentId ? (agentMap.get(issue.assigneeAgentId)?.name ?? null) : null}
-            onWakeupAgent={async (agentId) => { await wakeupAgent.mutateAsync(agentId); }}
-            onAdd={async (body, reopen, reassignment) => {
-              if (reassignment) {
-                await addCommentAndReassign.mutateAsync({ body, reopen, reassignment });
-                return;
-              }
-              await addComment.mutateAsync({ body, reopen });
-            }}
-            imageUploadHandler={async (file) => {
-              const attachment = await uploadAttachment.mutateAsync(file);
-              return attachment.contentPath;
-            }}
-            onAttachImage={async (file) => {
-              await uploadAttachment.mutateAsync(file);
-            }}
-            liveRunSlot={<LiveRunWidget issueId={issueId!} companyId={issue.companyId} />}
-          />
-        </TabsContent>
-
-        <IssueActivityTab
-          activity={activity}
-          hasLinkedRuns={!!(linkedRuns && linkedRuns.length > 0)}
-          issueCostSummary={issueCostSummary}
-          agentMap={agentMap}
-        />
-
-        {activePluginTab && (
-          <TabsContent value={activePluginTab.value}>
-            <PluginSlotMount
-              slot={activePluginTab.slot}
-              context={{
-                companyId: issue.companyId,
-                projectId: issue.projectId ?? null,
-                entityId: issue.id,
-                entityType: "issue",
-              }}
-              missingBehavior="placeholder"
-            />
-          </TabsContent>
-        )}
-      </Tabs>
 
       <PluginSlotOutlet
         slotTypes={["toolbarButton", "contextMenuItem"]}

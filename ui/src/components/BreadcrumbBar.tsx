@@ -13,9 +13,13 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, useState, useCallback, useEffect } from "react";
 import { PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
 import { PluginLauncherOutlet, usePluginLaunchers } from "@/plugins/launchers";
+import { HeartbeatGlobalToggle } from "./HeartbeatGlobalToggle";
+import { AiTierSelector } from "./AiTierSelector";
+import { getGlobalAiTier, setGlobalAiTier, type AiTierKey } from "../lib/aiTiers";
+import { instanceSettingsApi } from "../api/instanceSettings";
 
 type GlobalToolbarContext = { companyId: string | null; companyPrefix: string | null };
 
@@ -36,6 +40,25 @@ export function BreadcrumbBar() {
   const { breadcrumbs } = useBreadcrumbs();
   const { toggleSidebar, isMobile } = useSidebar();
   const { selectedCompanyId, selectedCompany } = useCompany();
+  const [aiTier, setAiTier] = useState<AiTierKey>(getGlobalAiTier);
+
+  // Hydrate tier from server on mount
+  useEffect(() => {
+    instanceSettingsApi.getGlobalAiTier().then((res) => {
+      if (res.globalAiTier) {
+        setAiTier(res.globalAiTier as AiTierKey);
+        setGlobalAiTier(res.globalAiTier as AiTierKey);
+      }
+    }).catch(() => { /* use localStorage fallback */ });
+  }, []);
+
+  const handleTierChange = useCallback((tier: AiTierKey) => {
+    setAiTier(tier);
+    setGlobalAiTier(tier);
+    // Persist to server (fire-and-forget); "custom" is UI-only, save null
+    const serverTier = tier === "custom" ? null : tier;
+    instanceSettingsApi.setGlobalAiTier(serverTier).catch(() => {});
+  }, []);
 
   const globalToolbarSlotContext = useMemo(
     () => ({
@@ -47,9 +70,15 @@ export function BreadcrumbBar() {
 
   const globalToolbarSlots = <GlobalToolbarPlugins context={globalToolbarSlotContext} />;
 
+  const tierSelector = selectedCompanyId ? (
+    <AiTierSelector value={aiTier} onChange={handleTierChange} size="sm" />
+  ) : null;
+
   if (breadcrumbs.length === 0) {
     return (
-      <div className="border-b border-border px-4 md:px-6 h-12 shrink-0 flex items-center justify-end">
+      <div className="border-b border-border px-4 md:px-6 h-12 shrink-0 flex items-center justify-end gap-2">
+        {tierSelector}
+        <HeartbeatGlobalToggle />
         {globalToolbarSlots}
       </div>
     );
@@ -77,6 +106,8 @@ export function BreadcrumbBar() {
             {breadcrumbs[0].label}
           </h1>
         </div>
+        {tierSelector}
+        <HeartbeatGlobalToggle />
         {globalToolbarSlots}
       </div>
     );
@@ -109,6 +140,8 @@ export function BreadcrumbBar() {
           </BreadcrumbList>
         </Breadcrumb>
       </div>
+      {tierSelector}
+      <HeartbeatGlobalToggle />
       {globalToolbarSlots}
     </div>
   );
