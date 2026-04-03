@@ -14,9 +14,6 @@ Leggi l'issue assegnata. Identifica: cosa deve essere consegnato, quali competen
 **Step 2 — Progetta il team.**
 Decidi quali ruoli servono per completare questo obiettivo. Non esistono ruoli predefiniti: scegli in base al task. Esempi:
 - Un task di ricerca web → un agente researcher con accesso web
-- Un task di redesign HTML → un agente con skill `html-redesign`
-- Un task di audit sito → un agente con skill `web-audit`
-- Un task di email outreach → un agente con skill `email-outreach`
 - Un task tecnico → un agente developer
 - Un task di contenuto → un agente copywriter
 
