@@ -26,6 +26,7 @@ import { Tabs } from "@/components/ui/tabs";
 import {
   Inbox as InboxIcon,
   AlertTriangle,
+  Folder,
   Group,
   X,
 } from "lucide-react";
@@ -71,8 +72,13 @@ export function Inbox() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("tutto");
+  // Read initial category from URL query param (e.g. /inbox/all?category=richiesta)
+  const urlCategory = new URLSearchParams(location.search).get("category") as CategoryFilter | null;
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(
+    urlCategory && ["richiesta", "messaggio", "aggiornamento"].includes(urlCategory) ? urlCategory : "tutto",
+  );
   const [groupByAgent, setGroupByAgent] = useState(false);
+  const [groupByProject, setGroupByProject] = useState(false);
   const { dismissed, dismiss } = useDismissedInboxItems();
   const { readItems, markRead: markItemRead } = useReadInboxItems();
 
@@ -269,22 +275,26 @@ export function Inbox() {
     return counts;
   }, [allWorkItems]);
 
-  // Group work items by agent
-  const groupedWorkItems = useMemo(() => {
-    if (!groupByAgent) return null;
-    const groups = new Map<string, typeof workItemsToRender>();
+  // Group work items by agent or project
+  type GroupedItems = { groupLabel: string; items: InboxWorkItem[] }[];
+
+  const groupedWorkItems = useMemo((): GroupedItems | null => {
+    if (!groupByAgent && !groupByProject) return null;
+
+    const groups = new Map<string, InboxWorkItem[]>();
     for (const item of workItemsToRender) {
       const ctx = resolveItemContext(item, agentById, issueById, projectById);
-      const agentLabel = ctx.agentName ?? "Altro";
-      const key = agentLabel;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(item);
+      const label = groupByProject
+        ? (ctx.projectName ?? "Senza progetto")
+        : (ctx.agentName ?? "Altro");
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label)!.push(item);
     }
-    return Array.from(groups.entries()).map(([agentLabel, items]) => ({
-      agentLabel,
+    return Array.from(groups.entries()).map(([groupLabel, items]) => ({
+      groupLabel,
       items,
     }));
-  }, [groupByAgent, workItemsToRender, agentById, issueById]);
+  }, [groupByAgent, groupByProject, workItemsToRender, agentById, issueById, projectById]);
 
   // ── Mutations ──────────────────────────────────────────────────────
 
@@ -695,10 +705,20 @@ export function Inbox() {
             variant={groupByAgent ? "default" : "outline"}
             size="sm"
             className="h-8 shrink-0 gap-1.5"
-            onClick={() => setGroupByAgent((p) => !p)}
+            onClick={() => { setGroupByAgent((p) => !p); setGroupByProject(false); }}
           >
             <Group className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">{groupByAgent ? t("inbox.grouped") : t("inbox.groupByAgent")}</span>
+          </Button>
+          <Button
+            type="button"
+            variant={groupByProject ? "default" : "outline"}
+            size="sm"
+            className="h-8 shrink-0 gap-1.5"
+            onClick={() => { setGroupByProject((p) => !p); setGroupByAgent(false); }}
+          >
+            <Folder className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{groupByProject ? "Raggruppati" : "Per progetto"}</span>
           </Button>
         </div>
       </div>
@@ -768,14 +788,14 @@ export function Inbox() {
       {/* Work items */}
       {workItemsToRender.length > 0 && (
         <div className="space-y-4">
-          {(groupedWorkItems ?? [{ agentLabel: null, items: workItemsToRender }]).map((group) => (
-            <div key={group.agentLabel ?? "all"}>
-              {group.agentLabel && (
+          {(groupedWorkItems ?? [{ groupLabel: null, items: workItemsToRender }]).map((group) => (
+            <div key={group.groupLabel ?? "all"}>
+              {group.groupLabel && (
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                    {group.agentLabel.charAt(0).toUpperCase()}
+                    {group.groupLabel.charAt(0).toUpperCase()}
                   </span>
-                  {group.agentLabel}
+                  {group.groupLabel}
                   <span className="text-xs font-normal text-muted-foreground">({group.items.length})</span>
                 </h3>
               )}

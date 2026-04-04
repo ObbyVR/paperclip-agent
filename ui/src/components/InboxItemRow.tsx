@@ -350,7 +350,7 @@ export function InboxItemRow({
       "group border-b border-border px-2 py-2.5 last:border-b-0 sm:px-1 sm:pr-3 sm:py-2",
       className,
     )}>
-      {/* ── Desktop layout ── */}
+      {/* ── Row: unread + badge + content + agent/time + actions ── */}
       <div className="flex items-start gap-2 sm:items-center">
         <UnreadSlot
           unreadState={unreadState}
@@ -360,21 +360,27 @@ export function InboxItemRow({
         />
 
         {/* Category badge */}
-        <CategoryBadge category={context.category} className="hidden sm:inline-flex shrink-0" />
+        <CategoryBadge category={context.category} className="shrink-0" />
 
-        {/* Main content */}
-        {content}
-
-        {/* Meta: project + agent + time */}
-        <div className="hidden sm:flex items-center gap-2 shrink-0">
-          <ProjectContextPill projectName={context.projectName} projectId={context.projectId} />
-          <AgentMeta context={context} />
-          {timestamp && (
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              {timeAgo(timestamp)}
-            </span>
-          )}
+        {/* Main content (title only, meta goes below) */}
+        <div className="min-w-0 flex-1">
+          {content}
+          {/* Project + task identifier + agent — small text below title */}
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+            <ProjectContextPill projectName={context.projectName} projectId={context.projectId} />
+            {context.issueIdentifier && (
+              <span className="font-mono text-[10px]">{context.issueIdentifier}</span>
+            )}
+            <AgentMeta context={context} />
+          </div>
         </div>
+
+        {/* Time — right side */}
+        {timestamp && (
+          <span className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap shrink-0">
+            {timeAgo(timestamp)}
+          </span>
+        )}
 
         {/* Desktop actions */}
         {actions && (
@@ -383,7 +389,7 @@ export function InboxItemRow({
           </div>
         )}
 
-        {/* Dismiss button for items without unread slot */}
+        {/* Dismiss button */}
         {!unreadState && onDismiss && (
           <button
             type="button"
@@ -396,17 +402,12 @@ export function InboxItemRow({
         )}
       </div>
 
-      {/* ── Mobile meta row ── */}
+      {/* ── Mobile time + actions ── */}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
-        <CategoryBadge category={context.category} />
-        <ProjectContextPill projectName={context.projectName} projectId={context.projectId} />
-        <AgentMeta context={context} />
         {timestamp && (
           <span className="text-xs text-muted-foreground">{timeAgo(timestamp)}</span>
         )}
       </div>
-
-      {/* ── Mobile actions ── */}
       {actions && (
         <div className="mt-2 flex gap-2 sm:hidden">
           {actions}
