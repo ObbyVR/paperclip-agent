@@ -1,9 +1,11 @@
 import type {
+  Agent,
   Approval,
   DashboardSummary,
   HeartbeatRun,
   Issue,
   JoinRequest,
+  Project,
 } from "@paperclipai/shared";
 
 export const RECENT_ISSUES_LIMIT = 100;
@@ -238,6 +240,126 @@ export function shouldShowInboxSection({
   if (tab === "recent") return showOnRecent;
   if (tab === "unread") return showOnUnread;
   return showOnAll;
+}
+
+// ── S36: Item category + context resolution ─────────────────────────
+
+/** Item category labels for inbox display */
+export type InboxItemCategory = "richiesta" | "messaggio" | "aggiornamento";
+
+/** Resolved context for displaying an inbox item */
+export interface InboxItemContext {
+  category: InboxItemCategory;
+  projectName: string | null;
+  projectId: string | null;
+  agentName: string | null;
+  agentRole: string | null;
+  agentIcon: string | null;
+  issueIdentifier: string | null;
+}
+
+/** Classify a work item into richiesta / messaggio / aggiornamento */
+export function categorizeWorkItem(item: InboxWorkItem): InboxItemCategory {
+  if (item.kind === "approval") return "richiesta";
+  if (item.kind === "join_request") return "richiesta";
+  if (item.kind === "failed_run") return "aggiornamento";
+  if (item.kind === "issue") {
+    const { issue } = item;
+    if (issue.status === "blocked" || issue.status === "in_review") return "richiesta";
+    const lastExternal = normalizeTimestamp(issue.lastExternalCommentAt);
+    const myLastTouch = normalizeTimestamp(issue.myLastTouchAt);
+    if (lastExternal > 0 && lastExternal > myLastTouch) return "messaggio";
+    return "aggiornamento";
+  }
+  return "aggiornamento";
+}
+
+/** Resolve project/agent context from any inbox work item */
+export function resolveItemContext(
+  item: InboxWorkItem,
+  agentById: Map<string, Agent>,
+  issueById: Map<string, Issue>,
+  projectById?: Map<string, Project>,
+): InboxItemContext {
+  const category = categorizeWorkItem(item);
+  let projectName: string | null = null;
+  let projectId: string | null = null;
+  let agentName: string | null = null;
+  let agentRole: string | null = null;
+  let agentIcon: string | null = null;
+  let issueIdentifier: string | null = null;
+
+  if (item.kind === "issue") {
+    const { issue } = item;
+    projectName = issue.project?.name ?? null;
+    projectId = issue.projectId;
+    // Fallback: lookup project from projectId if nested object not populated
+    if (!projectName && projectId && projectById) {
+      const proj = projectById.get(projectId);
+      if (proj) projectName = proj.name;
+    }
+    issueIdentifier = issue.identifier ?? issue.id.slice(0, 8);
+    if (issue.assigneeAgentId) {
+      const agent = agentById.get(issue.assigneeAgentId);
+      if (agent) {
+        agentName = agent.name;
+        agentRole = agent.title ?? agent.role;
+        agentIcon = agent.icon;
+      }
+    }
+  } else if (item.kind === "approval") {
+    const { approval } = item;
+    if (approval.requestedByAgentId) {
+      const agent = agentById.get(approval.requestedByAgentId);
+      if (agent) {
+        agentName = agent.name;
+        agentRole = agent.title ?? agent.role;
+        agentIcon = agent.icon;
+      }
+    }
+    // Try to resolve project from linked issue in payload
+    const payloadIssueId = (approval.payload as Record<string, unknown>)?.issueId;
+    if (typeof payloadIssueId === "string") {
+      const issue = issueById.get(payloadIssueId);
+      if (issue) {
+        projectName = issue.project?.name ?? null;
+        projectId = issue.projectId;
+        if (!projectName && projectId && projectById) {
+          const proj = projectById.get(projectId);
+          if (proj) projectName = proj.name;
+        }
+        issueIdentifier = issue.identifier ?? issue.id.slice(0, 8);
+      }
+    }
+  } else if (item.kind === "failed_run") {
+    const { run } = item;
+    const agent = agentById.get(run.agentId);
+    if (agent) {
+      agentName = agent.name;
+      agentRole = agent.title ?? agent.role;
+      agentIcon = agent.icon;
+    }
+    // Try to resolve project from context snapshot
+    const ctx = run.contextSnapshot;
+    const issueId = ctx?.issueId ?? ctx?.taskId;
+    if (typeof issueId === "string") {
+      const issue = issueById.get(issueId);
+      if (issue) {
+        projectName = issue.project?.name ?? null;
+        projectId = issue.projectId;
+        if (!projectName && projectId && projectById) {
+          const proj = projectById.get(projectId);
+          if (proj) projectName = proj.name;
+        }
+        issueIdentifier = issue.identifier ?? issue.id.slice(0, 8);
+      }
+    }
+  } else if (item.kind === "join_request") {
+    const { joinRequest } = item;
+    agentName = joinRequest.agentName ?? null;
+  }
+
+  return { category, projectName, projectId, agentName, agentRole, agentIcon, issueIdentifier };
 }
 
 export function computeInboxBadgeData({

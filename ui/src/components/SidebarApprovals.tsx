@@ -239,7 +239,7 @@ export function ApprovalsSidePanel({
     queryKey: queryKeys.approvals.list(selectedCompanyId!, "pending"),
     queryFn: () => approvalsApi.list(selectedCompanyId!, "pending"),
     enabled: !!selectedCompanyId && open,
-    refetchInterval: open ? 5000 : false,
+    refetchInterval: open ? 30_000 : false,
   });
 
   const { data: allApprovals = [] } = useQuery({

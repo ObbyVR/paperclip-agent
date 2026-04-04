@@ -18,7 +18,7 @@ import { RoutineDetail } from "./pages/RoutineDetail";
 import { ExecutionWorkspaceDetail } from "./pages/ExecutionWorkspaceDetail";
 import { Goals } from "./pages/Goals";
 import { GoalDetail } from "./pages/GoalDetail";
-import { Approvals } from "./pages/Approvals";
+// Approvals list merged into Inbox (S36) — only detail page remains
 import { ApprovalDetail } from "./pages/ApprovalDetail";
 import { Costs } from "./pages/Costs";
 import { Activity } from "./pages/Activity";
@@ -158,13 +158,15 @@ function boardRoutes() {
       <Route path="execution-workspaces/:workspaceId" element={<ExecutionWorkspaceDetail />} />
       <Route path="goals" element={<Goals />} />
       <Route path="goals/:goalId" element={<GoalDetail />} />
-      <Route path="approvals" element={<Navigate to="/approvals/pending" replace />} />
-      <Route path="approvals/pending" element={<Approvals />} />
-      <Route path="approvals/approved" element={<Approvals />} />
-      <Route path="approvals/rejected" element={<Approvals />} />
-      <Route path="approvals/blocked" element={<Approvals />} />
-      <Route path="approvals/in_review" element={<Approvals />} />
-      <Route path="approvals/all" element={<Approvals />} />
+      {/* S36: Approvals list merged into Inbox — redirect to inbox with richieste filter */}
+      <Route path="approvals" element={<Navigate to="/inbox/all" replace />} />
+      <Route path="approvals/pending" element={<Navigate to="/inbox/all" replace />} />
+      <Route path="approvals/approved" element={<Navigate to="/inbox/all" replace />} />
+      <Route path="approvals/rejected" element={<Navigate to="/inbox/all" replace />} />
+      <Route path="approvals/blocked" element={<Navigate to="/inbox/all" replace />} />
+      <Route path="approvals/in_review" element={<Navigate to="/inbox/all" replace />} />
+      <Route path="approvals/all" element={<Navigate to="/inbox/all" replace />} />
+      {/* Approval detail page remains */}
       <Route path="approvals/:approvalId" element={<ApprovalDetail />} />
       <Route path="costs" element={<Costs />} />
       <Route path="activity" element={<Activity />} />

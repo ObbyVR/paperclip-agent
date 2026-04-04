@@ -9,503 +9,59 @@ import { dashboardApi } from "../api/dashboard";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
+import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
-import { IssueRow } from "../components/IssueRow";
 import { SwipeToArchive } from "../components/SwipeToArchive";
-
-import { StatusIcon } from "../components/StatusIcon";
+import { InboxItemRow } from "../components/InboxItemRow";
+import { CategoryBadge } from "../components/CategoryBadge";
 import { cn } from "../lib/utils";
-import { StatusBadge } from "../components/StatusBadge";
-import { approvalLabel, defaultTypeIcon, typeIcon } from "../components/ApprovalPayload";
-import { timeAgo } from "../lib/timeAgo";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs } from "@/components/ui/tabs";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Inbox as InboxIcon,
   AlertTriangle,
   Group,
-  XCircle,
   X,
-  RotateCcw,
-  UserPlus,
 } from "lucide-react";
 import { PageTabBar } from "../components/PageTabBar";
-import type { Approval, HeartbeatRun, Issue, JoinRequest } from "@paperclipai/shared";
+import type { Agent, Approval, HeartbeatRun, Issue, JoinRequest, Project } from "@paperclipai/shared";
 import {
   ACTIONABLE_APPROVAL_STATUSES,
   getApprovalsForTab,
   getInboxWorkItems,
   getLatestFailedRunsByAgent,
   getRecentTouchedIssues,
-  InboxApprovalFilter,
+  resolveItemContext,
+  categorizeWorkItem,
   saveLastInboxTab,
   shouldShowInboxSection,
+  type InboxItemCategory,
   type InboxTab,
+  type InboxWorkItem,
 } from "../lib/inbox";
 import { useDismissedInboxItems, useReadInboxItems } from "../hooks/useInboxBadge";
 
-type InboxCategoryFilter =
-  | "everything"
-  | "issues_i_touched"
-  | "join_requests"
-  | "approvals"
-  | "failed_runs"
-  | "alerts";
-type SectionKey =
-  | "work_items"
-  | "alerts";
+type CategoryFilter = "tutto" | InboxItemCategory;
 
 const INBOX_ISSUE_STATUSES = "backlog,todo,in_progress,in_review,blocked,done";
-
-function firstNonEmptyLine(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const line = value.split("\n").map((chunk) => chunk.trim()).find(Boolean);
-  return line ?? null;
-}
-
-function runFailureMessage(run: HeartbeatRun): string {
-  return firstNonEmptyLine(run.error) ?? firstNonEmptyLine(run.stderrExcerpt) ?? "Run exited with an error.";
-}
-
-function approvalStatusLabel(status: Approval["status"]): string {
-  return status.replaceAll("_", " ");
-}
 
 function readIssueIdFromRun(run: HeartbeatRun): string | null {
   const context = run.contextSnapshot;
   if (!context) return null;
-
   const issueId = context["issueId"];
   if (typeof issueId === "string" && issueId.length > 0) return issueId;
-
   const taskId = context["taskId"];
   if (typeof taskId === "string" && taskId.length > 0) return taskId;
-
   return null;
 }
 
-
 type NonIssueUnreadState = "visible" | "fading" | "hidden" | null;
-
-function FailedRunInboxRow({
-  run,
-  issueById,
-  agentName: linkedAgentName,
-  issueLinkState,
-  onDismiss,
-  onRetry,
-  isRetrying,
-  unreadState = null,
-  onMarkRead,
-  onArchive,
-  archiveDisabled,
-  className,
-}: {
-  run: HeartbeatRun;
-  issueById: Map<string, Issue>;
-  agentName: string | null;
-  issueLinkState: unknown;
-  onDismiss: () => void;
-  onRetry: () => void;
-  isRetrying: boolean;
-  unreadState?: NonIssueUnreadState;
-  onMarkRead?: () => void;
-  onArchive?: () => void;
-  archiveDisabled?: boolean;
-  className?: string;
-}) {
-  const { t } = useTranslation();
-  const issueId = readIssueIdFromRun(run);
-  const issue = issueId ? issueById.get(issueId) ?? null : null;
-  const displayError = runFailureMessage(run);
-  const showUnreadSlot = unreadState !== null;
-  const showUnreadDot = unreadState === "visible" || unreadState === "fading";
-
-  return (
-    <div className={cn(
-      "group border-b border-border px-2 py-2.5 last:border-b-0 sm:px-1 sm:pr-3 sm:py-2",
-      className,
-    )}>
-      <div className="flex items-start gap-2 sm:items-center">
-        {showUnreadSlot ? (
-          <span className="hidden sm:inline-flex h-4 w-4 shrink-0 items-center justify-center self-center">
-            {showUnreadDot ? (
-              <button
-                type="button"
-                onClick={onMarkRead}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-blue-500/20"
-                aria-label="Mark as read"
-              >
-                <span className={cn(
-                  "block h-2 w-2 rounded-full bg-blue-600 transition-opacity duration-300 dark:bg-blue-400",
-                  unreadState === "fading" ? "opacity-0" : "opacity-100",
-                )} />
-              </button>
-            ) : onArchive ? (
-              <button
-                type="button"
-                onClick={onArchive}
-                disabled={archiveDisabled}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
-                aria-label="Dismiss from inbox"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : (
-              <span className="inline-flex h-4 w-4" aria-hidden="true" />
-            )}
-          </span>
-        ) : null}
-        <Link
-          to={`/agents/${run.agentId}/runs/${run.id}`}
-          className="flex min-w-0 flex-1 items-start gap-2 no-underline text-inherit transition-colors hover:bg-accent/50"
-        >
-          {!showUnreadSlot && <span className="hidden h-2 w-2 shrink-0 sm:inline-flex" aria-hidden="true" />}
-          <span className="hidden h-3.5 w-3.5 shrink-0 sm:inline-flex" aria-hidden="true" />
-          <span className="mt-0.5 shrink-0 rounded-md bg-red-500/20 p-1.5 sm:mt-0">
-            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="line-clamp-2 text-sm font-medium sm:truncate sm:line-clamp-none">
-              {issue ? (
-                <>
-                  <span className="font-mono text-muted-foreground mr-1.5">
-                    {issue.identifier ?? issue.id.slice(0, 8)}
-                  </span>
-                  {issue.title}
-                </>
-              ) : (
-                <>Failed run{linkedAgentName ? ` — ${linkedAgentName}` : ""}</>
-              )}
-            </span>
-            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <StatusBadge status={run.status} />
-              {linkedAgentName && issue ? <span>{linkedAgentName}</span> : null}
-              <span className="truncate max-w-[300px]">{displayError}</span>
-              <span>{timeAgo(run.createdAt)}</span>
-            </span>
-          </span>
-        </Link>
-        <div className="hidden shrink-0 items-center gap-2 sm:flex">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 shrink-0 px-2.5"
-            onClick={onRetry}
-            disabled={isRetrying}
-          >
-            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-            {isRetrying ? t("inbox.retrying") : t("inbox.retry")}
-          </Button>
-          {!showUnreadSlot && (
-            <button
-              type="button"
-              onClick={onDismiss}
-              className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
-              aria-label="Dismiss"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="mt-3 flex gap-2 sm:hidden">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 shrink-0 px-2.5"
-          onClick={onRetry}
-          disabled={isRetrying}
-        >
-          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-          {isRetrying ? t("inbox.retrying") : t("inbox.retry")}
-        </Button>
-        {!showUnreadSlot && (
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Dismiss"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ApprovalInboxRow({
-  approval,
-  requesterName,
-  onApprove,
-  onReject,
-  isPending,
-  unreadState = null,
-  onMarkRead,
-  onArchive,
-  archiveDisabled,
-  className,
-}: {
-  approval: Approval;
-  requesterName: string | null;
-  onApprove: () => void;
-  onReject: () => void;
-  isPending: boolean;
-  unreadState?: NonIssueUnreadState;
-  onMarkRead?: () => void;
-  onArchive?: () => void;
-  archiveDisabled?: boolean;
-  className?: string;
-}) {
-  const { t } = useTranslation();
-  const Icon = typeIcon[approval.type] ?? defaultTypeIcon;
-  const label = approvalLabel(approval.type, approval.payload as Record<string, unknown> | null);
-  const showResolutionButtons =
-    approval.type !== "budget_override_required" &&
-    ACTIONABLE_APPROVAL_STATUSES.has(approval.status);
-  const showUnreadSlot = unreadState !== null;
-  const showUnreadDot = unreadState === "visible" || unreadState === "fading";
-
-  return (
-    <div className={cn(
-      "group border-b border-border px-2 py-2.5 last:border-b-0 sm:px-1 sm:pr-3 sm:py-2",
-      className,
-    )}>
-      <div className="flex items-start gap-2 sm:items-center">
-        {showUnreadSlot ? (
-          <span className="hidden sm:inline-flex h-4 w-4 shrink-0 items-center justify-center self-center">
-            {showUnreadDot ? (
-              <button
-                type="button"
-                onClick={onMarkRead}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-blue-500/20"
-                aria-label="Mark as read"
-              >
-                <span className={cn(
-                  "block h-2 w-2 rounded-full bg-blue-600 transition-opacity duration-300 dark:bg-blue-400",
-                  unreadState === "fading" ? "opacity-0" : "opacity-100",
-                )} />
-              </button>
-            ) : onArchive ? (
-              <button
-                type="button"
-                onClick={onArchive}
-                disabled={archiveDisabled}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
-                aria-label="Dismiss from inbox"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : (
-              <span className="inline-flex h-4 w-4" aria-hidden="true" />
-            )}
-          </span>
-        ) : null}
-        <Link
-          to={`/approvals/${approval.id}`}
-          className="flex min-w-0 flex-1 items-start gap-2 no-underline text-inherit transition-colors hover:bg-accent/50"
-        >
-          {!showUnreadSlot && <span className="hidden h-2 w-2 shrink-0 sm:inline-flex" aria-hidden="true" />}
-          <span className="hidden h-3.5 w-3.5 shrink-0 sm:inline-flex" aria-hidden="true" />
-          <span className="mt-0.5 shrink-0 rounded-md bg-muted p-1.5 sm:mt-0">
-            <Icon className="h-4 w-4 text-muted-foreground" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="line-clamp-2 text-sm font-medium sm:truncate sm:line-clamp-none">
-              {label}
-            </span>
-            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span className="capitalize">{approvalStatusLabel(approval.status)}</span>
-              {requesterName ? <span>{t("inbox.requestedBy")} {requesterName}</span> : null}
-              <span>updated {timeAgo(approval.updatedAt)}</span>
-            </span>
-          </span>
-        </Link>
-        {showResolutionButtons ? (
-          <div className="hidden shrink-0 items-center gap-2 sm:flex">
-            <Button
-              size="sm"
-              className="h-8 bg-green-700 px-3 text-white hover:bg-green-600"
-              onClick={onApprove}
-              disabled={isPending}
-            >
-              {t("inbox.approve")}
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="h-8 px-3"
-              onClick={onReject}
-              disabled={isPending}
-            >
-              {t("inbox.reject")}
-            </Button>
-          </div>
-        ) : null}
-      </div>
-      {showResolutionButtons ? (
-        <div className="mt-3 flex gap-2 sm:hidden">
-          <Button
-            size="sm"
-            className="h-8 bg-green-700 px-3 text-white hover:bg-green-600"
-            onClick={onApprove}
-            disabled={isPending}
-          >
-            {t("inbox.approve")}
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="h-8 px-3"
-            onClick={onReject}
-            disabled={isPending}
-          >
-            {t("inbox.reject")}
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function JoinRequestInboxRow({
-  joinRequest,
-  onApprove,
-  onReject,
-  isPending,
-  unreadState = null,
-  onMarkRead,
-  onArchive,
-  archiveDisabled,
-  className,
-}: {
-  joinRequest: JoinRequest;
-  onApprove: () => void;
-  onReject: () => void;
-  isPending: boolean;
-  unreadState?: NonIssueUnreadState;
-  onMarkRead?: () => void;
-  onArchive?: () => void;
-  archiveDisabled?: boolean;
-  className?: string;
-}) {
-  const { t } = useTranslation();
-  const label =
-    joinRequest.requestType === "human"
-      ? "Human join request"
-      : `Agent join request${joinRequest.agentName ? `: ${joinRequest.agentName}` : ""}`;
-  const showUnreadSlot = unreadState !== null;
-  const showUnreadDot = unreadState === "visible" || unreadState === "fading";
-
-  return (
-    <div className={cn(
-      "group border-b border-border px-2 py-2.5 last:border-b-0 sm:px-1 sm:pr-3 sm:py-2",
-      className,
-    )}>
-      <div className="flex items-start gap-2 sm:items-center">
-        {showUnreadSlot ? (
-          <span className="hidden sm:inline-flex h-4 w-4 shrink-0 items-center justify-center self-center">
-            {showUnreadDot ? (
-              <button
-                type="button"
-                onClick={onMarkRead}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-blue-500/20"
-                aria-label="Mark as read"
-              >
-                <span className={cn(
-                  "block h-2 w-2 rounded-full bg-blue-600 transition-opacity duration-300 dark:bg-blue-400",
-                  unreadState === "fading" ? "opacity-0" : "opacity-100",
-                )} />
-              </button>
-            ) : onArchive ? (
-              <button
-                type="button"
-                onClick={onArchive}
-                disabled={archiveDisabled}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
-                aria-label="Dismiss from inbox"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : (
-              <span className="inline-flex h-4 w-4" aria-hidden="true" />
-            )}
-          </span>
-        ) : null}
-        <div className="flex min-w-0 flex-1 items-start gap-2">
-          {!showUnreadSlot && <span className="hidden h-2 w-2 shrink-0 sm:inline-flex" aria-hidden="true" />}
-          <span className="hidden h-3.5 w-3.5 shrink-0 sm:inline-flex" aria-hidden="true" />
-          <span className="mt-0.5 shrink-0 rounded-md bg-muted p-1.5 sm:mt-0">
-            <UserPlus className="h-4 w-4 text-muted-foreground" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="line-clamp-2 text-sm font-medium sm:truncate sm:line-clamp-none">
-              {label}
-            </span>
-            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span>requested {timeAgo(joinRequest.createdAt)} from IP {joinRequest.requestIp}</span>
-              {joinRequest.adapterType && <span>adapter: {joinRequest.adapterType}</span>}
-            </span>
-          </span>
-        </div>
-        <div className="hidden shrink-0 items-center gap-2 sm:flex">
-          <Button
-            size="sm"
-            className="h-8 bg-green-700 px-3 text-white hover:bg-green-600"
-            onClick={onApprove}
-            disabled={isPending}
-          >
-            {t("inbox.approve")}
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="h-8 px-3"
-            onClick={onReject}
-            disabled={isPending}
-          >
-            {t("inbox.reject")}
-          </Button>
-        </div>
-      </div>
-      <div className="mt-3 flex gap-2 sm:hidden">
-        <Button
-          size="sm"
-          className="h-8 bg-green-700 px-3 text-white hover:bg-green-600"
-          onClick={onApprove}
-          disabled={isPending}
-        >
-          {t("inbox.approve")}
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          className="h-8 px-3"
-          onClick={onReject}
-          disabled={isPending}
-        >
-          {t("inbox.reject")}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 export function Inbox() {
   const { t } = useTranslation();
@@ -515,8 +71,7 @@ export function Inbox() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
-  const [allCategoryFilter, setAllCategoryFilter] = useState<InboxCategoryFilter>("everything");
-  const [allApprovalFilter, setAllApprovalFilter] = useState<InboxApprovalFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("tutto");
   const [groupByAgent, setGroupByAgent] = useState(false);
   const { dismissed, dismiss } = useDismissedInboxItems();
   const { readItems, markRead: markItemRead } = useReadInboxItems();
@@ -621,24 +176,29 @@ export function Inbox() {
     enabled: !!selectedCompanyId,
   });
 
+  const { data: projects } = useQuery({
+    queryKey: queryKeys.projects.list(selectedCompanyId!),
+    queryFn: () => projectsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  // ── Derived data ───────────────────────────────────────────────────
+
   const mineIssues = useMemo(() => getRecentTouchedIssues(mineIssuesRaw), [mineIssuesRaw]);
   const touchedIssues = useMemo(() => getRecentTouchedIssues(touchedIssuesRaw), [touchedIssuesRaw]);
   const unreadTouchedIssues = useMemo(
     () => touchedIssues.filter((issue) => issue.isUnreadForMe),
     [touchedIssues],
   );
-  const issuesToRender = useMemo(
-    () => {
-      if (tab === "mine") return mineIssues;
-      if (tab === "unread") return unreadTouchedIssues;
-      return touchedIssues;
-    },
-    [tab, mineIssues, touchedIssues, unreadTouchedIssues],
-  );
+  const issuesToRender = useMemo(() => {
+    if (tab === "mine") return mineIssues;
+    if (tab === "unread") return unreadTouchedIssues;
+    return touchedIssues;
+  }, [tab, mineIssues, touchedIssues, unreadTouchedIssues]);
 
   const agentById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const agent of agents ?? []) map.set(agent.id, agent.name);
+    const map = new Map<string, Agent>();
+    for (const agent of agents ?? []) map.set(agent.id, agent);
     return map;
   }, [agents]);
 
@@ -648,10 +208,17 @@ export function Inbox() {
     return map;
   }, [issues]);
 
+  const projectById = useMemo(() => {
+    const map = new Map<string, Project>();
+    for (const project of projects ?? []) map.set(project.id, project);
+    return map;
+  }, [projects]);
+
   const failedRuns = useMemo(
     () => getLatestFailedRunsByAgent(heartbeatRuns ?? []).filter((r) => !dismissed.has(`run:${r.id}`)),
     [heartbeatRuns, dismissed],
   );
+
   const liveIssueIds = useMemo(() => {
     const ids = new Set<string>();
     for (const run of heartbeatRuns ?? []) {
@@ -663,74 +230,63 @@ export function Inbox() {
   }, [heartbeatRuns]);
 
   const approvalsToRender = useMemo(() => {
-    let filtered = getApprovalsForTab(approvals ?? [], tab, allApprovalFilter);
+    let filtered = getApprovalsForTab(approvals ?? [], tab, "all");
     if (tab === "mine") {
       filtered = filtered.filter((a) => !dismissed.has(`approval:${a.id}`));
     }
     return filtered;
-  }, [approvals, tab, allApprovalFilter, dismissed]);
-  const showJoinRequestsCategory =
-    allCategoryFilter === "everything" || allCategoryFilter === "join_requests";
-  const showTouchedCategory =
-    allCategoryFilter === "everything" || allCategoryFilter === "issues_i_touched";
-  const showApprovalsCategory =
-    allCategoryFilter === "everything" || allCategoryFilter === "approvals";
-  const showFailedRunsCategory =
-    allCategoryFilter === "everything" || allCategoryFilter === "failed_runs";
-  const showAlertsCategory = allCategoryFilter === "everything" || allCategoryFilter === "alerts";
-  const failedRunsForTab = useMemo(() => {
-    if (tab === "all" && !showFailedRunsCategory) return [];
-    return failedRuns;
-  }, [failedRuns, tab, showFailedRunsCategory]);
+  }, [approvals, tab, dismissed]);
 
   const joinRequestsForTab = useMemo(() => {
-    if (tab === "all" && !showJoinRequestsCategory) return [];
     if (tab === "mine") return joinRequests.filter((jr) => !dismissed.has(`join:${jr.id}`));
     return joinRequests;
-  }, [joinRequests, tab, showJoinRequestsCategory, dismissed]);
+  }, [joinRequests, tab, dismissed]);
 
-  const workItemsToRender = useMemo(
+  // ── Build work items + filter by category ──────────────────────────
+
+  const allWorkItems = useMemo(
     () =>
       getInboxWorkItems({
-        issues: tab === "all" && !showTouchedCategory ? [] : issuesToRender,
-        approvals: tab === "all" && !showApprovalsCategory ? [] : approvalsToRender,
-        failedRuns: failedRunsForTab,
+        issues: issuesToRender,
+        approvals: approvalsToRender,
+        failedRuns,
         joinRequests: joinRequestsForTab,
       }),
-    [approvalsToRender, issuesToRender, showApprovalsCategory, showTouchedCategory, tab, failedRunsForTab, joinRequestsForTab],
+    [approvalsToRender, issuesToRender, failedRuns, joinRequestsForTab],
   );
 
-  const agentName = (id: string | null) => {
-    if (!id) return null;
-    return agentById.get(id) ?? null;
-  };
+  const workItemsToRender = useMemo(() => {
+    if (categoryFilter === "tutto") return allWorkItems;
+    return allWorkItems.filter((item) => categorizeWorkItem(item) === categoryFilter);
+  }, [allWorkItems, categoryFilter]);
 
-  // Group work items by agent when groupByAgent is active
+  // Category counts for filter badges
+  const categoryCounts = useMemo(() => {
+    const counts = { richiesta: 0, messaggio: 0, aggiornamento: 0 };
+    for (const item of allWorkItems) {
+      counts[categorizeWorkItem(item)]++;
+    }
+    return counts;
+  }, [allWorkItems]);
+
+  // Group work items by agent
   const groupedWorkItems = useMemo(() => {
     if (!groupByAgent) return null;
     const groups = new Map<string, typeof workItemsToRender>();
     for (const item of workItemsToRender) {
-      let agentId = "other";
-      let agentLabel = "Other";
-      if (item.kind === "issue" && item.issue.assigneeAgentId) {
-        agentId = item.issue.assigneeAgentId;
-        agentLabel = agentById.get(agentId) ?? agentId.slice(0, 8);
-      } else if (item.kind === "failed_run") {
-        agentId = item.run.agentId;
-        agentLabel = agentById.get(agentId) ?? agentId.slice(0, 8);
-      } else if (item.kind === "approval" && item.approval.requestedByAgentId) {
-        agentId = item.approval.requestedByAgentId;
-        agentLabel = agentById.get(agentId) ?? agentId.slice(0, 8);
-      }
-      const key = `${agentId}|||${agentLabel}`;
+      const ctx = resolveItemContext(item, agentById, issueById, projectById);
+      const agentLabel = ctx.agentName ?? "Altro";
+      const key = agentLabel;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(item);
     }
-    return Array.from(groups.entries()).map(([key, items]) => ({
-      agentLabel: key.split("|||")[1],
+    return Array.from(groups.entries()).map(([agentLabel, items]) => ({
+      agentLabel,
       items,
     }));
-  }, [groupByAgent, workItemsToRender, agentById]);
+  }, [groupByAgent, workItemsToRender, agentById, issueById]);
+
+  // ── Mutations ──────────────────────────────────────────────────────
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => approvalsApi.approve(id),
@@ -842,9 +398,7 @@ export function Inbox() {
       setActionError(null);
       setArchivingIssueIds((prev) => new Set(prev).add(id));
     },
-    onSuccess: () => {
-      invalidateInboxIssueQueries();
-    },
+    onSuccess: () => invalidateInboxIssueQueries(),
     onError: (err, id) => {
       setActionError(err instanceof Error ? err.message : "Failed to archive issue");
       setArchivingIssueIds((prev) => {
@@ -870,9 +424,7 @@ export function Inbox() {
     onMutate: (id) => {
       setFadingOutIssues((prev) => new Set(prev).add(id));
     },
-    onSuccess: () => {
-      invalidateInboxIssueQueries();
-    },
+    onSuccess: () => invalidateInboxIssueQueries(),
     onSettled: (_data, _error, id) => {
       setTimeout(() => {
         setFadingOutIssues((prev) => {
@@ -895,9 +447,7 @@ export function Inbox() {
         return next;
       });
     },
-    onSuccess: () => {
-      invalidateInboxIssueQueries();
-    },
+    onSuccess: () => invalidateInboxIssueQueries(),
     onSettled: (_data, _error, issueIds) => {
       setTimeout(() => {
         setFadingOutIssues((prev) => {
@@ -942,6 +492,8 @@ export function Inbox() {
     return "hidden";
   };
 
+  // ── Guards ─────────────────────────────────────────────────────────
+
   if (!selectedCompanyId) {
     return <EmptyState icon={InboxIcon} message={t("inbox.selectCompany")} />;
   }
@@ -954,20 +506,14 @@ export function Inbox() {
     dashboard.costs.monthUtilizationPercent >= 80 &&
     !dismissed.has("alert:budget");
   const hasAlerts = showAggregateAgentError || showBudgetAlert;
-  const showWorkItemsSection = workItemsToRender.length > 0;
   const showAlertsSection = shouldShowInboxSection({
     tab,
     hasItems: hasAlerts,
     showOnMine: hasAlerts,
     showOnRecent: hasAlerts,
     showOnUnread: hasAlerts,
-    showOnAll: showAlertsCategory && hasAlerts,
+    showOnAll: hasAlerts,
   });
-
-  const visibleSections = [
-    showAlertsSection ? "alerts" : null,
-    showWorkItemsSection ? "work_items" : null,
-  ].filter((key): key is SectionKey => key !== null);
 
   const allLoaded =
     !isJoinRequestsLoading &&
@@ -978,28 +524,154 @@ export function Inbox() {
     !isTouchedIssuesLoading &&
     !isRunsLoading;
 
-  const showSeparatorBefore = (key: SectionKey) => visibleSections.indexOf(key) > 0;
   const markAllReadIssues = (tab === "mine" ? mineIssues : unreadTouchedIssues)
     .filter((issue) => issue.isUnreadForMe && !fadingOutIssues.has(issue.id) && !archivingIssueIds.has(issue.id));
-  const unreadIssueIds = markAllReadIssues
-    .map((issue) => issue.id);
-  const canMarkAllRead = unreadIssueIds.length > 0;
+  const canMarkAllRead = markAllReadIssues.length > 0;
+
+  const isMineTab = tab === "mine";
+
+  // ── Render helpers ─────────────────────────────────────────────────
+
+  function renderItem(item: InboxWorkItem) {
+    const ctx = resolveItemContext(item, agentById, issueById, projectById);
+
+    if (item.kind === "issue") {
+      const { issue } = item;
+      const isUnread = issue.isUnreadForMe && !fadingOutIssues.has(issue.id);
+      const isFading = fadingOutIssues.has(issue.id);
+      const isArchiving = archivingIssueIds.has(issue.id);
+      const row = (
+        <InboxItemRow
+          key={`issue:${issue.id}`}
+          item={item}
+          context={ctx}
+          issueLinkState={issueLinkState}
+          issueById={issueById}
+          unreadState={isUnread ? "visible" : isFading ? "fading" : "hidden"}
+          onMarkRead={() => markReadMutation.mutate(issue.id)}
+          onArchive={isMineTab ? () => archiveIssueMutation.mutate(issue.id) : undefined}
+          archiveDisabled={isArchiving || archiveIssueMutation.isPending}
+          className={
+            isArchiving
+              ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"
+              : "transition-all duration-200 ease-out"
+          }
+        />
+      );
+      return isMineTab ? (
+        <SwipeToArchive
+          key={`issue:${issue.id}`}
+          disabled={isArchiving || archiveIssueMutation.isPending}
+          onArchive={() => archiveIssueMutation.mutate(issue.id)}
+        >
+          {row}
+        </SwipeToArchive>
+      ) : row;
+    }
+
+    if (item.kind === "approval") {
+      const approvalKey = `approval:${item.approval.id}`;
+      const isArchiving = archivingNonIssueIds.has(approvalKey);
+      const row = (
+        <InboxItemRow
+          key={approvalKey}
+          item={item}
+          context={ctx}
+          onApprove={() => approveMutation.mutate(item.approval.id)}
+          onReject={() => rejectMutation.mutate(item.approval.id)}
+          isPending={approveMutation.isPending || rejectMutation.isPending}
+          unreadState={nonIssueUnreadState(approvalKey)}
+          onMarkRead={() => handleMarkNonIssueRead(approvalKey)}
+          onArchive={isMineTab ? () => handleArchiveNonIssue(approvalKey) : undefined}
+          archiveDisabled={isArchiving}
+          className={
+            isArchiving
+              ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"
+              : "transition-all duration-200 ease-out"
+          }
+        />
+      );
+      return isMineTab ? (
+        <SwipeToArchive key={approvalKey} disabled={isArchiving} onArchive={() => handleArchiveNonIssue(approvalKey)}>
+          {row}
+        </SwipeToArchive>
+      ) : row;
+    }
+
+    if (item.kind === "failed_run") {
+      const runKey = `run:${item.run.id}`;
+      const isArchiving = archivingNonIssueIds.has(runKey);
+      const row = (
+        <InboxItemRow
+          key={runKey}
+          item={item}
+          context={ctx}
+          issueById={issueById}
+          onDismiss={() => dismiss(runKey)}
+          onRetry={() => retryRunMutation.mutate(item.run)}
+          isRetrying={retryingRunIds.has(item.run.id)}
+          unreadState={nonIssueUnreadState(runKey)}
+          onMarkRead={() => handleMarkNonIssueRead(runKey)}
+          onArchive={isMineTab ? () => handleArchiveNonIssue(runKey) : undefined}
+          archiveDisabled={isArchiving}
+          className={
+            isArchiving
+              ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"
+              : "transition-all duration-200 ease-out"
+          }
+        />
+      );
+      return isMineTab ? (
+        <SwipeToArchive key={runKey} disabled={isArchiving} onArchive={() => handleArchiveNonIssue(runKey)}>
+          {row}
+        </SwipeToArchive>
+      ) : row;
+    }
+
+    if (item.kind === "join_request") {
+      const joinKey = `join:${item.joinRequest.id}`;
+      const isArchiving = archivingNonIssueIds.has(joinKey);
+      const row = (
+        <InboxItemRow
+          key={joinKey}
+          item={item}
+          context={ctx}
+          onApprove={() => approveJoinMutation.mutate(item.joinRequest)}
+          onReject={() => rejectJoinMutation.mutate(item.joinRequest)}
+          isPending={approveJoinMutation.isPending || rejectJoinMutation.isPending}
+          unreadState={nonIssueUnreadState(joinKey)}
+          onMarkRead={() => handleMarkNonIssueRead(joinKey)}
+          onArchive={isMineTab ? () => handleArchiveNonIssue(joinKey) : undefined}
+          archiveDisabled={isArchiving}
+          className={
+            isArchiving
+              ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"
+              : "transition-all duration-200 ease-out"
+          }
+        />
+      );
+      return isMineTab ? (
+        <SwipeToArchive key={joinKey} disabled={isArchiving} onArchive={() => handleArchiveNonIssue(joinKey)}>
+          {row}
+        </SwipeToArchive>
+      ) : row;
+    }
+
+    return null;
+  }
+
+  // ── Main render ────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
+      {/* Tab bar + actions */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={tab} onValueChange={(value) => navigate(`/inbox/${value}`)}>
             <PageTabBar
               items={[
-                {
-                  value: "mine",
-                  label: t("inbox.mine"),
-                },
-                {
-                  value: "recent",
-                  label: t("inbox.recent"),
-                },
+                { value: "mine", label: t("inbox.mine") },
+                { value: "recent", label: t("inbox.recent") },
                 { value: "unread", label: t("inbox.unread") },
                 { value: "all", label: t("inbox.all") },
               ]}
@@ -1012,7 +684,7 @@ export function Inbox() {
               variant="outline"
               size="sm"
               className="h-8 shrink-0"
-              onClick={() => markAllReadMutation.mutate(unreadIssueIds)}
+              onClick={() => markAllReadMutation.mutate(markAllReadIssues.map((i) => i.id))}
               disabled={markAllReadMutation.isPending}
             >
               {markAllReadMutation.isPending ? t("inbox.marking") : t("inbox.markAllRead")}
@@ -1029,57 +701,60 @@ export function Inbox() {
             <span className="hidden sm:inline">{groupByAgent ? t("inbox.grouped") : t("inbox.groupByAgent")}</span>
           </Button>
         </div>
+      </div>
 
-        {tab === "all" && (
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <Select
-              value={allCategoryFilter}
-              onValueChange={(value) => setAllCategoryFilter(value as InboxCategoryFilter)}
-            >
-              <SelectTrigger className="h-8 w-[170px] text-xs">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="everything">All categories</SelectItem>
-                <SelectItem value="issues_i_touched">My recent issues</SelectItem>
-                <SelectItem value="join_requests">Join requests</SelectItem>
-                <SelectItem value="approvals">Approvals</SelectItem>
-                <SelectItem value="failed_runs">Failed runs</SelectItem>
-                <SelectItem value="alerts">Alerts</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {showApprovalsCategory && (
-              <Select
-                value={allApprovalFilter}
-                onValueChange={(value) => setAllApprovalFilter(value as InboxApprovalFilter)}
-              >
-                <SelectTrigger className="h-8 w-[170px] text-xs">
-                  <SelectValue placeholder="Approval status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All approval statuses</SelectItem>
-                  <SelectItem value="actionable">Needs action</SelectItem>
-                  <SelectItem value="resolved">Resolved</SelectItem>
-                </SelectContent>
-              </Select>
+      {/* Category filter pills */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setCategoryFilter("tutto")}
+          className={cn(
+            "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+            categoryFilter === "tutto"
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground hover:bg-accent",
+          )}
+        >
+          Tutto ({allWorkItems.length})
+        </button>
+        {(["richiesta", "messaggio", "aggiornamento"] as InboxItemCategory[]).map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            onClick={() => setCategoryFilter(cat === categoryFilter ? "tutto" : cat)}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-xs font-medium transition-colors flex items-center gap-1.5",
+              categoryFilter === cat
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-accent",
             )}
-          </div>
-        )}
+          >
+            <CategoryBadge
+              category={cat}
+              className={cn(
+                "!px-0 !py-0 !bg-transparent !text-inherit !text-[10px]",
+                categoryFilter === cat && "!text-primary-foreground",
+              )}
+            />
+            <span>({categoryCounts[cat]})</span>
+          </button>
+        ))}
       </div>
 
       {approvalsError && <p className="text-sm text-destructive">{approvalsError.message}</p>}
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
-      {!allLoaded && visibleSections.length === 0 && (
+      {!allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
         <PageSkeleton variant="inbox" />
       )}
 
-      {allLoaded && visibleSections.length === 0 && (
+      {allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
         <EmptyState
           icon={InboxIcon}
           message={
-            tab === "mine"
+            categoryFilter !== "tutto"
+              ? `Nessun elemento nella categoria "${categoryFilter}"`
+              : tab === "mine"
               ? t("inbox.noItems")
               : tab === "unread"
               ? t("inbox.noNewItems")
@@ -1090,11 +765,10 @@ export function Inbox() {
         />
       )}
 
-      {showWorkItemsSection && (
-        <>
-          {showSeparatorBefore("work_items") && <Separator />}
-          <div className="space-y-4">
-            {(groupedWorkItems ?? [{ agentLabel: null, items: workItemsToRender }]).map((group, gi) => (
+      {/* Work items */}
+      {workItemsToRender.length > 0 && (
+        <div className="space-y-4">
+          {(groupedWorkItems ?? [{ agentLabel: null, items: workItemsToRender }]).map((group) => (
             <div key={group.agentLabel ?? "all"}>
               {group.agentLabel && (
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -1105,198 +779,23 @@ export function Inbox() {
                   <span className="text-xs font-normal text-muted-foreground">({group.items.length})</span>
                 </h3>
               )}
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              {group.items.map((item) => {
-                const isMineTab = tab === "mine";
-
-                if (item.kind === "approval") {
-                  const approvalKey = `approval:${item.approval.id}`;
-                  const isArchiving = archivingNonIssueIds.has(approvalKey);
-                  const row = (
-                    <ApprovalInboxRow
-                      key={approvalKey}
-                      approval={item.approval}
-                      requesterName={agentName(item.approval.requestedByAgentId)}
-                      onApprove={() => approveMutation.mutate(item.approval.id)}
-                      onReject={() => rejectMutation.mutate(item.approval.id)}
-                      isPending={approveMutation.isPending || rejectMutation.isPending}
-                      unreadState={nonIssueUnreadState(approvalKey)}
-                      onMarkRead={() => handleMarkNonIssueRead(approvalKey)}
-                      onArchive={isMineTab ? () => handleArchiveNonIssue(approvalKey) : undefined}
-                      archiveDisabled={isArchiving}
-                      className={
-                        isArchiving
-                          ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"
-                          : "transition-all duration-200 ease-out"
-                      }
-                    />
-                  );
-                  return isMineTab ? (
-                    <SwipeToArchive
-                      key={approvalKey}
-                      disabled={isArchiving}
-                      onArchive={() => handleArchiveNonIssue(approvalKey)}
-                    >
-                      {row}
-                    </SwipeToArchive>
-                  ) : row;
-                }
-
-                if (item.kind === "failed_run") {
-                  const runKey = `run:${item.run.id}`;
-                  const isArchiving = archivingNonIssueIds.has(runKey);
-                  const row = (
-                    <FailedRunInboxRow
-                      key={runKey}
-                      run={item.run}
-                      issueById={issueById}
-                      agentName={agentName(item.run.agentId)}
-                      issueLinkState={issueLinkState}
-                      onDismiss={() => dismiss(runKey)}
-                      onRetry={() => retryRunMutation.mutate(item.run)}
-                      isRetrying={retryingRunIds.has(item.run.id)}
-                      unreadState={nonIssueUnreadState(runKey)}
-                      onMarkRead={() => handleMarkNonIssueRead(runKey)}
-                      onArchive={isMineTab ? () => handleArchiveNonIssue(runKey) : undefined}
-                      archiveDisabled={isArchiving}
-                      className={
-                        isArchiving
-                          ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"
-                          : "transition-all duration-200 ease-out"
-                      }
-                    />
-                  );
-                  return isMineTab ? (
-                    <SwipeToArchive
-                      key={runKey}
-                      disabled={isArchiving}
-                      onArchive={() => handleArchiveNonIssue(runKey)}
-                    >
-                      {row}
-                    </SwipeToArchive>
-                  ) : row;
-                }
-
-                if (item.kind === "join_request") {
-                  const joinKey = `join:${item.joinRequest.id}`;
-                  const isArchiving = archivingNonIssueIds.has(joinKey);
-                  const row = (
-                    <JoinRequestInboxRow
-                      key={joinKey}
-                      joinRequest={item.joinRequest}
-                      onApprove={() => approveJoinMutation.mutate(item.joinRequest)}
-                      onReject={() => rejectJoinMutation.mutate(item.joinRequest)}
-                      isPending={approveJoinMutation.isPending || rejectJoinMutation.isPending}
-                      unreadState={nonIssueUnreadState(joinKey)}
-                      onMarkRead={() => handleMarkNonIssueRead(joinKey)}
-                      onArchive={isMineTab ? () => handleArchiveNonIssue(joinKey) : undefined}
-                      archiveDisabled={isArchiving}
-                      className={
-                        isArchiving
-                          ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"
-                          : "transition-all duration-200 ease-out"
-                      }
-                    />
-                  );
-                  return isMineTab ? (
-                    <SwipeToArchive
-                      key={joinKey}
-                      disabled={isArchiving}
-                      onArchive={() => handleArchiveNonIssue(joinKey)}
-                    >
-                      {row}
-                    </SwipeToArchive>
-                  ) : row;
-                }
-
-                const issue = item.issue;
-                const isUnread = issue.isUnreadForMe && !fadingOutIssues.has(issue.id);
-                const isFading = fadingOutIssues.has(issue.id);
-                const isArchiving = archivingIssueIds.has(issue.id);
-                const row = (
-                  <IssueRow
-                    key={`issue:${issue.id}`}
-                    issue={issue}
-                    issueLinkState={issueLinkState}
-                    className={
-                      isArchiving
-                        ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"
-                        : "transition-all duration-200 ease-out"
-                    }
-                    desktopMetaLeading={(
-                      <>
-                        <span className="hidden shrink-0 sm:inline-flex">
-                          <StatusIcon status={issue.status} />
-                        </span>
-                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                          {issue.identifier ?? issue.id.slice(0, 8)}
-                        </span>
-                        {issue.assigneeAgentId && agentName(issue.assigneeAgentId) && (
-                          <span className="hidden shrink-0 rounded bg-accent/60 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline">
-                            {agentName(issue.assigneeAgentId)}
-                          </span>
-                        )}
-                        {liveIssueIds.has(issue.id) && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 sm:gap-1.5 sm:px-2">
-                            <span className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-blue-400 opacity-75" />
-                              <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
-                            </span>
-                            <span className="hidden text-[11px] font-medium text-blue-600 dark:text-blue-400 sm:inline">
-                              Live
-                            </span>
-                          </span>
-                        )}
-                      </>
-                    )}
-                    mobileMeta={
-                      issue.lastExternalCommentAt
-                        ? `commented ${timeAgo(issue.lastExternalCommentAt)}`
-                        : `updated ${timeAgo(issue.updatedAt)}`
-                    }
-                    unreadState={
-                      isUnread ? "visible" : isFading ? "fading" : "hidden"
-                    }
-                    onMarkRead={() => markReadMutation.mutate(issue.id)}
-                    onArchive={
-                      isMineTab
-                        ? () => archiveIssueMutation.mutate(issue.id)
-                        : undefined
-                    }
-                    archiveDisabled={isArchiving || archiveIssueMutation.isPending}
-                    trailingMeta={
-                      issue.lastExternalCommentAt
-                        ? `commented ${timeAgo(issue.lastExternalCommentAt)}`
-                        : `updated ${timeAgo(issue.updatedAt)}`
-                    }
-                  />
-                );
-
-                return isMineTab ? (
-                  <SwipeToArchive
-                    key={`issue:${issue.id}`}
-                    disabled={isArchiving || archiveIssueMutation.isPending}
-                    onArchive={() => archiveIssueMutation.mutate(issue.id)}
-                  >
-                    {row}
-                  </SwipeToArchive>
-                ) : row;
-              })}
+              <div className="overflow-hidden rounded-xl border border-border bg-card">
+                {group.items.map(renderItem)}
+              </div>
             </div>
-            </div>
-            ))}
-          </div>
-        </>
+          ))}
+        </div>
       )}
 
+      {/* Alerts section */}
       {showAlertsSection && (
         <>
-          {showSeparatorBefore("alerts") && <Separator />}
+          <Separator />
           <div>
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Alerts
             </h3>
-            <div className="divide-y divide-border border border-border">
+            <div className="divide-y divide-border rounded-xl border border-border">
               {showAggregateAgentError && (
                 <div className="group/alert relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
                   <Link
@@ -1346,7 +845,6 @@ export function Inbox() {
           </div>
         </>
       )}
-
     </div>
   );
 }

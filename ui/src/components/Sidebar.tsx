@@ -38,7 +38,7 @@ export function Sidebar() {
     queryKey: queryKeys.liveRuns(selectedCompanyId!),
     queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!),
     enabled: !!selectedCompanyId,
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
   const liveRunCount = (liveRuns ?? []).filter((r) => r.status === "running" || r.status === "queued").length;
 
@@ -105,16 +105,11 @@ export function Sidebar() {
         <SidebarSection label={t("nav.work")}>
           <SidebarNavItem to="/issues" label={t("nav.issues")} icon={CircleDot} badge={inboxBadge.mineIssues > 0 ? inboxBadge.mineIssues : undefined} badgeTone="danger" />
           <SidebarNavItem
-            to="/approvals"
+            to="/inbox/all"
             label={t("nav.approvals", "Approvazioni")}
             icon={ShieldCheck}
             badge={inboxBadge.approvals > 0 ? inboxBadge.approvals : undefined}
             badgeTone="danger"
-            onClick={() => {
-              if (inboxBadge.approvals > 0) {
-                window.dispatchEvent(new CustomEvent("paperclip:open-approvals-panel"));
-              }
-            }}
           />
           <SidebarNavItem to="/routines" label={t("nav.routines")} icon={Repeat} textBadge="Beta" textBadgeTone="amber" />
           <SidebarNavItem to="/goals" label={t("nav.goals")} icon={Target} />
