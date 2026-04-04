@@ -12,6 +12,7 @@ import {
   Boxes,
   Repeat,
   Settings,
+  Users,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -114,6 +115,7 @@ export function Sidebar() {
 
         <SidebarSection label={t("nav.company")}>
           <SidebarNavItem to="/org" label={t("nav.org")} icon={Network} />
+          <SidebarNavItem to="/round-table" label="Round Table" icon={Users} />
           <SidebarNavItem to="/skills" label={t("nav.skills")} icon={Boxes} />
           <SidebarNavItem to="/costs" label={t("nav.costs")} icon={DollarSign} />
           <SidebarNavItem to="/activity" label={t("nav.activity")} icon={History} />

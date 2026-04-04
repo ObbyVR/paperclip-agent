@@ -5,8 +5,9 @@ import { Identity } from "./Identity";
 import { Button } from "@/components/ui/button";
 import {
   AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock,
-  FileText, Layers, List, Loader2, RotateCcw, XCircle,
+  FileText, Layers, List, Loader2, RotateCcw, Square, XCircle,
 } from "lucide-react";
+import type { LiveRunForIssue } from "../api/heartbeats";
 import type { Issue, Agent } from "@paperclipai/shared";
 
 /* ── Types ──────────────────────────────────── */
@@ -100,20 +101,14 @@ function buildTree(issues: Issue[], agents: Agent[], viewMode: ViewMode): TreeNo
   const issueMap = new Map<string, Issue>();
   for (const i of issues) issueMap.set(i.id, i);
 
-  // Find root issues that have children (workflow roots)
+  // Find ALL root issues that have children (workflow roots) — visible until archived
   const childIds = new Set(issues.filter((i) => i.parentId).map((i) => i.parentId!));
   const roots = issues.filter((i) =>
-    !i.parentId && childIds.has(i.id) &&
-    (i.status === "in_progress" || i.status === "blocked" || i.status === "todo"),
-  );
-
-  // Also include done roots that have children (completed or partially completed workflows)
-  const doneRoots = issues.filter((i) =>
-    !i.parentId && childIds.has(i.id) && i.status === "done",
+    !i.parentId && childIds.has(i.id),
   );
 
   // Standalone issues: no parent, no children, still active — show as single nodes
-  const treeRootIds = new Set([...roots, ...doneRoots].map((i) => i.id));
+  const treeRootIds = new Set(roots.map((i) => i.id));
   const standaloneRoots = issues.filter((i) =>
     !i.parentId && !childIds.has(i.id) && !treeRootIds.has(i.id) &&
     (i.status === "in_progress" || i.status === "blocked" || i.status === "todo" || i.status === "in_review"),
@@ -152,7 +147,7 @@ function buildTree(issues: Issue[], agents: Agent[], viewMode: ViewMode): TreeNo
     return { issue, agent, department, children, depth, x: 0, y: 0, width: 0 };
   }
 
-  return [...roots, ...doneRoots, ...standaloneRoots].map((root) => buildNode(root, 0));
+  return [...roots, ...standaloneRoots].map((root) => buildNode(root, 0));
 }
 
 /* ── Layout algorithm ───────────────────────── */
@@ -753,6 +748,8 @@ export function WorkflowGraph({
   isPending,
   failedIssueIds = new Set(),
   failedIssueErrors = new Map(),
+  activeRuns = [],
+  onCancelRun,
 }: {
   issues: Issue[];
   agents: Agent[];
@@ -762,6 +759,8 @@ export function WorkflowGraph({
   isPending: boolean;
   failedIssueIds?: Set<string>;
   failedIssueErrors?: Map<string, string>;
+  activeRuns?: LiveRunForIssue[];
+  onCancelRun?: (runId: string) => void;
 }) {
   const [blockedIssue, setBlockedIssue] = useState<Issue | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<TreeNode | null>(null);
@@ -782,6 +781,10 @@ export function WorkflowGraph({
           for (const child of node.children) collectNodes(child);
         }
         collectNodes(root);
+
+        // Active runs belonging to this tree
+        const treeIssueIds = new Set(nodes.map((n) => n.issue.id));
+        const treeRuns = activeRuns.filter((r) => r.issueId && treeIssueIds.has(r.issueId));
 
         return (
           <div key={root.issue.id} className="rounded-xl border border-border bg-[#0c0e14] p-4 overflow-x-auto">
@@ -856,6 +859,38 @@ export function WorkflowGraph({
                 />
               ))}
             </div>
+
+            {/* Active runs for this workflow */}
+            {treeRuns.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border/30">
+                {treeRuns.map((run) => {
+                  const issue = issues.find((i) => i.id === run.issueId);
+                  return (
+                    <div key={run.id} className="flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] px-3 py-1.5 text-xs">
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
+                      </span>
+                      <span className="font-medium text-foreground">{run.agentName}</span>
+                      {issue && (
+                        <span className="text-muted-foreground truncate max-w-[200px]">
+                          su {issue.identifier} {issue.title}
+                        </span>
+                      )}
+                      {onCancelRun && (
+                        <button
+                          onClick={() => onCancelRun(run.id)}
+                          className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+                        >
+                          <Square className="h-2.5 w-2.5" />
+                          Stop
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}

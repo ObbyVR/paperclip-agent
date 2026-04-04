@@ -15,8 +15,8 @@ import { EmptyState } from "../components/EmptyState";
 import { StatusIcon } from "../components/StatusIcon";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
-import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, FolderOpen, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
+import { formatCents } from "../lib/utils";
+import { Bot, ChevronDown, ChevronRight, CircleDot, DollarSign, FolderOpen, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
@@ -47,6 +47,52 @@ function WorkflowGraphSafe(props: React.ComponentProps<typeof WorkflowGraph>) {
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
+
+/* ── Collapsible project section for "all projects" view ── */
+function CollapsibleProjectSection({
+  name,
+  issueCount,
+  activeRunCount,
+  children,
+}: {
+  name: string;
+  issueCount: number;
+  activeRunCount: number;
+  children: React.ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex items-center gap-2 w-full text-left group"
+      >
+        {collapsed
+          ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        }
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
+          {name}
+        </h3>
+        <span className="text-[10px] text-muted-foreground/60">
+          {issueCount} task{issueCount !== 1 ? "" : ""}
+        </span>
+        {activeRunCount > 0 && (
+          <span className="flex items-center gap-1 text-[10px] text-cyan-400">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-500" />
+            </span>
+            {activeRunCount} attivi
+          </span>
+        )}
+      </button>
+      {!collapsed && children}
+    </div>
+  );
+}
 
 function getRecentIssues(issues: Issue[]): Issue[] {
   return [...issues]
@@ -271,112 +317,140 @@ export function Dashboard() {
       )}
 
 
-      {/* ── Workflow Graph — issue tree visualization ── */}
-      {filteredIssues.length > 0 && agents && (
-        <WorkflowGraphSafe
-          issues={filteredIssues}
-          agents={agents}
-          onApprove={(id) => unblockMutation.mutate({ issueId: id, action: "approve" })}
-          onReject={(id) => unblockMutation.mutate({ issueId: id, action: "reject" })}
-          onRevision={(id) => unblockMutation.mutate({ issueId: id, action: "revision" })}
-          isPending={unblockMutation.isPending}
-          failedIssueIds={failedIssueIds}
-          failedIssueErrors={failedIssueErrors}
-        />
-      )}
+      {/* ── Workflow Graphs — per-project visualization ── */}
+      {issues && agents && (() => {
+        const wfProps = {
+          agents,
+          onApprove: (id: string) => unblockMutation.mutate({ issueId: id, action: "approve" }),
+          onReject: (id: string) => unblockMutation.mutate({ issueId: id, action: "reject" }),
+          onRevision: (id: string) => unblockMutation.mutate({ issueId: id, action: "revision" }),
+          isPending: unblockMutation.isPending,
+          failedIssueIds,
+          failedIssueErrors,
+          onCancelRun: handleCancelRun,
+        };
 
-      {/* ── Active runs banner ──────────────────── */}
-      {activeRuns.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {activeRuns.map((run) => (
-            <div key={run.id} className="flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] px-3 py-1.5 text-xs">
-              <span className="relative flex h-2 w-2 shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
-              </span>
-              <Link to={`/agents/${run.agentId}`} className="font-medium text-foreground hover:underline">{run.agentName}</Link>
-              {run.issueId && (() => {
-                const issue = filteredIssues.find((i) => i.id === run.issueId);
-                return issue ? (
-                  <span className="text-muted-foreground truncate max-w-[200px]">
-                    su {issue.identifier} {issue.title}
-                  </span>
-                ) : null;
-              })()}
-              <button
-                onClick={() => handleCancelRun(run.id)}
-                className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
-              >
-                <Square className="h-2.5 w-2.5" />
-                Stop
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+        if (selectedProjectId) {
+          // Specific project selected: show that project's graph + other projects collapsed
+          const projectRuns = activeRuns.filter((r) => {
+            if (!r.issueId) return false;
+            return filteredIssues.some((i) => i.id === r.issueId);
+          });
 
-      {/* ── Other projects — same WorkflowGraph style ── */}
-      {issues && agents && selectedProjectId && (() => {
-        const otherProjects = (projectsList ?? []).filter((p) => p.id !== selectedProjectId);
-        if (otherProjects.length === 0) return null;
-
-        return otherProjects.map((project) => {
-          const projectIssues = issues.filter((i) => i.projectId === project.id);
-          if (projectIssues.length === 0) return null;
+          const otherProjects = (projectsList ?? []).filter((p) => p.id !== selectedProjectId);
 
           return (
-            <div key={project.id} className="space-y-1">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                {project.name}
-              </h3>
-              <WorkflowGraphSafe
-                issues={projectIssues}
-                agents={agents}
-                onApprove={(id) => unblockMutation.mutate({ issueId: id, action: "approve" })}
-                onReject={(id) => unblockMutation.mutate({ issueId: id, action: "reject" })}
-                onRevision={(id) => unblockMutation.mutate({ issueId: id, action: "revision" })}
-                isPending={unblockMutation.isPending}
-                failedIssueIds={failedIssueIds}
-                failedIssueErrors={failedIssueErrors}
-              />
-            </div>
+            <>
+              {filteredIssues.length > 0 && (
+                <WorkflowGraphSafe
+                  issues={filteredIssues}
+                  activeRuns={projectRuns}
+                  {...wfProps}
+                />
+              )}
+              {otherProjects.map((project) => {
+                const projectIssues = issues.filter((i) => i.projectId === project.id);
+                if (projectIssues.length === 0) return null;
+                const projRuns = activeRuns.filter((r) => r.issueId && projectIssues.some((i) => i.id === r.issueId));
+                return (
+                  <CollapsibleProjectSection key={project.id} name={project.name} issueCount={projectIssues.length} activeRunCount={projRuns.length}>
+                    <WorkflowGraphSafe
+                      issues={projectIssues}
+                      activeRuns={projRuns}
+                      {...wfProps}
+                    />
+                  </CollapsibleProjectSection>
+                );
+              })}
+            </>
           );
-        });
-      })()}
+        }
 
-      {/* ── All projects view (no filter) — show per-project WorkflowGraphs ── */}
-      {issues && agents && !selectedProjectId && projectsList && projectsList.length > 1 && (() => {
-        // When viewing "all projects", the primary WorkflowGraph above already shows everything.
-        // Show unassigned issues separately if they exist.
-        const unassigned = issues.filter((i) => !i.projectId);
-        if (unassigned.length === 0) return null;
+        // "All projects" view — each project gets its own collapsible section
+        const projects = projectsList ?? [];
+        // Group issues by project
+        const issuesByProject = new Map<string | null, Issue[]>();
+        for (const issue of issues) {
+          const key = issue.projectId ?? null;
+          if (!issuesByProject.has(key)) issuesByProject.set(key, []);
+          issuesByProject.get(key)!.push(issue);
+        }
+
+        if (projects.length <= 1 && !issuesByProject.has(null)) {
+          // Single project or no projects — show all in one graph
+          const allRuns = activeRuns.filter((r) => r.issueId && issues.some((i) => i.id === r.issueId));
+          return issues.length > 0 ? (
+            <WorkflowGraphSafe issues={issues} activeRuns={allRuns} {...wfProps} />
+          ) : null;
+        }
 
         return (
-          <div className="space-y-1">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Senza progetto
-            </h3>
-            <WorkflowGraphSafe
-              issues={unassigned}
-              agents={agents}
-              onApprove={(id) => unblockMutation.mutate({ issueId: id, action: "approve" })}
-              onReject={(id) => unblockMutation.mutate({ issueId: id, action: "reject" })}
-              onRevision={(id) => unblockMutation.mutate({ issueId: id, action: "revision" })}
-              isPending={unblockMutation.isPending}
-              failedIssueIds={failedIssueIds}
-              failedIssueErrors={failedIssueErrors}
-            />
+          <>
+            {projects.map((project) => {
+              const projectIssues = issuesByProject.get(project.id) ?? [];
+              if (projectIssues.length === 0) return null;
+              const projRuns = activeRuns.filter((r) => r.issueId && projectIssues.some((i) => i.id === r.issueId));
+              return (
+                <CollapsibleProjectSection key={project.id} name={project.name} issueCount={projectIssues.length} activeRunCount={projRuns.length}>
+                  <WorkflowGraphSafe
+                    issues={projectIssues}
+                    activeRuns={projRuns}
+                    {...wfProps}
+                  />
+                </CollapsibleProjectSection>
+              );
+            })}
+            {/* Unassigned issues */}
+            {(() => {
+              const unassigned = issuesByProject.get(null) ?? [];
+              if (unassigned.length === 0) return null;
+              const unassignedRuns = activeRuns.filter((r) => r.issueId && unassigned.some((i) => i.id === r.issueId));
+              return (
+                <CollapsibleProjectSection name="Senza progetto" issueCount={unassigned.length} activeRunCount={unassignedRuns.length}>
+                  <WorkflowGraphSafe
+                    issues={unassigned}
+                    activeRuns={unassignedRuns}
+                    {...wfProps}
+                  />
+                </CollapsibleProjectSection>
+              );
+            })()}
+          </>
+        );
+      })()}
+
+      {/* ── Orphan active runs (not linked to any issue) ── */}
+      {(() => {
+        const orphanRuns = activeRuns.filter((r) => !r.issueId);
+        if (orphanRuns.length === 0) return null;
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {orphanRuns.map((run) => (
+              <div key={run.id} className="flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] px-3 py-1.5 text-xs">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
+                </span>
+                <Link to={`/agents/${run.agentId}`} className="font-medium text-foreground hover:underline">{run.agentName}</Link>
+                <button
+                  onClick={() => handleCancelRun(run.id)}
+                  className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+                >
+                  <Square className="h-2.5 w-2.5" />
+                  Stop
+                </button>
+              </div>
+            ))}
           </div>
         );
       })()}
 
       {/* ── Fallback: recent issues only when no workflow graph visible ── */}
       {filteredIssues.length > 0 && agents && (() => {
-        // Check if WorkflowGraph would render (same logic as buildTree)
+        // Check if WorkflowGraph would render (same logic as buildTree — all statuses)
         const childIds = new Set(filteredIssues.filter((i) => i.parentId).map((i) => i.parentId!));
         const hasWorkflowRoots = filteredIssues.some((i) =>
-          !i.parentId && childIds.has(i.id) &&
-          (i.status === "in_progress" || i.status === "blocked" || i.status === "todo" || i.status === "done")
+          !i.parentId && childIds.has(i.id),
         );
         // Also check for standalone active issues (no parent, no children)
         const hasStandaloneRoots = filteredIssues.some((i) =>
