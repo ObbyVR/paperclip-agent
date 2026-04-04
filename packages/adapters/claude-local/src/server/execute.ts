@@ -391,15 +391,44 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+
+  // Issue brief injection: when the agent is woken up because an issue was assigned
+  // (or a comment mentioned it), the brief lives in context.issueDescription but the
+  // default promptTemplate does not reference it. Inject it explicitly so the model
+  // actually sees the task instead of just "Continue your Paperclip work." This mirrors
+  // what the direct_llm adapter does with the same context field.
+  const issueDescription = asString(context.issueDescription, "").trim();
+  const issueTitle = asString(context.issueTitle, "").trim();
+  const issueIdentifier = asString(context.issueIdentifier, "").trim();
+  const wakeReason = asString(context.wakeReason, "").trim();
+  const shouldInjectIssueBrief =
+    issueDescription.length > 0 &&
+    (wakeReason === "issue_assigned" || wakeReason === "issue_comment_mentioned");
+  const issueBriefSection = shouldInjectIssueBrief
+    ? [
+        "## Task assegnato",
+        issueIdentifier || issueTitle
+          ? `**${[issueIdentifier, issueTitle].filter(Boolean).join(" — ")}**`
+          : "",
+        "",
+        issueDescription,
+      ]
+        .filter((line) => line.length > 0 || line === "")
+        .join("\n")
+        .trim()
+    : "";
+
   const prompt = joinPromptSections([
     renderedBootstrapPrompt,
     sessionHandoffNote,
+    issueBriefSection,
     renderedPrompt,
   ]);
   const promptMetrics = {
     promptChars: prompt.length,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,
+    issueBriefChars: issueBriefSection.length,
     heartbeatPromptChars: renderedPrompt.length,
   };
 

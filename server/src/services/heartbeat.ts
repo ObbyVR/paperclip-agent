@@ -2086,7 +2086,12 @@ export function heartbeatService(db: Db) {
           executionWorkspacePreference: issueContext.executionWorkspacePreference,
         }
       : null;
-    // Expose issue title & description to adapter context (used by direct_llm for web agency workflows)
+    // Expose issue identifier, title & description to adapter context.
+    // Consumed by direct_llm and claude_local adapters to inject the task brief into the
+    // first user message when an agent is woken up via issue_assigned / issue_comment_mentioned.
+    // Without this, the adapter prompt template only says "Continue your Paperclip work." and
+    // the model never sees what it's supposed to do (see heartbeat-runs with input_tokens≈4).
+    if (issueContext?.identifier) context.issueIdentifier = issueContext.identifier;
     if (issueContext?.title) context.issueTitle = issueContext.title;
     if (issueContext?.description) context.issueDescription = issueContext.description;
     const existingExecutionWorkspace =
