@@ -104,13 +104,6 @@ export function Sidebar() {
 
         <SidebarSection label={t("nav.work")}>
           <SidebarNavItem to="/issues" label={t("nav.issues")} icon={CircleDot} badge={inboxBadge.mineIssues > 0 ? inboxBadge.mineIssues : undefined} badgeTone="danger" />
-          <SidebarNavItem
-            to="/inbox/all?category=richiesta"
-            label={t("nav.approvals", "Approvazioni")}
-            icon={ShieldCheck}
-            badge={inboxBadge.approvals > 0 ? inboxBadge.approvals : undefined}
-            badgeTone="danger"
-          />
           <SidebarNavItem to="/routines" label={t("nav.routines")} icon={Repeat} textBadge="Beta" textBadgeTone="amber" />
           <SidebarNavItem to="/goals" label={t("nav.goals")} icon={Target} />
         </SidebarSection>
