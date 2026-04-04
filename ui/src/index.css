@@ -540,6 +540,44 @@ a.paperclip-mention-chip[data-mention-kind="agent"]::before {
   --tw-prose-invert-pre-code: #cdd6f4;
 }
 
+/* Code block wrapper for copy button positioning */
+.paperclip-markdown .code-block-wrapper {
+  position: relative;
+  margin: 0.4rem 0;
+}
+
+.paperclip-markdown .code-block-wrapper pre {
+  margin: 0 !important;
+}
+
+.paperclip-markdown .code-block-wrapper .copy-code-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(30, 30, 46, 0.85);
+  color: #a6adc8;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.paperclip-markdown .code-block-wrapper:hover .copy-code-btn {
+  opacity: 1;
+}
+
+.paperclip-markdown .code-block-wrapper .copy-code-btn:hover {
+  background: rgba(50, 50, 70, 0.95);
+  color: #cdd6f4;
+}
+
 .paperclip-markdown pre {
   border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent) !important;
   border-radius: calc(var(--radius) - 3px) !important;

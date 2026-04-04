@@ -681,6 +681,12 @@
     "noRecentItems": "Nessun elemento recente.",
     "noMatchingItems": "Nessun elemento corrisponde ai filtri."
   },
+  "heartbeatToggle": {
+    "enableAll": "Attiva tutti gli heartbeat",
+    "disableAll": "Disattiva tutti gli heartbeat",
+    "activeCount": "{{count}}/{{total}} attivi",
+    "allOff": "Heartbeat spento"
+  },
   "approvalPanel": {
     "title": "Approvazioni",
     "waiting": "in attesa",

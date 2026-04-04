@@ -264,7 +264,7 @@ export function Dashboard() {
           </Link>
           <Link to="/approvals" className="flex items-center gap-1 hover:text-foreground">
             <ShieldCheck className="h-3 w-3" />
-            <span className="font-semibold text-foreground">{data.pendingApprovals + data.budgets.pendingApprovals}</span>
+            <span className="font-semibold text-foreground">{data.pendingApprovals + data.budgets.pendingApprovals + (issues?.filter((i) => i.status === "in_review").length ?? 0)}</span>
             approvazioni
           </Link>
         </div>
@@ -376,8 +376,7 @@ export function Dashboard() {
         const childIds = new Set(filteredIssues.filter((i) => i.parentId).map((i) => i.parentId!));
         const hasWorkflowRoots = filteredIssues.some((i) =>
           !i.parentId && childIds.has(i.id) &&
-          (i.status === "in_progress" || i.status === "blocked" || i.status === "todo" ||
-           (i.status === "done" && filteredIssues.some((c) => c.parentId === i.id && c.status !== "done" && c.status !== "cancelled")))
+          (i.status === "in_progress" || i.status === "blocked" || i.status === "todo" || i.status === "done")
         );
         // Also check for standalone active issues (no parent, no children)
         const hasStandaloneRoots = filteredIssues.some((i) =>

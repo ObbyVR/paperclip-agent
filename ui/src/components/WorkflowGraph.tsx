@@ -67,6 +67,7 @@ const DEPT_COLORS: Record<string, { border: string; bg: string; text: string; do
 /* State-override colors — applied over department colors */
 const STATE_COLORS = {
   approval: { border: "border-amber-500/50", bg: "bg-amber-500/[0.08]", ring: "ring-amber-500/40" },
+  review: { border: "border-violet-500/50", bg: "bg-violet-500/[0.08]", ring: "ring-violet-500/40" },
   error: { border: "border-red-500/50", bg: "bg-red-500/[0.08]", ring: "ring-red-500/40" },
 };
 
@@ -106,10 +107,9 @@ function buildTree(issues: Issue[], agents: Agent[], viewMode: ViewMode): TreeNo
     (i.status === "in_progress" || i.status === "blocked" || i.status === "todo"),
   );
 
-  // Also include done roots that have non-done children (recently completed workflows)
+  // Also include done roots that have children (completed or partially completed workflows)
   const doneRoots = issues.filter((i) =>
-    !i.parentId && childIds.has(i.id) && i.status === "done" &&
-    issues.some((c) => c.parentId === i.id && c.status !== "done" && c.status !== "cancelled"),
+    !i.parentId && childIds.has(i.id) && i.status === "done",
   );
 
   // Standalone issues: no parent, no children, still active — show as single nodes
@@ -157,7 +157,14 @@ function buildTree(issues: Issue[], agents: Agent[], viewMode: ViewMode): TreeNo
 
 /* ── Layout algorithm ───────────────────────── */
 
-function layoutTree(root: TreeNode): { root: TreeNode; totalWidth: number; totalHeight: number; treeHeight: number; compactNodes: TreeNode[] } {
+function cloneTree(node: TreeNode): TreeNode {
+  return { ...node, children: node.children.map(cloneTree) };
+}
+
+function layoutTree(inputRoot: TreeNode): { root: TreeNode; totalWidth: number; totalHeight: number; treeHeight: number; compactNodes: TreeNode[] } {
+  // Clone to avoid mutating the memoized tree (React StrictMode calls useMemo twice)
+  const root = cloneTree(inputRoot);
+
   // Separate completed children into compact lane
   const compactNodes: TreeNode[] = [];
   separateCompactNodes(root, compactNodes);
@@ -312,6 +319,7 @@ function StatusDot({ status, hasFailed }: { status: string; hasFailed?: boolean 
   if (hasFailed) return <AlertTriangle className="h-3 w-3 text-red-500" />;
   if (status === "done") return <CheckCircle2 className="h-3 w-3 text-emerald-500" />;
   if (status === "blocked") return <AlertCircle className="h-3 w-3 text-amber-500 animate-pulse" />;
+  if (status === "in_review") return <AlertCircle className="h-3 w-3 text-violet-400 animate-pulse" />;
   if (status === "in_progress") return <Loader2 className="h-3 w-3 text-cyan-400 animate-spin" />;
   if (status === "cancelled") return <XCircle className="h-3 w-3 text-muted-foreground" />;
   if (status === "todo") return <Clock className="h-3 w-3 text-muted-foreground/50" />;
@@ -431,6 +439,7 @@ function NodeCard({
 }) {
   const colors = DEPT_COLORS[node.department] ?? DEPT_COLORS.general;
   const isBlocked = node.issue.status === "blocked";
+  const isInReview = node.issue.status === "in_review";
   const hasFailed = failedIssueIds.has(node.issue.id);
   const isDone = node.issue.status === "done" || node.issue.status === "cancelled";
 
@@ -439,7 +448,9 @@ function NodeCard({
     ? STATE_COLORS.error
     : isBlocked
       ? STATE_COLORS.approval
-      : null;
+      : isInReview
+        ? STATE_COLORS.review
+        : null;
 
   // Extract workflow tag like [W1.1]
   const tagMatch = node.issue.title.match(/\[([^\]]+)\]/);
@@ -504,7 +515,7 @@ function NodeCard({
         stateOverride ? stateOverride.bg : colors.bg,
         "border border-border/40",
         stateOverride && `ring-1 ${stateOverride.ring}`,
-        isBlocked && !hasFailed && "animate-[pulse-blocked_2s_ease-in-out_infinite]",
+        (isBlocked || isInReview) && !hasFailed && "animate-[pulse-blocked_2s_ease-in-out_infinite]",
         hasFailed && "animate-[pulse-blocked_1.5s_ease-in-out_infinite]",
         isDone && !hasFailed && "opacity-50",
       )}
@@ -514,7 +525,7 @@ function NodeCard({
       <div className="flex items-center gap-1.5 mb-0.5">
         <StatusDot status={node.issue.status} hasFailed={hasFailed} />
         <span className="text-[10px] font-mono text-muted-foreground">{node.issue.identifier}</span>
-        {tag && <span className={cn("text-[10px] font-medium", stateOverride ? (hasFailed ? "text-red-400" : "text-amber-400") : colors.text)}>{tag}</span>}
+        {tag && <span className={cn("text-[10px] font-medium", stateOverride ? (hasFailed ? "text-red-400" : isInReview ? "text-violet-400" : "text-amber-400") : colors.text)}>{tag}</span>}
       </div>
       {/* Row 2: title */}
       <p className="text-xs font-medium truncate leading-tight">{cleanTitle}</p>
@@ -529,6 +540,7 @@ function NodeCard({
           "text-[9px] font-medium px-1 py-0.5 rounded",
           hasFailed ? "bg-red-500/20 text-red-400" :
           isBlocked ? "bg-amber-500/20 text-amber-400" :
+          isInReview ? "bg-violet-500/20 text-violet-400" :
           node.issue.status === "in_progress" ? "bg-cyan-500/20 text-cyan-400" :
           isDone ? "bg-emerald-500/20 text-emerald-400" :
           "bg-muted text-muted-foreground",
@@ -681,6 +693,7 @@ function BlockedPopover({
 function Legend() {
   const items = [
     { color: "bg-amber-500", label: "Da approvare" },
+    { color: "bg-violet-500", label: "In revisione" },
     { color: "bg-red-500", label: "Errore" },
     { color: "bg-cyan-400", label: "In corso" },
     { color: "bg-emerald-500", label: "Completata" },

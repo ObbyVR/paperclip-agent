@@ -54,6 +54,8 @@ import { issueStatusText, issueStatusTextDefault, priorityColor, priorityColorDe
 import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "./MarkdownEditor";
 import { AgentIcon } from "./AgentIconPicker";
 import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySelector";
+import { AiTierSelector } from "./AiTierSelector";
+import { getGlobalAiTier, getTierDef, type AiTierKey } from "../lib/aiTiers";
 
 const DRAFT_KEY = "paperclip:issue-draft";
 const DEBOUNCE_MS = 800;
@@ -282,6 +284,7 @@ export function NewIssueDialog() {
   const [projectId, setProjectId] = useState("");
   const [projectWorkspaceId, setProjectWorkspaceId] = useState("");
   const [assigneeOptionsOpen, setAssigneeOptionsOpen] = useState(false);
+  const [aiTier, setAiTier] = useState<AiTierKey>(getGlobalAiTier);
   const [assigneeModelOverride, setAssigneeModelOverride] = useState("");
   const [assigneeThinkingEffort, setAssigneeThinkingEffort] = useState("");
   const [assigneeChrome, setAssigneeChrome] = useState(false);
@@ -634,10 +637,20 @@ export function NewIssueDialog() {
 
   function handleSubmit() {
     if (!effectiveCompanyId || !title.trim() || createIssue.isPending) return;
+    // Resolve model/effort from tier preset or manual selection
+    let effectiveModel = assigneeModelOverride;
+    let effectiveEffort = assigneeThinkingEffort;
+    if (aiTier !== "custom") {
+      const tierDef = getTierDef(aiTier);
+      if (tierDef.config) {
+        effectiveModel = tierDef.config.model;
+        effectiveEffort = tierDef.config.effort;
+      }
+    }
     const assigneeAdapterOverrides = buildAssigneeAdapterOverrides({
       adapterType: assigneeAdapterType,
-      modelOverride: assigneeModelOverride,
-      thinkingEffortOverride: assigneeThinkingEffort,
+      modelOverride: effectiveModel,
+      thinkingEffortOverride: effectiveEffort,
       chrome: assigneeChrome,
     });
     const selectedProject = orderedProjects.find((project) => project.id === projectId);
@@ -1165,14 +1178,23 @@ export function NewIssueDialog() {
 
         {supportsAssigneeOverrides && (
           <div className="px-4 pb-2 shrink-0">
-            <button
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setAssigneeOptionsOpen((open) => !open)}
-            >
-              {assigneeOptionsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              {assigneeOptionsTitle}
-            </button>
-            {assigneeOptionsOpen && (
+            {/* AI Tier selector */}
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs text-muted-foreground">Livello AI:</span>
+              <AiTierSelector value={aiTier} onChange={setAiTier} size="sm" />
+            </div>
+
+            {/* Advanced config — only shown for "custom" tier */}
+            {aiTier === "custom" && (
+              <button
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setAssigneeOptionsOpen((open) => !open)}
+              >
+                {assigneeOptionsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                {assigneeOptionsTitle}
+              </button>
+            )}
+            {aiTier === "custom" && assigneeOptionsOpen && (
               <div className="mt-2 rounded-md border border-border p-3 bg-muted/20 space-y-3">
                 <div className="space-y-1.5">
                   <div className="text-xs text-muted-foreground">Model</div>

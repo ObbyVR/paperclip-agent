@@ -1,9 +1,10 @@
-import { isValidElement, useEffect, useId, useState, type ReactNode } from "react";
+import { isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "../lib/utils";
 import { useTheme } from "../context/ThemeContext";
 import { mentionChipInlineStyle, parseMentionChipHref } from "../lib/mention-chips";
+import { Copy, Check } from "lucide-react";
 
 interface MarkdownBodyProps {
   children: string;
@@ -91,6 +92,33 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
   );
 }
 
+function CopyCodeButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard not available */
+    }
+  }, [text]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="copy-code-btn"
+      aria-label="Copy code"
+    >
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+    </button>
+  );
+}
+
 export function MarkdownBody({ children, className, resolveImageSrc }: MarkdownBodyProps) {
   const { theme } = useTheme();
   const components: Components = {
@@ -99,7 +127,13 @@ export function MarkdownBody({ children, className, resolveImageSrc }: MarkdownB
       if (mermaidSource) {
         return <MermaidDiagramBlock source={mermaidSource} darkMode={theme === "dark"} />;
       }
-      return <pre {...preProps}>{preChildren}</pre>;
+      const codeText = flattenText(preChildren).replace(/\n$/, "");
+      return (
+        <div className="code-block-wrapper">
+          <CopyCodeButton text={codeText} />
+          <pre {...preProps}>{preChildren}</pre>
+        </div>
+      );
     },
     a: ({ href, children: linkChildren }) => {
       const parsed = href ? parseMentionChipHref(href) : null;

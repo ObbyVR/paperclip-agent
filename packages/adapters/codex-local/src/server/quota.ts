@@ -419,6 +419,13 @@ class CodexRpcClient {
   private stderr = "";
 
   constructor() {
+    this.proc.on("error", (err) => {
+      for (const request of this.pending.values()) {
+        clearTimeout(request.timer);
+        request.reject(new Error(`codex spawn error: ${err.message}`));
+      }
+      this.pending.clear();
+    });
     this.proc.stdout.setEncoding("utf8");
     this.proc.stderr.setEncoding("utf8");
     this.proc.stdout.on("data", (chunk: string) => this.onStdout(chunk));

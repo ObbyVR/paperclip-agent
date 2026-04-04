@@ -578,5 +578,11 @@
     "it": "Italiano",
     "en": "English",
     "switchLang": "Switch language"
+  },
+  "heartbeatToggle": {
+    "enableAll": "Enable all heartbeats",
+    "disableAll": "Disable all heartbeats",
+    "activeCount": "{{count}}/{{total}} active",
+    "allOff": "Heartbeat off"
   }
 }
