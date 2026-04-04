@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { pickTextColorForPillBg } from "@/lib/color-contrast";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
@@ -248,6 +248,27 @@ export function IssuesList({
   });
   const [assigneePickerIssueId, setAssigneePickerIssueId] = useState<string | null>(null);
   const [assigneeSearch, setAssigneeSearch] = useState("");
+  const [fadingOutIssues, setFadingOutIssues] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => issuesApi.markRead(id),
+    onMutate: (id) => {
+      setFadingOutIssues((prev) => new Set(prev).add(id));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+    },
+    onSettled: (_data, _error, id) => {
+      setTimeout(() => {
+        setFadingOutIssues((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, 300);
+    },
+  });
   const [issueSearch, setIssueSearch] = useState(initialSearch ?? "");
   const normalizedIssueSearch = issueSearch.trim();
 
@@ -877,6 +898,14 @@ export function IssuesList({
                     </>
                   )}
                   trailingMeta={formatDate(issue.createdAt)}
+                  unreadState={
+                    issue.isUnreadForMe && !fadingOutIssues.has(issue.id)
+                      ? "visible"
+                      : fadingOutIssues.has(issue.id)
+                        ? "fading"
+                        : "hidden"
+                  }
+                  onMarkRead={() => markReadMutation.mutate(issue.id)}
                 />
               ))}
             </CollapsibleContent>

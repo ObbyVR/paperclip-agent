@@ -23,6 +23,7 @@ import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { MarkdownBody } from "../components/MarkdownBody";
+import { WorkspaceFileBrowser } from "../components/WorkspaceFileBrowser";
 import type { Issue, Agent } from "@paperclipai/shared";
 
 type StatusFilter = "pending" | "in_review" | "approved" | "rejected" | "blocked" | "all";
@@ -41,6 +42,8 @@ function BlockedIssueCard({
   onReject,
   onRevision,
   isPending,
+  isUnread,
+  onMarkRead,
 }: {
   issue: Issue;
   agents: Agent[];
@@ -49,6 +52,8 @@ function BlockedIssueCard({
   onReject: () => void;
   onRevision: () => void;
   isPending: boolean;
+  isUnread?: boolean;
+  onMarkRead?: () => void;
 }) {
   const [openTab, setOpenTab] = useState<AccordionTab>(null);
   const assignee = issue.assigneeAgentId
@@ -76,9 +81,29 @@ function BlockedIssueCard({
   }, [issue, allIssues]);
 
   return (
-    <div className="border border-amber-500/20 bg-amber-500/[0.03] rounded-lg overflow-hidden">
+    <div className={cn(
+      "border rounded-lg overflow-hidden",
+      isUnread ? "border-amber-500/30 bg-amber-500/[0.05]" : "border-amber-500/20 bg-amber-500/[0.03]",
+    )}>
       {/* ── Compact header ── */}
       <div className="px-4 py-3">
+        {/* Unread indicator */}
+        {isUnread && (
+          <div className="flex items-center gap-1.5 mb-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMarkRead?.();
+              }}
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-blue-500/20"
+              aria-label="Mark as read"
+            >
+              <span className="block h-2 w-2 rounded-full bg-blue-600 dark:bg-blue-400" />
+            </button>
+            <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400">Nuovo</span>
+          </div>
+        )}
         {/* Parent chain breadcrumb */}
         {parentChain.length > 0 && (
           <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap mb-2">
@@ -391,6 +416,13 @@ function TabOutput({ issue }: { issue: Issue }) {
           )}
         </div>
 
+        {/* Workspace files (always show alongside docs if available) */}
+        {issue.companyId && (
+          <div className="px-4 pb-3">
+            <WorkspaceFileBrowser companyId={issue.companyId} issueId={issue.id} />
+          </div>
+        )}
+
         {/* Fullscreen dialog */}
         <Dialog open={fullscreen} onOpenChange={setFullscreen}>
           <DialogContent
@@ -429,8 +461,20 @@ function TabOutput({ issue }: { issue: Issue }) {
   // Run output fallback
   if (runContent) {
     return (
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 space-y-3">
         <InlineOutputPreview content={runContent} title={issue.title} />
+        {issue.companyId && (
+          <WorkspaceFileBrowser companyId={issue.companyId} issueId={issue.id} />
+        )}
+      </div>
+    );
+  }
+
+  // Workspace files fallback (e.g., web designer HTML/images)
+  if (issue.companyId) {
+    return (
+      <div className="px-4 py-3">
+        <WorkspaceFileBrowser companyId={issue.companyId} issueId={issue.id} />
       </div>
     );
   }
@@ -680,7 +724,7 @@ export function Approvals() {
 
   const totalApproved = approvedApprovals.length + founderApprovedIssues.length;
   const totalRejected = rejectedApprovals.length + founderRejectedIssues.length;
-  const pendingCount = pendingApprovals.length + blockedIssues.length;
+  const pendingCount = pendingApprovals.length + blockedIssues.length + inReviewIssues.length;
 
   // ── Choose what to display ──
 
@@ -704,7 +748,7 @@ export function Approvals() {
   }, [statusFilter, pendingApprovals, approvedApprovals, rejectedApprovals, approvals]);
 
   const showBlockedSection = statusFilter === "pending" || statusFilter === "blocked";
-  const showInReviewSection = statusFilter === "in_review";
+  const showInReviewSection = statusFilter === "pending" || statusFilter === "in_review";
 
   // ── Mutations ──
 
@@ -712,13 +756,43 @@ export function Approvals() {
     mutationFn: async ({
       issueId,
       action,
+      assigneeAgentId,
+      assigneeUserId,
     }: {
       issueId: string;
       action: "approve" | "reject" | "revision";
+      assigneeAgentId?: string | null;
+      assigneeUserId?: string | null;
     }) => {
       if (action === "revision") {
         await issuesApi.addComment(issueId, "🔄 Revisione richiesta dal founder. Rielabora l'output e ripresenta.");
-        return issuesApi.update(issueId, { status: "in_progress" });
+
+        // Resolve the agent to re-assign: use current assignee, or find the last agent who commented
+        let agentId = assigneeAgentId;
+        if (!agentId) {
+          const comments = await issuesApi.listComments(issueId);
+          const lastAgentComment = [...comments].reverse().find((c) => c.authorAgentId);
+          agentId = lastAgentComment?.authorAgentId ?? null;
+        }
+
+        const updatePayload: Record<string, unknown> = { status: agentId ? "in_progress" : "todo" };
+        if (agentId) updatePayload.assigneeAgentId = agentId;
+        else if (assigneeUserId) updatePayload.assigneeUserId = assigneeUserId;
+        const result = await issuesApi.update(issueId, updatePayload);
+
+        // Wake the agent so it picks up the revision immediately
+        // Use idempotencyKey to prevent duplicate wakeups from rapid clicks
+        if (agentId) {
+          await agentsApi.wakeup(agentId, {
+            source: "assignment",
+            triggerDetail: "system",
+            reason: "Revision requested by founder",
+            payload: { issueId },
+            idempotencyKey: `revision:${issueId}`,
+          });
+        }
+
+        return result;
       }
       const newStatus = action === "approve" ? "done" : "cancelled";
       const comment =
@@ -753,6 +827,13 @@ export function Approvals() {
     },
     onError: (err) => {
       setActionError(err instanceof Error ? err.message : "Failed to reject");
+    },
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => issuesApi.markRead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
     },
   });
 
@@ -968,9 +1049,16 @@ export function Approvals() {
                         unblockMutation.mutate({ issueId: issue.id, action: "reject" })
                       }
                       onRevision={() =>
-                        unblockMutation.mutate({ issueId: issue.id, action: "revision" })
+                        unblockMutation.mutate({
+                          issueId: issue.id,
+                          action: "revision",
+                          assigneeAgentId: issue.assigneeAgentId,
+                          assigneeUserId: issue.assigneeUserId,
+                        })
                       }
                       isPending={unblockMutation.isPending}
+                      isUnread={issue.isUnreadForMe}
+                      onMarkRead={() => markReadMutation.mutate(issue.id)}
                     />
                   ))}
                 </div>
@@ -1015,9 +1103,16 @@ export function Approvals() {
                         unblockMutation.mutate({ issueId: issue.id, action: "reject" })
                       }
                       onRevision={() =>
-                        unblockMutation.mutate({ issueId: issue.id, action: "revision" })
+                        unblockMutation.mutate({
+                          issueId: issue.id,
+                          action: "revision",
+                          assigneeAgentId: issue.assigneeAgentId,
+                          assigneeUserId: issue.assigneeUserId,
+                        })
                       }
                       isPending={unblockMutation.isPending}
+                      isUnread={issue.isUnreadForMe}
+                      onMarkRead={() => markReadMutation.mutate(issue.id)}
                     />
                   ))}
                 </div>

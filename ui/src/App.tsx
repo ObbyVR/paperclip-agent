@@ -163,6 +163,7 @@ function boardRoutes() {
       <Route path="approvals/approved" element={<Approvals />} />
       <Route path="approvals/rejected" element={<Approvals />} />
       <Route path="approvals/blocked" element={<Approvals />} />
+      <Route path="approvals/in_review" element={<Approvals />} />
       <Route path="approvals/all" element={<Approvals />} />
       <Route path="approvals/:approvalId" element={<ApprovalDetail />} />
       <Route path="costs" element={<Costs />} />

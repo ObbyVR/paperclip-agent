@@ -167,10 +167,10 @@ function IssueDetailAccordion({
     <div className="border border-border/50 rounded-lg overflow-hidden">
       {/* Tab bar */}
       <div className="flex bg-card/30">
-        <AccordionBtn label="Output" count={(issue.documents?.length ?? 0) + runResults.length} isOpen={openTab === "output"} onClick={() => toggle("output")} />
+        <AccordionBtn label="Output" count={(issue.documents?.length ?? 0) + runResults.length} isOpen={openTab === "output"} onClick={() => toggle("output")} alert={(issue.isUnreadForMe || issue.status === "in_review") && openTab !== "output"} />
         {hasBriefing && <AccordionBtn label="Briefing" isOpen={openTab === "briefing"} onClick={() => toggle("briefing")} />}
         <AccordionBtn label="Commenti" count={commentsWithRunMeta.length} isOpen={openTab === "commenti"} onClick={() => toggle("commenti")} alert={issue.isUnreadForMe && openTab !== "commenti"} />
-        <AccordionBtn label="Attivita'" isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} />
+        <AccordionBtn label="Attivita'" isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} alert={issue.isUnreadForMe && openTab !== "attivita"} />
         {hasSubIssues && <AccordionBtn label="Sub-issue" count={childIssues.length} isOpen={openTab === "sub-issues"} onClick={() => toggle("sub-issues")} />}
       </div>
 

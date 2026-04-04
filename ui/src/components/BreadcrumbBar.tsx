@@ -17,6 +17,7 @@ import { Fragment, useMemo, useState, useCallback, useEffect } from "react";
 import { PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
 import { PluginLauncherOutlet, usePluginLaunchers } from "@/plugins/launchers";
 import { HeartbeatGlobalToggle } from "./HeartbeatGlobalToggle";
+import { NotificationBell } from "./NotificationBell";
 import { AiTierSelector } from "./AiTierSelector";
 import { getGlobalAiTier, setGlobalAiTier, type AiTierKey } from "../lib/aiTiers";
 import { instanceSettingsApi } from "../api/instanceSettings";
@@ -77,6 +78,7 @@ export function BreadcrumbBar() {
   if (breadcrumbs.length === 0) {
     return (
       <div className="border-b border-border px-4 md:px-6 h-12 shrink-0 flex items-center justify-end gap-2">
+        <NotificationBell />
         {tierSelector}
         <HeartbeatGlobalToggle />
         {globalToolbarSlots}
@@ -106,6 +108,7 @@ export function BreadcrumbBar() {
             {breadcrumbs[0].label}
           </h1>
         </div>
+        <NotificationBell />
         {tierSelector}
         <HeartbeatGlobalToggle />
         {globalToolbarSlots}
