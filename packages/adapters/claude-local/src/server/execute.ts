@@ -392,18 +392,22 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
 
-  // Issue brief injection: when the agent is woken up because an issue was assigned
-  // (or a comment mentioned it), the brief lives in context.issueDescription but the
-  // default promptTemplate does not reference it. Inject it explicitly so the model
-  // actually sees the task instead of just "Continue your Paperclip work." This mirrors
-  // what the direct_llm adapter does with the same context field.
+  // Issue brief injection: whenever heartbeat has attached issueDescription to the
+  // adapter context, inject it into the prompt. The default promptTemplate does not
+  // reference context.issueDescription, so without this the model only sees
+  // "Continue your Paperclip work." and replies generically. This mirrors what the
+  // direct_llm adapter does with the same context field.
+  //
+  // Rule: if heartbeat put the description in the context, that is already the signal
+  // that this run is about a specific issue — we do not also filter by wakeReason.
+  // The original S38 fix was whitelisted to issue_assigned / issue_comment_mentioned,
+  // which left issue_commented (the most common reason, ~50% silent), issue_checked_out,
+  // approval_approved, issue_reopened_via_comment and process_lost_retry silently
+  // broken. Presence of issueDescription is the only predicate that matters.
   const issueDescription = asString(context.issueDescription, "").trim();
   const issueTitle = asString(context.issueTitle, "").trim();
   const issueIdentifier = asString(context.issueIdentifier, "").trim();
-  const wakeReason = asString(context.wakeReason, "").trim();
-  const shouldInjectIssueBrief =
-    issueDescription.length > 0 &&
-    (wakeReason === "issue_assigned" || wakeReason === "issue_comment_mentioned");
+  const shouldInjectIssueBrief = issueDescription.length > 0;
   const issueBriefSection = shouldInjectIssueBrief
     ? [
         "## Task assegnato",
