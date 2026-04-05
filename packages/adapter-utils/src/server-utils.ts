@@ -1,5 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { constants as fsConstants, promises as fs, type Dirent } from "node:fs";
+import {
+  accessSync,
+  constants as fsConstants,
+  promises as fs,
+  type Dirent,
+} from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type {
   AdapterSkillEntry,
@@ -229,6 +235,40 @@ export function defaultPathForPlatform() {
   return "/usr/local/bin:/opt/homebrew/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin";
 }
 
+/**
+ * User-level bin directories where CLI tools (Claude Code, nvm shims, pnpm
+ * managed binaries, pipx, etc.) commonly live. These are NOT in the default
+ * PATH of GUI-launched processes on macOS, so spawned sub-processes fail to
+ * find commands like `claude`. We append them (best-effort) so adapters can
+ * resolve user-installed binaries regardless of how paperclip was started.
+ *
+ * Paths are only added if they exist on disk to keep PATH clean.
+ *
+ * Extendable via env var `PAPERCLIP_EXTRA_PATH` (same delimiter as PATH).
+ */
+function userLocalBinDirs(): string[] {
+  if (process.platform === "win32") return [];
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, ".local", "bin"),
+    path.join(home, "bin"),
+    path.join(home, ".local", "share", "claude", "versions"),
+    path.join(home, ".claude", "local"),
+    path.join(home, ".volta", "bin"),
+    path.join(home, ".cargo", "bin"),
+    path.join(home, ".bun", "bin"),
+    path.join(home, "local-node", "bin"),
+    path.join(home, "Library", "pnpm"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+  ];
+  const extra = (process.env.PAPERCLIP_EXTRA_PATH ?? "")
+    .split(":")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return [...extra, ...candidates];
+}
+
 function windowsPathExts(env: NodeJS.ProcessEnv): string[] {
   return (env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean);
 }
@@ -302,9 +342,36 @@ async function resolveSpawnTarget(
 }
 
 export function ensurePathInEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (typeof env.PATH === "string" && env.PATH.length > 0) return env;
-  if (typeof env.Path === "string" && env.Path.length > 0) return env;
-  return { ...env, PATH: defaultPathForPlatform() };
+  const delimiter = process.platform === "win32" ? ";" : ":";
+  const currentPath = (env.PATH ?? env.Path ?? "") as string;
+  const baseDirs = currentPath.split(delimiter).filter(Boolean);
+
+  // If PATH is empty, fall back to platform default; otherwise keep existing.
+  const existing = baseDirs.length > 0 ? baseDirs : defaultPathForPlatform().split(delimiter);
+
+  // Append user-level bin dirs (Claude CLI, nvm, pnpm, etc.) so that GUI- or
+  // launchd-spawned paperclip processes can still resolve user-installed
+  // binaries. Only directories that actually exist are appended.
+  const extras = userLocalBinDirs();
+  const merged: string[] = [...existing];
+  const seen = new Set(merged);
+  for (const dir of extras) {
+    if (!dir || seen.has(dir)) continue;
+    try {
+      accessSync(dir, fsConstants.F_OK);
+      merged.push(dir);
+      seen.add(dir);
+    } catch {
+      /* dir does not exist — skip silently */
+    }
+  }
+
+  const nextPath = merged.join(delimiter);
+  // Preserve original casing (Windows may use `Path`).
+  if (typeof env.Path === "string" && typeof env.PATH !== "string") {
+    return { ...env, Path: nextPath };
+  }
+  return { ...env, PATH: nextPath };
 }
 
 export async function ensureAbsoluteDirectory(
