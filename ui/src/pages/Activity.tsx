@@ -5,7 +5,7 @@ import { useNavigate, useLocation, Link } from "@/lib/router";
 import { activityApi } from "../api/activity";
 import { agentsApi } from "../api/agents";
 import { issuesApi } from "../api/issues";
-import { heartbeatsApi } from "../api/heartbeats";
+import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -18,332 +18,466 @@ import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import {
   History,
-  ChevronRight,
-  FileText,
-  Bot,
+  Search,
+  X,
+  MessageSquare,
   Zap,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  AlertTriangle,
-  XCircle,
+  ShieldCheck,
+  Cog,
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
+  User,
+  Bot,
 } from "lucide-react";
-import type { Agent, ActivityEvent, Issue } from "@paperclipai/shared";
+import type { Agent, ActivityEvent, Issue, Project } from "@paperclipai/shared";
 
-type ActivityTab = "recenti" | "in_corso" | "completate";
-const VALID_TABS: ActivityTab[] = ["recenti", "in_corso", "completate"];
+/* ══════════════════════════════════════════════════════════════════════
+   Activity feed — rebuilt S42
 
-/* ── Status-aware card styling (matches Approvals page) ── */
+   A chronological, filterable timeline of everything happening across
+   the company: comments, runs, approvals, system events. Layout
+   mirrors the Inbox page visually (same PageTabBar + chip filters +
+   compact rows) but the data flow is different: Inbox is "what needs
+   my attention", Activity is "what already happened".
 
-function cardStyle(status: string | null, hasFailed?: boolean) {
-  if (hasFailed) return {
-    border: "border-red-500/20",
-    bg: "bg-red-500/[0.03]",
-    tabBorder: "border-red-500/10",
-    tabHover: "hover:bg-red-500/5",
-    tabActive: "text-red-400 bg-red-500/[0.06]",
-  };
-  switch (status) {
-    case "blocked":
-      return {
-        border: "border-amber-500/20",
-        bg: "bg-amber-500/[0.03]",
-        tabBorder: "border-amber-500/10",
-        tabHover: "hover:bg-amber-500/5",
-        tabActive: "text-amber-400 bg-amber-500/[0.06]",
-      };
-    case "in_progress":
-      return {
-        border: "border-cyan-500/20",
-        bg: "bg-cyan-500/[0.03]",
-        tabBorder: "border-cyan-500/10",
-        tabHover: "hover:bg-cyan-500/5",
-        tabActive: "text-cyan-400 bg-cyan-500/[0.06]",
-      };
-    case "done":
-      return {
-        border: "border-emerald-500/20",
-        bg: "bg-emerald-500/[0.03]",
-        tabBorder: "border-emerald-500/10",
-        tabHover: "hover:bg-emerald-500/5",
-        tabActive: "text-emerald-400 bg-emerald-500/[0.06]",
-      };
-    case "cancelled":
-      return {
-        border: "border-border/50",
-        bg: "bg-card/30",
-        tabBorder: "border-border/30",
-        tabHover: "hover:bg-white/5",
-        tabActive: "text-muted-foreground bg-white/5",
-      };
-    default:
-      return {
-        border: "border-border/50",
-        bg: "bg-card/50",
-        tabBorder: "border-border/30",
-        tabHover: "hover:bg-white/5",
-        tabActive: "text-cyan-400 bg-cyan-500/[0.06]",
-      };
+   Three axes of filtering:
+   1. Time bucket (tab): Oggi / Ieri / Settimana / Sempre
+   2. Category (chips): Tutto / Commenti / Esecuzioni / Decisioni / Sistema
+   3. Free-form filters: search text + agent dropdown + project dropdown
+
+   Rendering groups events by local day, newest first. Consecutive
+   events for the same issue+actor within 5 minutes collapse into a
+   single summary row that the user can expand — keeps the feed
+   scannable when a workflow bursts a dozen events.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Time buckets (tab) ───────────────────────────────────────────── */
+
+type TimeBucket = "today" | "yesterday" | "week" | "all";
+const VALID_BUCKETS: TimeBucket[] = ["today", "yesterday", "week", "all"];
+
+function startOfDay(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
+function bucketForEvent(eventAt: Date, now: Date = new Date()): TimeBucket {
+  const today = startOfDay(now);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const ts = eventAt.getTime();
+  if (ts >= today.getTime()) return "today";
+  if (ts >= yesterday.getTime()) return "yesterday";
+  if (ts >= weekAgo.getTime()) return "week";
+  return "all";
+}
+
+/** Returns true if `ev` matches the selected time bucket (cumulative:
+ * "week" also includes today + yesterday). */
+function matchesBucket(ev: ActivityEvent, bucket: TimeBucket, now: Date = new Date()): boolean {
+  if (bucket === "all") return true;
+  const today = startOfDay(now);
+  const ts = new Date(ev.createdAt).getTime();
+  if (bucket === "today") return ts >= today.getTime();
+  if (bucket === "yesterday") {
+    const yest = new Date(today);
+    yest.setDate(yest.getDate() - 1);
+    return ts >= yest.getTime() && ts < today.getTime();
   }
+  // week = last 7 days including today
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  return ts >= weekAgo.getTime();
 }
 
-/* ── Accordion tab button (matches Approvals style) ── */
+/* ── Categories ───────────────────────────────────────────────────── */
 
-type AccordionSection = "dettagli" | "timeline" | null;
+type ActivityCategory = "comment" | "execution" | "decision" | "system";
+type CategoryFilter = "all" | ActivityCategory;
 
-function AccordionTabButton({
-  label,
-  isOpen,
-  onClick,
-  style: s,
-}: {
-  label: string;
-  isOpen: boolean;
-  onClick: () => void;
-  style: ReturnType<typeof cardStyle>;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex-1 py-2 text-xs font-medium text-center transition-colors",
-        s.tabHover,
-        "border-r last:border-r-0",
-        s.tabBorder,
-        isOpen ? s.tabActive : "text-muted-foreground",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-/* ── Status icon (matches Approvals) ── */
-
-function statusIcon(status: string | null, hasFailed?: boolean) {
-  if (hasFailed) return <AlertTriangle className="h-3.5 w-3.5 text-red-500" />;
-  if (status === "done") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
-  if (status === "in_progress") return <Zap className="h-3.5 w-3.5 text-cyan-400" />;
-  if (status === "blocked") return <AlertCircle className="h-3.5 w-3.5 text-amber-500 animate-pulse" />;
-  if (status === "cancelled") return <XCircle className="h-3.5 w-3.5 text-muted-foreground" />;
-  return <Clock className="h-3.5 w-3.5 text-muted-foreground" />;
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  done: "Completata",
-  blocked: "Da approvare",
-  in_progress: "In corso",
-  cancelled: "Annullata",
-  todo: "Da fare",
-  in_review: "In revisione",
+const CATEGORY_LABELS: Record<ActivityCategory, string> = {
+  comment: "Commenti",
+  execution: "Esecuzioni",
+  decision: "Decisioni",
+  system: "Sistema",
 };
 
-/* ── Activity group card (matches Approvals card layout) ── */
+const CATEGORY_COLORS: Record<ActivityCategory, { bg: string; text: string; dot: string }> = {
+  comment: { bg: "bg-sky-500/10", text: "text-sky-400", dot: "bg-sky-500" },
+  execution: { bg: "bg-cyan-500/10", text: "text-cyan-400", dot: "bg-cyan-500" },
+  decision: { bg: "bg-amber-500/10", text: "text-amber-400", dot: "bg-amber-500" },
+  system: { bg: "bg-muted", text: "text-muted-foreground", dot: "bg-muted-foreground" },
+};
+
+const CATEGORY_ICONS: Record<ActivityCategory, typeof MessageSquare> = {
+  comment: MessageSquare,
+  execution: Zap,
+  decision: ShieldCheck,
+  system: Cog,
+};
+
+/** Map an action string to a category. Unknown actions fall back to
+ * "system" so nothing disappears from the feed. */
+function categorizeAction(action: string): ActivityCategory {
+  if (
+    action === "issue.comment_added" ||
+    action === "issue.commented" ||
+    action === "approval.commented"
+  ) return "comment";
+  if (
+    action.startsWith("heartbeat.") ||
+    action === "issue.checked_out" ||
+    action === "issue.released" ||
+    action === "issue.suspend_expired" ||
+    action === "issue.checkout_lock_adopted"
+  ) return "execution";
+  if (
+    action.startsWith("approval.") ||
+    action === "issue.updated" ||
+    action === "issue.created" ||
+    action === "issue.document_created" ||
+    action === "issue.document_updated" ||
+    action === "issue.attachment_added"
+  ) return "decision";
+  return "system";
+}
+
+/* ── Human-readable action labels ─────────────────────────────────── */
 
 const ACTION_LABELS: Record<string, string> = {
   "issue.created": "Creata",
   "issue.updated": "Aggiornata",
   "issue.comment_added": "Commento",
   "issue.commented": "Commento",
-  "issue.checked_out": "Checked out",
+  "issue.checked_out": "Presa in carico",
   "issue.released": "Rilasciata",
-  "heartbeat.invoked": "Esecuzione",
-  "heartbeat.cancelled": "Annullata",
-  "approval.created": "Approvazione",
+  "issue.document_created": "Documento creato",
+  "issue.document_updated": "Documento aggiornato",
+  "issue.attachment_added": "Allegato aggiunto",
+  "issue.lock_released": "Lock rilasciato",
+  "issue.suspend_expired": "Sospensione scaduta",
+  "issue.checkout_lock_adopted": "Lock adottato",
+  "heartbeat.invoked": "Run avviato",
+  "heartbeat.cancelled": "Run annullato",
+  "approval.created": "Approvazione richiesta",
   "approval.approved": "Approvata",
   "approval.rejected": "Rifiutata",
-  "cost.reported": "Costo",
-  "cost.recorded": "Costo",
-  "issue.document_created": "Documento",
-  "issue.document_updated": "Doc aggiornato",
-  "issue.attachment_added": "Allegato",
+  "approval.revision_requested": "Revisione richiesta",
+  "cost.reported": "Costo registrato",
+  "cost.recorded": "Costo registrato",
 };
 
-interface ActivityGroupProps {
-  issueId: string;
-  issueIdentifier: string | null;
-  issueTitle: string | null;
+function formatAction(action: string): string {
+  return ACTION_LABELS[action] ?? action.replace(/[._]/g, " ");
+}
+
+/* ── Actor display ────────────────────────────────────────────────── */
+
+function actorName(ev: ActivityEvent, agentMap: Map<string, Agent>): string {
+  if (ev.actorType === "agent") {
+    const agentId = ev.agentId ?? ev.actorId;
+    return agentMap.get(agentId)?.name ?? "Agente";
+  }
+  if (ev.actorType === "system") return "Sistema";
+  return "Utente";
+}
+
+/* ── Linkable target resolution ───────────────────────────────────── */
+
+interface EventTarget {
+  href: string | null;
+  label: string;
+  identifier: string | null;
+}
+
+function resolveTarget(ev: ActivityEvent, issueMap: Map<string, Issue>): EventTarget {
+  if (ev.entityType === "issue") {
+    const issue = issueMap.get(ev.entityId);
+    if (issue) {
+      return {
+        href: `/issues/${issue.identifier ?? issue.id}`,
+        label: issue.title,
+        identifier: issue.identifier ?? null,
+      };
+    }
+    // Issue we don't have cached yet — details often carry identifier/title
+    const det = ev.details as Record<string, unknown> | null;
+    const ident = det && typeof det.identifier === "string" ? det.identifier : null;
+    const title = det && typeof det.issueTitle === "string" ? det.issueTitle : "Issue";
+    return {
+      href: ident ? `/issues/${ident}` : `/issues/${ev.entityId}`,
+      label: title,
+      identifier: ident,
+    };
+  }
+  if (ev.entityType === "heartbeat_run") {
+    const det = ev.details as Record<string, unknown> | null;
+    const agentId = det && typeof det.agentId === "string" ? det.agentId : (ev.agentId ?? null);
+    if (agentId) {
+      return {
+        href: `/agents/${agentId}/runs/${ev.entityId}`,
+        label: "Run",
+        identifier: null,
+      };
+    }
+  }
+  if (ev.entityType === "approval") {
+    return {
+      href: `/approvals/${ev.entityId}`,
+      label: "Approvazione",
+      identifier: null,
+    };
+  }
+  return { href: null, label: ev.entityType, identifier: null };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Collapsed burst grouping
+
+   When the same issue receives 3+ events from the same actor in a
+   5-minute window, fold them into a single summary row that the user
+   can expand. Prevents noisy workflows from drowning the feed.
+   ══════════════════════════════════════════════════════════════════ */
+
+interface FeedRow {
+  key: string;
+  firstEventAt: Date;
   events: ActivityEvent[];
-  agentMap: Map<string, Agent>;
-  status: string | null;
-  parentChain: Issue[];
-  hasFailed: boolean;
-  failedError?: string;
+  /** True if the row should start collapsed. */
+  collapsed: boolean;
 }
 
-function ActivityGroupCard({
-  issueId,
-  issueIdentifier,
-  issueTitle,
-  events,
+const BURST_WINDOW_MS = 5 * 60 * 1000;
+const BURST_MIN_SIZE = 3;
+
+function buildFeedRows(events: ActivityEvent[]): FeedRow[] {
+  // Events arrive newest-first from the API. Walk linearly and merge
+  // adjacent runs that share (entityType, entityId, actorId) AND fall
+  // within BURST_WINDOW_MS of the latest event in the current run.
+  const rows: FeedRow[] = [];
+  let current: FeedRow | null = null;
+  for (const ev of events) {
+    const evAt = new Date(ev.createdAt);
+    if (
+      current &&
+      current.events.length > 0 &&
+      current.events[0].entityType === ev.entityType &&
+      current.events[0].entityId === ev.entityId &&
+      current.events[0].actorId === ev.actorId &&
+      current.events[current.events.length - 1].createdAt &&
+      Math.abs(
+        new Date(current.events[current.events.length - 1].createdAt).getTime() - evAt.getTime(),
+      ) <= BURST_WINDOW_MS
+    ) {
+      current.events.push(ev);
+      current.firstEventAt = evAt;
+      continue;
+    }
+    if (current) rows.push(current);
+    current = {
+      key: `${ev.id}`,
+      firstEventAt: evAt,
+      events: [ev],
+      collapsed: true,
+    };
+  }
+  if (current) rows.push(current);
+
+  // Promote bursts to collapsed-by-default, singleton rows stay as-is.
+  return rows.map((r) => ({
+    ...r,
+    collapsed: r.events.length >= BURST_MIN_SIZE,
+  }));
+}
+
+/* ── Day grouping ─────────────────────────────────────────────────── */
+
+interface DayGroup {
+  dayKey: string;
+  dayLabel: string;
+  rows: FeedRow[];
+}
+
+const DAY_FMT = new Intl.DateTimeFormat("it-IT", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+});
+
+function formatDayLabel(d: Date, now: Date = new Date()): string {
+  const today = startOfDay(now);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const day = startOfDay(d);
+  if (day.getTime() === today.getTime()) return "Oggi";
+  if (day.getTime() === yesterday.getTime()) return "Ieri";
+  return DAY_FMT.format(d);
+}
+
+function groupByDay(rows: FeedRow[], now: Date = new Date()): DayGroup[] {
+  const byDay = new Map<string, { label: string; rows: FeedRow[] }>();
+  for (const row of rows) {
+    const day = startOfDay(row.firstEventAt);
+    const key = day.toISOString();
+    if (!byDay.has(key)) {
+      byDay.set(key, { label: formatDayLabel(day, now), rows: [] });
+    }
+    byDay.get(key)!.rows.push(row);
+  }
+  return Array.from(byDay.entries()).map(([dayKey, { label, rows }]) => ({
+    dayKey,
+    dayLabel: label,
+    rows,
+  }));
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Row component
+   ══════════════════════════════════════════════════════════════════ */
+
+function ActivityFeedRow({
+  row,
   agentMap,
-  status,
-  parentChain,
-  hasFailed,
-  failedError,
-}: ActivityGroupProps) {
-  const [openSection, setOpenSection] = useState<AccordionSection>(null);
-  const toggleSection = (s: AccordionSection) => setOpenSection((prev) => (prev === s ? null : s));
+  issueMap,
+  projectMap,
+}: {
+  row: FeedRow;
+  agentMap: Map<string, Agent>;
+  issueMap: Map<string, Issue>;
+  projectMap: Map<string, Project>;
+}) {
+  const [expanded, setExpanded] = useState(!row.collapsed);
+  const latest = row.events[row.events.length - 1]; // oldest in this burst
+  const head = row.events[0]; // most recent
+  const category = categorizeAction(head.action);
+  const Icon = CATEGORY_ICONS[category];
+  const colors = CATEGORY_COLORS[category];
+  const isBurst = row.events.length >= BURST_MIN_SIZE;
+  const time = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" })
+    .format(row.firstEventAt);
 
-  const lastEvent = events[0];
-  const actor = lastEvent?.actorType === "agent" ? agentMap.get(lastEvent.actorId) : null;
-  const s = cardStyle(status, hasFailed);
+  const target = resolveTarget(head, issueMap);
+  const actor = actorName(head, agentMap);
+  const issue = head.entityType === "issue" ? issueMap.get(head.entityId) : null;
+  const project = issue?.projectId ? projectMap.get(issue.projectId) : null;
+  const details = head.details as Record<string, unknown> | null;
+  const snippet = details && typeof details.bodySnippet === "string"
+    ? details.bodySnippet
+    : null;
+
+  const actionLabel = formatAction(head.action);
 
   return (
-    <div className={cn("border rounded-lg overflow-hidden", s.border, s.bg)}>
-      {/* Header */}
-      <div className="px-4 py-3">
-        {/* Parent chain breadcrumb (like Approvals) */}
-        {parentChain.length > 0 && (
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-wrap mb-2">
-            {parentChain.map((parent, i) => (
-              <span key={parent.id} className="flex items-center gap-1">
-                {i > 0 && <ChevronRight className="h-2.5 w-2.5" />}
-                <Link
-                  to={`/issues/${parent.identifier ?? parent.id}`}
-                  className="hover:underline hover:text-foreground"
-                >
-                  {parent.identifier && <span className="font-mono mr-0.5">{parent.identifier}</span>}
-                  {parent.title}
-                </Link>
-              </span>
-            ))}
-            <ChevronRight className="h-2.5 w-2.5" />
-          </div>
-        )}
+    <div className="group relative flex gap-3 px-4 py-2.5 hover:bg-accent/30 transition-colors">
+      {/* Time column */}
+      <div className="shrink-0 w-12 pt-0.5 text-right">
+        <span className="text-[10px] font-mono text-muted-foreground/70">{time}</span>
+      </div>
 
-        <div className="flex items-start justify-between gap-3">
-          <Link
-            to={`/issues/${issueIdentifier ?? issueId}`}
-            className="min-w-0 no-underline text-inherit hover:opacity-80 transition-opacity"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              {statusIcon(status, hasFailed)}
-              <span className="font-medium text-sm">
-                {issueIdentifier && (
-                  <span className="text-muted-foreground mr-1.5">{issueIdentifier}</span>
+      {/* Category icon */}
+      <div className={cn("shrink-0 flex h-6 w-6 items-center justify-center rounded-full mt-0.5", colors.bg)}>
+        <Icon className={cn("h-3 w-3", colors.text)} />
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={cn("text-[10px] font-medium uppercase tracking-wide shrink-0", colors.text)}>
+            {actionLabel}
+          </span>
+          <span className="text-xs text-muted-foreground shrink-0">·</span>
+          <div className="flex items-center gap-1 shrink-0">
+            {head.actorType === "agent" ? (
+              // Identity already renders the name alongside its avatar chip;
+              // an extra <span> would duplicate it.
+              <Identity name={actor} size="xs" />
+            ) : (
+              <>
+                {head.actorType === "system" ? (
+                  <Cog className="h-3 w-3 text-muted-foreground" />
+                ) : (
+                  <User className="h-3 w-3 text-muted-foreground" />
                 )}
-                {issueTitle ?? "Attivita'"}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {actor && (
-                <span className="flex items-center gap-1">
-                  <Identity name={actor.name} size="sm" className="inline-flex" />
-                </span>
-              )}
-              <span className={cn(
-                "font-medium",
-                hasFailed ? "text-red-400" :
-                status === "blocked" ? "text-amber-400" :
-                status === "done" ? "text-emerald-400" :
-                status === "in_progress" ? "text-cyan-400" :
-                "text-muted-foreground",
-              )}>
-                {hasFailed ? "Errore" : STATUS_LABELS[status ?? ""] ?? status}
-              </span>
-              <span>{timeAgo(lastEvent?.createdAt)}</span>
-            </div>
-          </Link>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-muted-foreground">
-              {events.length} {events.length === 1 ? "evento" : "eventi"}
-            </span>
+                <span className="text-xs text-foreground/80">{actor}</span>
+              </>
+            )}
           </div>
+          {isBurst && (
+            <button
+              type="button"
+              onClick={() => setExpanded((e) => !e)}
+              className="inline-flex items-center gap-0.5 rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-white/10 hover:text-foreground transition-colors"
+            >
+              {expanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+              {row.events.length} eventi
+            </button>
+          )}
         </div>
 
-        {/* Error message if failed */}
-        {hasFailed && failedError && (
-          <p className="text-[11px] text-red-400 mt-2 px-2 py-1.5 rounded bg-red-500/10 font-mono truncate">
-            {failedError}
-          </p>
+        {/* Target line */}
+        {target.href ? (
+          <Link
+            to={target.href}
+            className="mt-0.5 flex items-baseline gap-1.5 text-sm no-underline text-inherit hover:underline"
+          >
+            {target.identifier && (
+              <span className="font-mono text-[11px] text-muted-foreground shrink-0">
+                {target.identifier}
+              </span>
+            )}
+            <span className="truncate text-foreground">{target.label}</span>
+          </Link>
+        ) : (
+          <div className="mt-0.5 text-sm text-foreground/70 truncate">{target.label}</div>
+        )}
+
+        {/* Project context (when the target is an issue) */}
+        {project && (
+          <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+            <FolderOpen className="h-2.5 w-2.5" />
+            <span>{project.name}</span>
+          </div>
+        )}
+
+        {/* Comment snippet preview */}
+        {category === "comment" && snippet && (
+          <div className="mt-1 border-l-2 border-sky-500/30 pl-2 text-xs text-muted-foreground line-clamp-2">
+            "{snippet}"
+          </div>
+        )}
+
+        {/* Expanded burst: show all sub-events */}
+        {isBurst && expanded && (
+          <div className="mt-2 space-y-1 border-l-2 border-border/30 pl-3">
+            {row.events.slice(1).map((ev) => {
+              const evTime = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" })
+                .format(new Date(ev.createdAt));
+              return (
+                <div key={ev.id} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="font-mono text-[10px]">{evTime}</span>
+                  <span>{formatAction(ev.action)}</span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* Accordion tabs */}
-      <div className={cn("flex border-t", s.tabBorder)}>
-        <AccordionTabButton
-          label="Dettagli"
-          isOpen={openSection === "dettagli"}
-          onClick={() => toggleSection("dettagli")}
-          style={s}
-        />
-        <AccordionTabButton
-          label="Timeline"
-          isOpen={openSection === "timeline"}
-          onClick={() => toggleSection("timeline")}
-          style={s}
-        />
-      </div>
-
-      {/* Accordion content */}
-      {openSection === "dettagli" && (
-        <div className={cn("border-t px-4 py-3 text-xs space-y-2", s.tabBorder)}>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Stato:</span>
-            <span className={cn(
-              "font-medium",
-              hasFailed ? "text-red-400" :
-              status === "blocked" ? "text-amber-400" :
-              status === "done" ? "text-emerald-400" :
-              status === "in_progress" ? "text-cyan-400" :
-              "",
-            )}>
-              {hasFailed ? "Errore" : STATUS_LABELS[status ?? ""] ?? status?.replace(/_/g, " ") ?? "—"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Ultima azione:</span>
-            <span>{ACTION_LABELS[lastEvent?.action] ?? lastEvent?.action}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Agente:</span>
-            <span>{actor?.name ?? "Sistema"}</span>
-          </div>
-        </div>
-      )}
-
-      {openSection === "timeline" && (
-        <div className={cn("border-t px-4 py-2 max-h-48 overflow-y-auto", s.tabBorder)}>
-          {events.map((event) => {
-            const evtActor = event.actorType === "agent" ? agentMap.get(event.actorId) : null;
-            return (
-              <div key={event.id} className="flex items-center gap-2 py-1.5 border-b border-border/20 last:border-b-0">
-                <Identity name={evtActor?.name ?? "Sistema"} size="xs" />
-                <span className="text-[11px] text-muted-foreground flex-1 truncate">
-                  {ACTION_LABELS[event.action] ?? event.action.replace(/[._]/g, " ")}
-                </span>
-                <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo(event.createdAt)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Ungrouped event card ── */
-
-function UngroupedEventCard({ event, agentMap }: { event: ActivityEvent; agentMap: Map<string, Agent> }) {
-  const actor = event.actorType === "agent" ? agentMap.get(event.actorId) : null;
-
-  return (
-    <div className="border border-border/30 bg-card/30 rounded-lg px-4 py-3">
-      <div className="flex items-center gap-2">
-        <Bot className="h-3.5 w-3.5 text-muted-foreground" />
-        <Identity name={actor?.name ?? "Sistema"} size="xs" />
-        <span className="text-xs text-muted-foreground flex-1 truncate">
-          {ACTION_LABELS[event.action] ?? event.action.replace(/[._]/g, " ")}
-        </span>
-        <span className="text-[11px] text-muted-foreground shrink-0">{timeAgo(event.createdAt)}</span>
+      {/* Relative time on the right */}
+      <div className="shrink-0 self-center text-[10px] text-muted-foreground/60 tabular-nums">
+        {timeAgo(latest.createdAt)}
       </div>
     </div>
   );
 }
 
-/* ── Main page ── */
+/* ══════════════════════════════════════════════════════════════════
+   Main page
+   ══════════════════════════════════════════════════════════════════ */
 
 export function Activity() {
   const { t } = useTranslation();
@@ -352,14 +486,28 @@ export function Activity() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const pathTab = location.pathname.split("/").pop() as ActivityTab;
-  const tab: ActivityTab = VALID_TABS.includes(pathTab) ? pathTab : "recenti";
+  const pathTab = location.pathname.split("/").pop() as TimeBucket;
+  const tab: TimeBucket = VALID_BUCKETS.includes(pathTab) ? pathTab : "today";
+
+  // URL query params for category/search/agent/project filters
+  const urlParams = new URLSearchParams(location.search);
+  const urlCategory = urlParams.get("category") as CategoryFilter | null;
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(
+    urlCategory && ["comment", "execution", "decision", "system"].includes(urlCategory)
+      ? urlCategory
+      : "all",
+  );
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [agentFilter, setAgentFilter] = useState<string>("");
+  const [projectFilter, setProjectFilter] = useState<string>("");
 
   useEffect(() => {
     setBreadcrumbs([{ label: t("activity.title") }]);
   }, [setBreadcrumbs]);
 
-  const { data, isLoading } = useQuery({
+  /* ── Data ─────────────────────────────────────────────────────── */
+
+  const { data: events, isLoading } = useQuery({
     queryKey: queryKeys.activity(selectedCompanyId!),
     queryFn: () => activityApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
@@ -377,10 +525,9 @@ export function Activity() {
     enabled: !!selectedCompanyId,
   });
 
-  // Fetch heartbeat runs for error detection
-  const { data: allRuns } = useQuery({
-    queryKey: [...queryKeys.liveRuns(selectedCompanyId ?? ""), "activity-runs"],
-    queryFn: () => heartbeatsApi.list(selectedCompanyId!),
+  const { data: projects } = useQuery({
+    queryKey: queryKeys.projects.list(selectedCompanyId!),
+    queryFn: () => projectsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
 
@@ -396,83 +543,100 @@ export function Activity() {
     return map;
   }, [issues]);
 
-  // Build failed issue IDs from runs
-  const { failedIssueIds, failedIssueErrors } = useMemo(() => {
-    const ids = new Set<string>();
-    const errors = new Map<string, string>();
-    if (!allRuns) return { failedIssueIds: ids, failedIssueErrors: errors };
+  const projectMap = useMemo(() => {
+    const map = new Map<string, Project>();
+    for (const p of projects ?? []) map.set(p.id, p);
+    return map;
+  }, [projects]);
 
-    const latestByIssue = new Map<string, { status: string; error: string }>();
-    for (const run of allRuns) {
-      const issueId = (run as any).contextSnapshot?.issueId;
-      if (!issueId) continue;
-      if (!latestByIssue.has(issueId)) {
-        latestByIssue.set(issueId, { status: run.status, error: run.error ?? "" });
-      }
+  /* ── Filtering ────────────────────────────────────────────────── */
+
+  const allEvents = events ?? [];
+
+  // Stable "now" within a single render pass so bucket assignment and
+  // day labels agree even at midnight.
+  const now = useMemo(() => new Date(), [events]);
+
+  // Counts PER BUCKET (independent of the selected bucket, so tabs
+  // always show the accurate size of each time window).
+  const bucketCounts = useMemo(() => {
+    const counts: Record<TimeBucket, number> = { today: 0, yesterday: 0, week: 0, all: 0 };
+    for (const ev of allEvents) {
+      counts.all += 1;
+      if (matchesBucket(ev, "today", now)) counts.today += 1;
+      if (matchesBucket(ev, "yesterday", now)) counts.yesterday += 1;
+      if (matchesBucket(ev, "week", now)) counts.week += 1;
     }
-    for (const [issueId, { status, error }] of latestByIssue) {
-      if (status === "failed") {
-        ids.add(issueId);
-        if (error) errors.set(issueId, error);
-      }
+    return counts;
+  }, [allEvents, now]);
+
+  // Events for the selected bucket, before any other filter.
+  const bucketEvents = useMemo(
+    () => allEvents.filter((ev) => matchesBucket(ev, tab, now)),
+    [allEvents, tab, now],
+  );
+
+  // Category counts within the selected bucket (so pills reflect the
+  // visible window, not the entire DB).
+  const categoryCounts = useMemo(() => {
+    const counts: Record<ActivityCategory, number> = { comment: 0, execution: 0, decision: 0, system: 0 };
+    for (const ev of bucketEvents) {
+      counts[categorizeAction(ev.action)]++;
     }
-    return { failedIssueIds: ids, failedIssueErrors: errors };
-  }, [allRuns]);
+    return counts;
+  }, [bucketEvents]);
 
-  // Build parent chain for an issue
-  function buildParentChain(issueId: string): Issue[] {
-    const chain: Issue[] = [];
-    let current = issueMap.get(issueId);
-    const visited = new Set<string>();
-    while (current?.parentId && !visited.has(current.parentId)) {
-      visited.add(current.parentId);
-      const parent = issueMap.get(current.parentId);
-      if (parent) {
-        chain.unshift(parent);
-        current = parent;
-      } else break;
+  // Full filter stack: bucket → category → search → agent → project.
+  const filteredEvents = useMemo(() => {
+    let list = bucketEvents;
+    if (categoryFilter !== "all") {
+      list = list.filter((ev) => categorizeAction(ev.action) === categoryFilter);
     }
-    return chain;
-  }
-
-  // Group events by issue
-  const { issueGroups, ungrouped } = useMemo(() => {
-    if (!data) return { issueGroups: [], ungrouped: [] };
-
-    const groupMap = new Map<string, ActivityEvent[]>();
-    const ungroupedList: ActivityEvent[] = [];
-
-    for (const event of data) {
-      if (event.entityType === "issue" && event.entityId) {
-        if (!groupMap.has(event.entityId)) groupMap.set(event.entityId, []);
-        groupMap.get(event.entityId)!.push(event);
-      } else {
-        ungroupedList.push(event);
-      }
+    if (agentFilter) {
+      list = list.filter((ev) => ev.agentId === agentFilter || ev.actorId === agentFilter);
     }
+    if (projectFilter) {
+      list = list.filter((ev) => {
+        if (ev.entityType !== "issue") return false;
+        const issue = issueMap.get(ev.entityId);
+        return issue?.projectId === projectFilter;
+      });
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((ev) => {
+        const det = ev.details as Record<string, unknown> | null;
+        const fields: string[] = [
+          ev.action,
+          formatAction(ev.action),
+          actorName(ev, agentMap),
+        ];
+        if (det) {
+          if (typeof det.bodySnippet === "string") fields.push(det.bodySnippet);
+          if (typeof det.identifier === "string") fields.push(det.identifier);
+          if (typeof det.issueTitle === "string") fields.push(det.issueTitle);
+        }
+        if (ev.entityType === "issue") {
+          const issue = issueMap.get(ev.entityId);
+          if (issue) {
+            fields.push(issue.title);
+            if (issue.identifier) fields.push(issue.identifier);
+          }
+        }
+        return fields.some((f) => f.toLowerCase().includes(q));
+      });
+    }
+    return list;
+  }, [bucketEvents, categoryFilter, agentFilter, projectFilter, searchQuery, agentMap, issueMap]);
 
-    const groups = Array.from(groupMap.entries()).map(([issueId, events]) => {
-      const info = issueMap.get(issueId);
-      return {
-        issueId,
-        issueIdentifier: info?.identifier ?? null,
-        issueTitle: info?.title ?? null,
-        status: info?.status ?? null,
-        events,
-        lastActivity: new Date(events[0]?.createdAt ?? 0).getTime(),
-      };
-    }).sort((a, b) => b.lastActivity - a.lastActivity);
+  /* ── Grouping ─────────────────────────────────────────────────── */
 
-    return { issueGroups: groups, ungrouped: ungroupedList };
-  }, [data, issueMap]);
+  const days = useMemo(() => {
+    const rows = buildFeedRows(filteredEvents);
+    return groupByDay(rows, now);
+  }, [filteredEvents, now]);
 
-  // Filter by tab
-  const filteredGroups = useMemo(() => {
-    if (tab === "recenti") return issueGroups;
-    if (tab === "in_corso") return issueGroups.filter((g) => g.status === "in_progress" || g.status === "blocked" || g.status === "todo");
-    if (tab === "completate") return issueGroups.filter((g) => g.status === "done" || g.status === "cancelled");
-    return issueGroups;
-  }, [issueGroups, tab]);
+  /* ── Render ───────────────────────────────────────────────────── */
 
   if (!selectedCompanyId) {
     return <EmptyState icon={History} message={t("activity.selectCompany")} />;
@@ -482,80 +646,180 @@ export function Activity() {
     return <PageSkeleton variant="list" />;
   }
 
-  const counts = {
-    recenti: issueGroups.length,
-    in_corso: issueGroups.filter((g) => g.status === "in_progress" || g.status === "blocked" || g.status === "todo").length,
-    completate: issueGroups.filter((g) => g.status === "done" || g.status === "cancelled").length,
-  };
-
-  // Count errors in "in corso" tab
-  const errorCount = issueGroups.filter((g) =>
-    (g.status === "in_progress" || g.status === "blocked" || g.status === "todo") &&
-    failedIssueIds.has(g.issueId),
-  ).length;
-
+  // Labels as plain strings so PageTabBar's mobile fallback (which renders
+  // a native <select>) can show the count inline. JSX labels would collapse
+  // to the raw `value` on narrow viewports.
   const tabItems = [
-    {
-      value: "recenti",
-      label: (
-        <span className="flex items-center gap-1.5">
-          Recenti
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10">{counts.recenti}</span>
-        </span>
-      ),
-    },
-    {
-      value: "in_corso",
-      label: (
-        <span className="flex items-center gap-1.5">
-          In corso
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400">{counts.in_corso}</span>
-          {errorCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">{errorCount} err</span>
-          )}
-        </span>
-      ),
-    },
-    {
-      value: "completate",
-      label: (
-        <span className="flex items-center gap-1.5">
-          Completate
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">{counts.completate}</span>
-        </span>
-      ),
-    },
+    { value: "today", label: `Oggi (${bucketCounts.today})` },
+    { value: "yesterday", label: `Ieri (${bucketCounts.yesterday})` },
+    { value: "week", label: `Settimana (${bucketCounts.week})` },
+    { value: "all", label: `Sempre (${bucketCounts.all})` },
   ];
+
+  const hasActiveFilters =
+    categoryFilter !== "all" || !!agentFilter || !!projectFilter || !!searchQuery.trim();
+
+  const clearFilters = () => {
+    setCategoryFilter("all");
+    setAgentFilter("");
+    setProjectFilter("");
+    setSearchQuery("");
+  };
 
   return (
     <div className="space-y-4">
+      {/* Tab bar (time buckets) */}
       <Tabs value={tab} onValueChange={(v) => navigate(`/activity/${v}`, { replace: true })}>
-        <PageTabBar items={tabItems} value={tab} onValueChange={(v) => navigate(`/activity/${v}`, { replace: true })} />
+        <PageTabBar
+          items={tabItems}
+          value={tab}
+          onValueChange={(v) => navigate(`/activity/${v}`, { replace: true })}
+        />
       </Tabs>
 
-      {filteredGroups.length === 0 && ungrouped.length === 0 && (
-        <EmptyState icon={History} message={tab === "completate" ? "Nessuna attivita' completata." : tab === "in_corso" ? "Nessuna attivita' in corso." : t("activity.none")} />
-      )}
-
-      <div className="grid gap-3">
-        {filteredGroups.map((group) => (
-          <ActivityGroupCard
-            key={group.issueId}
-            issueId={group.issueId}
-            issueIdentifier={group.issueIdentifier}
-            issueTitle={group.issueTitle}
-            events={group.events}
-            agentMap={agentMap}
-            status={group.status}
-            parentChain={buildParentChain(group.issueId)}
-            hasFailed={failedIssueIds.has(group.issueId)}
-            failedError={failedIssueErrors.get(group.issueId)}
-          />
-        ))}
-        {tab === "recenti" && ungrouped.slice(0, 10).map((event) => (
-          <UngroupedEventCard key={event.id} event={event} agentMap={agentMap} />
-        ))}
+      {/* Category filter chips */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setCategoryFilter("all")}
+          className={cn(
+            "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+            categoryFilter === "all"
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground hover:bg-accent",
+          )}
+        >
+          Tutto ({bucketEvents.length})
+        </button>
+        {(["comment", "execution", "decision", "system"] as ActivityCategory[]).map((cat) => {
+          const Icon = CATEGORY_ICONS[cat];
+          const active = categoryFilter === cat;
+          return (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setCategoryFilter(cat === categoryFilter ? "all" : cat)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-accent",
+              )}
+            >
+              <Icon className="h-3 w-3" />
+              <span>{CATEGORY_LABELS[cat]}</span>
+              <span className={cn("text-[10px]", active ? "opacity-80" : "opacity-60")}>
+                ({categoryCounts[cat]})
+              </span>
+            </button>
+          );
+        })}
       </div>
+
+      {/* Search + dropdown filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cerca nell'attivita'..."
+            className="w-full rounded-md border border-border bg-background pl-8 pr-8 py-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label="Svuota ricerca"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+          <select
+            value={agentFilter}
+            onChange={(e) => setAgentFilter(e.target.value)}
+            className="rounded-md border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">Tutti gli agenti</option>
+            {(agents ?? []).map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            className="rounded-md border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">Tutti i progetti</option>
+            {(projects ?? []).map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          >
+            <X className="h-3 w-3" />
+            Svuota filtri
+          </button>
+        )}
+      </div>
+
+      {/* Feed */}
+      {filteredEvents.length === 0 ? (
+        <EmptyState
+          icon={History}
+          message={
+            hasActiveFilters
+              ? "Nessun evento corrisponde ai filtri."
+              : tab === "today"
+              ? "Nessuna attivita' oggi."
+              : tab === "yesterday"
+              ? "Nessuna attivita' ieri."
+              : tab === "week"
+              ? "Nessuna attivita' questa settimana."
+              : t("activity.none")
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          {days.map((day) => (
+            <section key={day.dayKey}>
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {day.dayLabel}
+                <span className="ml-2 font-normal text-muted-foreground/60">
+                  ({day.rows.reduce((n, r) => n + r.events.length, 0)})
+                </span>
+              </h3>
+              <div className="overflow-hidden rounded-xl border border-border bg-card divide-y divide-border/40">
+                {day.rows.map((row) => (
+                  <ActivityFeedRow
+                    key={row.key}
+                    row={row}
+                    agentMap={agentMap}
+                    issueMap={issueMap}
+                    projectMap={projectMap}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

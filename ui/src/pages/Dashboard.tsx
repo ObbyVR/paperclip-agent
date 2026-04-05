@@ -430,11 +430,16 @@ export function Dashboard() {
         }
 
         if (projects.length <= 1 && !issuesByProject.has(null)) {
-          // Single project or no projects — show all in one graph
-          const allRuns = activeRuns.filter((r) => r.issueId && issues.some((i) => i.id === r.issueId));
-          return issues.length > 0 ? (
-            <WorkflowGraphSafe issues={issues} activeRuns={allRuns} {...wfProps} />
-          ) : null;
+          // Collapse into a single-graph fallback only for the issues that
+          // belong to visible projects — otherwise hiding a project would
+          // leak its issues here (S42 regression: the old fallback passed
+          // the full `issues` list, ignoring `prefs.hiddenProjects`).
+          if (projects.length === 0) return null;
+          const onlyProject = projects[0];
+          const visibleIssues = issuesByProject.get(onlyProject.id) ?? [];
+          if (visibleIssues.length === 0) return null;
+          const visibleRuns = activeRuns.filter((r) => r.issueId && visibleIssues.some((i) => i.id === r.issueId));
+          return <WorkflowGraphSafe issues={visibleIssues} activeRuns={visibleRuns} {...wfProps} />;
         }
 
         const unassignedHidden = prefs.hiddenProjects.has(UNASSIGNED_KEY);

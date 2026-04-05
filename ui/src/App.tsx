@@ -172,6 +172,12 @@ function boardRoutes() {
       <Route path="approvals/:approvalId" element={<ApprovalDetail />} />
       <Route path="costs" element={<Costs />} />
       <Route path="activity" element={<Activity />} />
+      {/* S42: rebuilt time-bucket tabs */}
+      <Route path="activity/today" element={<Activity />} />
+      <Route path="activity/yesterday" element={<Activity />} />
+      <Route path="activity/week" element={<Activity />} />
+      <Route path="activity/all" element={<Activity />} />
+      {/* Legacy aliases so old bookmarks land on the rebuilt page */}
       <Route path="activity/recenti" element={<Activity />} />
       <Route path="activity/in_corso" element={<Activity />} />
       <Route path="activity/completate" element={<Activity />} />
