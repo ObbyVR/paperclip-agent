@@ -47,6 +47,7 @@ export async function handleTask(
   svc: BotServices,
   session: SessionState | undefined,
   rawText: string,
+  userId: string,
 ): Promise<CommandResult> {
   if (!session?.companyId) {
     return {
@@ -73,6 +74,7 @@ export async function handleTask(
       title,
       description,
       assigneeAgentId: session.ceoAgentId,
+      createdByUserId: userId,
     });
     return {
       text:

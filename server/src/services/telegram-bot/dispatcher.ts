@@ -124,7 +124,7 @@ export class Dispatcher {
     const svc = this.deps.svc;
     if (command === null) {
       // Free-form → /task
-      return handleTask(svc, session, fullText);
+      return handleTask(svc, session, fullText, userId);
     }
     switch (command) {
       case "/start":
@@ -142,7 +142,7 @@ export class Dispatcher {
       case "/setceo":
         return handleSetCeo(svc, session, args, upsert);
       case "/task":
-        return handleTask(svc, session, args);
+        return handleTask(svc, session, args, userId);
       case "/status":
         return handleStatus(svc, session);
       case "/issues":

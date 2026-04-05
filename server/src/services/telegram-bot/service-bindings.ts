@@ -72,6 +72,7 @@ export interface BotServices {
     title: string;
     description: string | null;
     assigneeAgentId: string;
+    createdByUserId: string;
   }): Promise<BotIssueSummary>;
 
   listPendingApprovals(companyId: string): Promise<BotApproval[]>;

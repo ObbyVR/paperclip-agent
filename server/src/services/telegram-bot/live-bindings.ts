@@ -11,6 +11,9 @@ import { approvalService } from "../approvals.js";
 import { companyService } from "../companies.js";
 import { dashboardService } from "../dashboard.js";
 import { issueService } from "../issues.js";
+import { heartbeatService } from "../heartbeat.js";
+import { logActivity } from "../activity-log.js";
+import { queueIssueAssignmentWakeup } from "../issue-assignment-wakeup.js";
 import type {
   BotAgent,
   BotApproval,
@@ -27,6 +30,7 @@ export function createLiveBindings(db: Db): BotServices {
   const issues = issueService(db);
   const approvals = approvalService(db);
   const dashboard = dashboardService(db);
+  const heartbeat = heartbeatService(db);
 
   const mapCompany = (c: { id: string; name: string; issuePrefix: string }): BotCompany => ({
     id: c.id,
@@ -164,6 +168,33 @@ export function createLiveBindings(db: Db): BotServices {
         assigneeAgentId: input.assigneeAgentId,
         originKind: "manual",
       } as unknown as Parameters<typeof issues.create>[1]);
+
+      // Replicate what routes/issues.ts does on POST /issues: log the
+      // activity entry so the Inbox/Activity feed shows the new issue, then
+      // queue the assignee wake-up so Paperclip's existing scheduler picks
+      // up the work. We pass ourselves as `actor = {type: "user", id:
+      // <allowlist userId>}` via the params — same shape routes use. All of
+      // this is fire-and-forget: a failure does NOT undo the insert.
+      void logActivity(db, {
+        companyId: input.companyId,
+        actorType: "user",
+        actorId: input.createdByUserId,
+        action: "issue.created",
+        entityType: "issue",
+        entityId: row.id,
+        details: { title: row.title, identifier: row.identifier, source: "telegram-bot" },
+      }).catch(() => void 0);
+
+      void queueIssueAssignmentWakeup({
+        heartbeat,
+        issue: { id: row.id, assigneeAgentId: row.assigneeAgentId, status: row.status },
+        reason: "issue_assigned",
+        mutation: "create",
+        contextSource: "telegram-bot.createIssue",
+        requestedByActorType: "user",
+        requestedByActorId: input.createdByUserId,
+      });
+
       return mapIssueSummary({
         id: row.id,
         identifier: row.identifier ?? "?",

@@ -240,6 +240,7 @@ describe("Dispatcher.handle", () => {
       title: "Scrivi un report trimestrale",
       description: "Con focus sui costi",
       assigneeAgentId: "a1",
+      createdByUserId: "u-42",
     });
   });
 
