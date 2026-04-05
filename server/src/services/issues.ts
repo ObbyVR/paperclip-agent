@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   activityLog,
@@ -926,6 +926,13 @@ export function issueService(db: Db) {
      * emit activity-log entries or push live events. Used by the cron tick.
      */
     wakeExpiredSuspensions: async (now: Date = new Date()) => {
+      // S43-3: use typed drizzle operators (`isNotNull` + `lte`) instead of
+      // raw `sql\`... <= ${now}\`` templates. With raw SQL interpolation,
+      // postgres.js has no column-type hint for the bound parameter and
+      // tries to serialize the Date as binary/string, which throws
+      //   TypeError [ERR_INVALID_ARG_TYPE]: received an instance of Date
+      // every 30 s in the heartbeat loop. Typed operators preserve the
+      // `timestamp with time zone` type so the driver formats correctly.
       const rows = await db
         .update(issues)
         .set({
@@ -937,8 +944,8 @@ export function issueService(db: Db) {
         })
         .where(
           and(
-            sql`${issues.suspendedUntil} is not null`,
-            sql`${issues.suspendedUntil} <= ${now}`,
+            isNotNull(issues.suspendedUntil),
+            lte(issues.suspendedUntil, now),
           ),
         )
         .returning({ id: issues.id, companyId: issues.companyId });
