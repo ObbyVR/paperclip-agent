@@ -149,6 +149,148 @@ describe("classifyEvent", () => {
       classifyEvent({ type: "activity.logged", payload: { action: "something.else" } }),
     ).toBeNull();
   });
+
+  // S43-3 — extended notification types
+
+  it("classifies approval.approved → approvalResolved + skipIfActorIs", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "approval.approved",
+        actorType: "user",
+        actorId: "user-founder",
+        entityType: "approval",
+        entityId: "app-1",
+        details: { type: "hire_agent" },
+      },
+    });
+    expect(m?.key).toBe("approvalResolved");
+    expect(m?.skipIfActorIs).toBe("user-founder");
+    expect(m?.text).toContain("approvata");
+  });
+
+  it("classifies approval.rejected with correct verb", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "approval.rejected",
+        actorType: "user",
+        actorId: "user-other",
+        entityId: "app-2",
+        details: { type: "hire_agent" },
+      },
+    });
+    expect(m?.key).toBe("approvalResolved");
+    expect(m?.text).toContain("rifiutata");
+  });
+
+  it("classifies approval.revision_requested", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "approval.revision_requested",
+        actorType: "user",
+        actorId: "user-other",
+        entityId: "app-3",
+        details: { type: "spend_increase" },
+      },
+    });
+    expect(m?.text).toContain("revisione");
+  });
+
+  it("classifies budget.hard_threshold_crossed → budgetAlert", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "budget.hard_threshold_crossed",
+        actorType: "system",
+        details: { scopeType: "company" },
+      },
+    });
+    expect(m?.key).toBe("budgetAlert");
+    expect(m?.text).toContain("hard");
+  });
+
+  it("classifies budget.soft_threshold_crossed → budgetAlert", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "budget.soft_threshold_crossed",
+        actorType: "system",
+        details: { scopeType: "agent" },
+      },
+    });
+    expect(m?.key).toBe("budgetAlert");
+    expect(m?.text).toContain("soft");
+  });
+
+  it("classifies budget.incident_resolved → budgetAlert", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: { action: "budget.incident_resolved", actorType: "system" },
+    });
+    expect(m?.key).toBe("budgetAlert");
+    expect(m?.text).toContain("risolto");
+  });
+
+  it("classifies agent.paused → agentLifecycle + skipIfActorIs", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "agent.paused",
+        actorType: "user",
+        actorId: "user-founder",
+        details: { name: "Marco", pauseReason: "manual" },
+      },
+    });
+    expect(m?.key).toBe("agentLifecycle");
+    expect(m?.skipIfActorIs).toBe("user-founder");
+    expect(m?.text).toContain("Marco");
+    expect(m?.text).toContain("manual");
+  });
+
+  it("classifies agent.terminated → agentLifecycle", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "agent.terminated",
+        actorType: "user",
+        actorId: "user-founder",
+        details: { name: "Alice" },
+      },
+    });
+    expect(m?.key).toBe("agentLifecycle");
+    expect(m?.text).toContain("terminato");
+  });
+
+  it("classifies issue.suspend_expired → issueUnsuspended", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "issue.suspend_expired",
+        actorType: "system",
+        entityType: "issue",
+        entityId: "iss-42",
+        details: { identifier: "WEB-42" },
+      },
+    });
+    expect(m?.key).toBe("issueUnsuspended");
+    expect(m?.text).toContain("WEB-42");
+  });
+
+  it("classifies hire_hook.failed → hireFailed", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "hire_hook.failed",
+        actorType: "system",
+        details: { name: "Bob", error: "kaboom" },
+      },
+    });
+    expect(m?.key).toBe("hireFailed");
+    expect(m?.text).toContain("Bob");
+    expect(m?.text).toContain("kaboom");
+  });
 });
 
 async function makeNotifierFixture() {
@@ -209,6 +351,11 @@ describe("Notifier", () => {
         issueErrored: true,
         agentHired: true,
         agentReplied: true,
+        approvalResolved: true,
+        budgetAlert: true,
+        agentLifecycle: true,
+        issueUnsuspended: true,
+        hireFailed: true,
       },
     });
     const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
@@ -280,7 +427,8 @@ describe("Notifier", () => {
 
   it("forwards agent comment only when the issue is owned by this chat", async () => {
     const { store, transport, sent, subscribe, emit } = await makeNotifierFixture();
-    store.upsert("1", "u", { companyId: "co-1" });
+    // digestEnabled=false to test the raw per-event delivery path
+    store.upsert("1", "u", { companyId: "co-1", digestEnabled: false });
     store.trackOwnedIssue("1", "iss-owned");
     const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
     n.start();
@@ -313,9 +461,9 @@ describe("Notifier", () => {
     expect(sent[0].text).toContain("WEB-42");
   });
 
-  it("forwards agent completion on owned issue", async () => {
+  it("forwards agent completion on owned issue (digest off)", async () => {
     const { store, transport, sent, subscribe, emit } = await makeNotifierFixture();
-    store.upsert("1", "u", { companyId: "co-1" });
+    store.upsert("1", "u", { companyId: "co-1", digestEnabled: false });
     store.trackOwnedIssue("1", "iss-owned");
     const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
     n.start();
@@ -336,7 +484,7 @@ describe("Notifier", () => {
 
   it("does not forward founder's own comments (actorType=user)", async () => {
     const { store, transport, sent, subscribe, emit } = await makeNotifierFixture();
-    store.upsert("1", "u", { companyId: "co-1" });
+    store.upsert("1", "u", { companyId: "co-1", digestEnabled: false });
     store.trackOwnedIssue("1", "iss-owned");
     const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
     n.start();
@@ -352,5 +500,82 @@ describe("Notifier", () => {
     });
     await new Promise((r) => setImmediate(r));
     expect(sent).toHaveLength(0);
+  });
+
+  // S43-3 — digest mode integration
+
+  it("digest mode batches multiple agent comments + terminal into one message", async () => {
+    const { store, transport, sent, subscribe, emit } = await makeNotifierFixture();
+    store.upsert("1", "u", { companyId: "co-1", digestEnabled: true });
+    store.trackOwnedIssue("1", "iss-owned");
+    const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
+    n.start();
+    // 2 comments + 1 completion → 1 digest message
+    for (const snippet of ["step one", "step two"]) {
+      emit("co-1", {
+        type: "activity.logged",
+        payload: {
+          action: "issue.comment_added",
+          actorType: "agent",
+          entityType: "issue",
+          entityId: "iss-owned",
+          details: { identifier: "WEB-42", issueTitle: "Batched", bodySnippet: snippet },
+        },
+      });
+    }
+    emit("co-1", {
+      type: "activity.logged",
+      payload: {
+        action: "issue.updated",
+        actorType: "agent",
+        entityType: "issue",
+        entityId: "iss-owned",
+        details: { identifier: "WEB-42", issueTitle: "Batched", status: "done" },
+      },
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toContain("step one");
+    expect(sent[0].text).toContain("step two");
+    expect(sent[0].text).toContain("completata");
+  });
+
+  it("skipIfActorIs drops approval events the founder themself resolved", async () => {
+    const { store, transport, sent, subscribe, emit } = await makeNotifierFixture();
+    store.upsert("1", "user-founder", { companyId: "co-1" });
+    const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
+    n.start();
+    emit("co-1", {
+      type: "activity.logged",
+      payload: {
+        action: "approval.approved",
+        actorType: "user",
+        actorId: "user-founder",
+        entityId: "app-1",
+        details: { type: "hire_agent" },
+      },
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(sent).toHaveLength(0);
+  });
+
+  it("skipIfActorIs allows approval events resolved by someone else", async () => {
+    const { store, transport, sent, subscribe, emit } = await makeNotifierFixture();
+    store.upsert("1", "user-founder", { companyId: "co-1" });
+    const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
+    n.start();
+    emit("co-1", {
+      type: "activity.logged",
+      payload: {
+        action: "approval.approved",
+        actorType: "user",
+        actorId: "user-cofounder",
+        entityId: "app-1",
+        details: { type: "hire_agent" },
+      },
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toContain("approvata");
   });
 });

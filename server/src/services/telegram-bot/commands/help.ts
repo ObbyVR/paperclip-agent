@@ -26,7 +26,10 @@ const COMMANDS_HELP = `Paperclip CEO bot — comandi disponibili:
 
 🔔 *Notifiche*
 /notify <key> on|off
-keys: approvalsPending, runFailed, issueErrored, agentHired
+keys: approvalsPending, runFailed, issueErrored, agentHired,
+      agentReplied, approvalResolved, budgetAlert, agentLifecycle,
+      issueUnsuspended, hireFailed
+/digest on|off — raggruppa le risposte agente in un unico messaggio
 
 /help — questo messaggio`;
 

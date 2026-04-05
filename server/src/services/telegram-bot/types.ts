@@ -80,6 +80,16 @@ export interface SessionState {
     agentHired: boolean;
     // S43-2: agent responded (comment or completion) on a bot-created issue
     agentReplied: boolean;
+    // S43-3: approval resolved by someone else (approved/rejected/revision)
+    approvalResolved: boolean;
+    // S43-3: budget threshold crossed (soft/hard) or incident resolved
+    budgetAlert: boolean;
+    // S43-3: agent lifecycle events (paused, terminated)
+    agentLifecycle: boolean;
+    // S43-3: issue suspension expired (reminder task is back)
+    issueUnsuspended: boolean;
+    // S43-3: hire hook failure (agent hire pipeline error)
+    hireFailed: boolean;
   };
   /**
    * S43-2: the set of issue UUIDs this chat created via the bot. Used by the
@@ -89,6 +99,13 @@ export interface SessionState {
    * dropped FIFO when the limit is reached.
    */
   ownedIssueIds: string[];
+  /**
+   * S43-3: enable the digest composer for this chat. When true, agent
+   * comments + terminal status changes are batched per-issue and sent as a
+   * single summary message instead of one push per event. Toggled via
+   * `/digest on|off`. Default: true.
+   */
+  digestEnabled: boolean;
   updatedAt: string;
 }
 
@@ -100,6 +117,11 @@ export const NOTIFY_KEYS: NotifyKey[] = [
   "issueErrored",
   "agentHired",
   "agentReplied",
+  "approvalResolved",
+  "budgetAlert",
+  "agentLifecycle",
+  "issueUnsuspended",
+  "hireFailed",
 ];
 
 /** Maximum number of issue UUIDs tracked per session. */
@@ -122,5 +144,10 @@ export function defaultNotifyOn(): SessionState["notifyOn"] {
     issueErrored: true,
     agentHired: true,
     agentReplied: true,
+    approvalResolved: true,
+    budgetAlert: true,
+    agentLifecycle: true,
+    issueUnsuspended: true,
+    hireFailed: true,
   };
 }

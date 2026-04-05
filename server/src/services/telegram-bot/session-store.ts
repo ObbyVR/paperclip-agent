@@ -102,6 +102,8 @@ export class SessionStore {
         userId: obj.userId,
         companyId: typeof obj.companyId === "string" ? obj.companyId : null,
         ceoAgentId: typeof obj.ceoAgentId === "string" ? obj.ceoAgentId : null,
+        digestEnabled:
+          typeof obj.digestEnabled === "boolean" ? obj.digestEnabled : true,
         notifyOn: {
           approvalsPending:
             typeof notify?.approvalsPending === "boolean"
@@ -115,6 +117,22 @@ export class SessionStore {
             typeof notify?.agentHired === "boolean" ? notify.agentHired : defaults.agentHired,
           agentReplied:
             typeof notify?.agentReplied === "boolean" ? notify.agentReplied : defaults.agentReplied,
+          approvalResolved:
+            typeof notify?.approvalResolved === "boolean"
+              ? notify.approvalResolved
+              : defaults.approvalResolved,
+          budgetAlert:
+            typeof notify?.budgetAlert === "boolean" ? notify.budgetAlert : defaults.budgetAlert,
+          agentLifecycle:
+            typeof notify?.agentLifecycle === "boolean"
+              ? notify.agentLifecycle
+              : defaults.agentLifecycle,
+          issueUnsuspended:
+            typeof notify?.issueUnsuspended === "boolean"
+              ? notify.issueUnsuspended
+              : defaults.issueUnsuspended,
+          hireFailed:
+            typeof notify?.hireFailed === "boolean" ? notify.hireFailed : defaults.hireFailed,
         },
         ownedIssueIds,
         updatedAt:
@@ -147,6 +165,7 @@ export class SessionStore {
       ceoAgentId: null,
       notifyOn: defaultNotifyOn(),
       ownedIssueIds: [],
+      digestEnabled: true,
       updatedAt: this.now().toISOString(),
     };
     const next: SessionState = {
