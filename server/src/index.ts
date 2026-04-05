@@ -31,6 +31,11 @@ import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import { heartbeatService, reconcilePersistedRuntimeServicesOnStartup, routineService } from "./services/index.js";
 import { tickSuspendWakeup } from "./services/issue-suspend-wakeup.js";
 import { tickIssueLockWatchdog } from "./services/issue-lock-watchdog.js";
+// S43 — Telegram CEO bot (opt-in via PAPERCLIP_TELEGRAM_ENABLED).
+import { startTelegramBot, defaultSessionsFilePath } from "./services/telegram-bot/index.js";
+import { createLiveBindings } from "./services/telegram-bot/live-bindings.js";
+import { subscribeCompanyLiveEvents } from "./services/live-events.js";
+import { resolvePaperclipInstanceRoot } from "./home-paths.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
@@ -625,7 +630,41 @@ export async function startServer(): Promise<StartedServer> {
       });
     }, config.heartbeatSchedulerIntervalMs);
   }
-  
+
+  // S43 — Telegram CEO bot. Fully gated: if disabled or no token, never
+  // initialized. Any failure is isolated via .catch so it can never crash
+  // the server boot. The bot runs its own long-polling loop in the
+  // background. Shutdown is a TODO — the returned handle is discarded for
+  // now (the bot respects SIGTERM via its own AbortController at the
+  // fetch level so the process still exits cleanly).
+  if (config.telegramBotEnabled) {
+    if (!config.telegramBotToken) {
+      logger.warn("PAPERCLIP_TELEGRAM_ENABLED=true but PAPERCLIP_TELEGRAM_BOT_TOKEN is missing; telegram bot not started");
+    } else {
+      void startTelegramBot({
+        token: config.telegramBotToken,
+        allowedChatIdsRaw: config.telegramAllowedChatIdsRaw,
+        skipConfirm: config.telegramSkipConfirm,
+        sessionsFilePath: defaultSessionsFilePath(resolvePaperclipInstanceRoot()),
+        services: createLiveBindings(db as any),
+        // Adapter: paperclip LiveEvent carries extra fields (id, createdAt) the
+        // bot doesn't care about; pass a thin wrapper so type-variance stays honest.
+        subscribeCompanyLiveEvents: (companyId, listener) =>
+          subscribeCompanyLiveEvents(companyId, (event) =>
+            listener({ type: event.type, companyId: event.companyId, payload: event.payload }),
+          ),
+        logger: {
+          info: (obj, msg) => logger.info(obj, msg),
+          warn: (obj, msg) => logger.warn(obj, msg),
+          error: (obj, msg) => logger.error(obj, msg),
+          debug: (obj, msg) => logger.debug(obj, msg),
+        },
+      }).catch((err) => {
+        logger.error({ err }, "telegram bot startup failed");
+      });
+    }
+  }
+
   if (config.databaseBackupEnabled) {
     const backupIntervalMs = config.databaseBackupIntervalMinutes * 60 * 1000;
     let backupInFlight = false;

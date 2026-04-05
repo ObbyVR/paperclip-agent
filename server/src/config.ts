@@ -73,6 +73,11 @@ export interface Config {
   heartbeatSchedulerEnabled: boolean;
   heartbeatSchedulerIntervalMs: number;
   companyDeletionEnabled: boolean;
+  // S43 — Telegram CEO bot (disabled by default, opt-in via env).
+  telegramBotEnabled: boolean;
+  telegramBotToken: string | undefined;
+  telegramAllowedChatIdsRaw: string;
+  telegramSkipConfirm: boolean;
 }
 
 export function loadConfig(): Config {
@@ -255,5 +260,12 @@ export function loadConfig(): Config {
     heartbeatSchedulerEnabled: process.env.HEARTBEAT_SCHEDULER_ENABLED !== "false",
     heartbeatSchedulerIntervalMs: Math.max(10000, Number(process.env.HEARTBEAT_SCHEDULER_INTERVAL_MS) || 30000),
     companyDeletionEnabled,
+    // S43 — Telegram bot. Disabled by default (opt-in). When enabled, an
+    // empty token or allowlist causes the module to log warnings and reject
+    // every chat — the bot never degrades the rest of the server.
+    telegramBotEnabled: process.env.PAPERCLIP_TELEGRAM_ENABLED === "true",
+    telegramBotToken: process.env.PAPERCLIP_TELEGRAM_BOT_TOKEN?.trim() || undefined,
+    telegramAllowedChatIdsRaw: process.env.PAPERCLIP_TELEGRAM_ALLOWED_CHAT_IDS ?? "",
+    telegramSkipConfirm: process.env.PAPERCLIP_TELEGRAM_SKIP_CONFIRM === "true",
   };
 }
