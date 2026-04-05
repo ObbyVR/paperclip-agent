@@ -22,7 +22,9 @@ export const issuesApi = {
       assigneeUserId?: string;
       touchedByUserId?: string;
       inboxArchivedByUserId?: string;
+      inboxArchivedOnlyForUserId?: string;
       unreadForUserId?: string;
+      includeSuspended?: boolean;
       labelId?: string;
       originKind?: string;
       originId?: string;
@@ -38,7 +40,10 @@ export const issuesApi = {
     if (filters?.assigneeUserId) params.set("assigneeUserId", filters.assigneeUserId);
     if (filters?.touchedByUserId) params.set("touchedByUserId", filters.touchedByUserId);
     if (filters?.inboxArchivedByUserId) params.set("inboxArchivedByUserId", filters.inboxArchivedByUserId);
+    if (filters?.inboxArchivedOnlyForUserId)
+      params.set("inboxArchivedOnlyForUserId", filters.inboxArchivedOnlyForUserId);
     if (filters?.unreadForUserId) params.set("unreadForUserId", filters.unreadForUserId);
+    if (filters?.includeSuspended) params.set("includeSuspended", "true");
     if (filters?.labelId) params.set("labelId", filters.labelId);
     if (filters?.originKind) params.set("originKind", filters.originKind);
     if (filters?.originId) params.set("originId", filters.originId);
@@ -57,6 +62,13 @@ export const issuesApi = {
     api.post<{ id: string; archivedAt: Date }>(`/issues/${id}/inbox-archive`, {}),
   unarchiveFromInbox: (id: string) =>
     api.delete<{ id: string; archivedAt: Date } | { ok: true }>(`/issues/${id}/inbox-archive`),
+  suspend: (id: string, until: string, reason?: string | null) =>
+    api.post<Issue>(`/issues/${id}/suspend`, {
+      until,
+      ...(reason ? { reason } : {}),
+    }),
+  unsuspend: (id: string) =>
+    api.delete<Issue | { ok: true }>(`/issues/${id}/suspend`),
   create: (companyId: string, data: Record<string, unknown>) =>
     api.post<Issue>(`/companies/${companyId}/issues`, data),
   update: (id: string, data: Record<string, unknown>) => api.patch<Issue>(`/issues/${id}`, data),

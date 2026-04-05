@@ -68,6 +68,10 @@ export interface IssueFilters {
   assigneeUserId?: string;
   touchedByUserId?: string;
   inboxArchivedByUserId?: string;
+  /** When set, returns ONLY issues that are currently archived in the inbox
+   *  for this user — the inverse of `inboxArchivedByUserId`. Used by the
+   *  /inbox/archive page to render the archived list. */
+  inboxArchivedOnlyForUserId?: string;
   unreadForUserId?: string;
   projectId?: string;
   parentId?: string;
@@ -75,6 +79,10 @@ export interface IssueFilters {
   originKind?: string;
   originId?: string;
   includeRoutineExecutions?: boolean;
+  /** When false/undefined (default), issues with an active `suspendedUntil`
+   *  in the future are hidden from the list. Set true to include them (e.g.
+   *  for an admin "sospesi" tab). */
+  includeSuspended?: boolean;
   q?: string;
 }
 
@@ -269,6 +277,23 @@ function inboxVisibleForUserCondition(companyId: string, userId: string) {
   const issueLastActivityAt = issueLastActivityAtExpr(companyId, userId);
   return sql<boolean>`
     NOT EXISTS (
+      SELECT 1
+      FROM ${issueInboxArchives}
+      WHERE ${issueInboxArchives.issueId} = ${issues.id}
+        AND ${issueInboxArchives.companyId} = ${companyId}
+        AND ${issueInboxArchives.userId} = ${userId}
+        AND ${issueInboxArchives.archivedAt} >= ${issueLastActivityAt}
+    )
+  `;
+}
+
+/** Inverse of inboxVisibleForUserCondition — matches issues that ARE archived
+ *  for the given user (the archive record is fresher than the last activity).
+ *  Used by the /inbox/archive page. */
+function inboxArchivedForUserCondition(companyId: string, userId: string) {
+  const issueLastActivityAt = issueLastActivityAtExpr(companyId, userId);
+  return sql<boolean>`
+    EXISTS (
       SELECT 1
       FROM ${issueInboxArchives}
       WHERE ${issueInboxArchives.issueId} = ${issues.id}
@@ -603,8 +628,11 @@ export function issueService(db: Db) {
       const conditions = [eq(issues.companyId, companyId)];
       const touchedByUserId = filters?.touchedByUserId?.trim() || undefined;
       const inboxArchivedByUserId = filters?.inboxArchivedByUserId?.trim() || undefined;
+      const inboxArchivedOnlyForUserId =
+        filters?.inboxArchivedOnlyForUserId?.trim() || undefined;
       const unreadForUserId = filters?.unreadForUserId?.trim() || undefined;
-      const contextUserId = unreadForUserId ?? touchedByUserId ?? inboxArchivedByUserId;
+      const contextUserId =
+        unreadForUserId ?? touchedByUserId ?? inboxArchivedByUserId ?? inboxArchivedOnlyForUserId;
       const rawSearch = filters?.q?.trim() ?? "";
       const hasSearch = rawSearch.length > 0;
       const escapedSearch = hasSearch ? escapeLikePattern(rawSearch) : "";
@@ -643,6 +671,9 @@ export function issueService(db: Db) {
       if (inboxArchivedByUserId) {
         conditions.push(inboxVisibleForUserCondition(companyId, inboxArchivedByUserId));
       }
+      if (inboxArchivedOnlyForUserId) {
+        conditions.push(inboxArchivedForUserCondition(companyId, inboxArchivedOnlyForUserId));
+      }
       if (unreadForUserId) {
         conditions.push(unreadForUserCondition(companyId, unreadForUserId));
       }
@@ -672,6 +703,16 @@ export function issueService(db: Db) {
         conditions.push(ne(issues.originKind, "routine_execution"));
       }
       conditions.push(isNull(issues.hiddenAt));
+      if (!filters?.includeSuspended) {
+        // Hide issues whose suspension is still in the future. NULL values are
+        // always visible; only an active suspension hides the row.
+        conditions.push(
+          or(
+            isNull(issues.suspendedUntil),
+            sql`${issues.suspendedUntil} <= now()`,
+          )!,
+        );
+      }
 
       const priorityOrder = sql`CASE ${issues.priority} WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END`;
       const searchOrder = sql<number>`
@@ -825,6 +866,83 @@ export function issueService(db: Db) {
         )
         .returning();
       return row ?? null;
+    },
+
+    /**
+     * Suspend an issue's inbox visibility until a given deadline. While
+     * suspended, the issue is hidden from the inbox projects view. A cron tick
+     * clears the suspension once `suspendedUntil` is in the past. This does
+     * NOT change `status` — it's an orthogonal display signal so existing
+     * status transitions and execution state are untouched.
+     */
+    suspend: async (
+      companyId: string,
+      issueId: string,
+      input: { until: Date; reason?: string | null; userId?: string | null },
+    ) => {
+      if (!(input.until instanceof Date) || Number.isNaN(input.until.getTime())) {
+        throw unprocessable("suspendedUntil must be a valid date");
+      }
+      if (input.until.getTime() <= Date.now()) {
+        throw unprocessable("suspendedUntil must be in the future");
+      }
+      const now = new Date();
+      const [row] = await db
+        .update(issues)
+        .set({
+          suspendedUntil: input.until,
+          suspendedAt: now,
+          suspendReason: input.reason?.trim() || null,
+          suspendedByUserId: input.userId ?? null,
+          updatedAt: now,
+        })
+        .where(and(eq(issues.companyId, companyId), eq(issues.id, issueId)))
+        .returning();
+      if (!row) throw notFound("Issue not found");
+      return row;
+    },
+
+    /** Clear a suspension immediately (used by the wake-up tick and by the
+     *  manual "riattiva" user action). Idempotent: returns the row either way. */
+    unsuspend: async (companyId: string, issueId: string) => {
+      const now = new Date();
+      const [row] = await db
+        .update(issues)
+        .set({
+          suspendedUntil: null,
+          suspendedAt: null,
+          suspendReason: null,
+          suspendedByUserId: null,
+          updatedAt: now,
+        })
+        .where(and(eq(issues.companyId, companyId), eq(issues.id, issueId)))
+        .returning();
+      return row ?? null;
+    },
+
+    /**
+     * Wake-up scan: find every issue whose `suspendedUntil` is due and clear
+     * its suspension fields. Returns the IDs that were woken so callers can
+     * emit activity-log entries or push live events. Used by the cron tick.
+     */
+    wakeExpiredSuspensions: async (now: Date = new Date()) => {
+      const rows = await db
+        .update(issues)
+        .set({
+          suspendedUntil: null,
+          suspendedAt: null,
+          suspendReason: null,
+          suspendedByUserId: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            sql`${issues.suspendedUntil} is not null`,
+            sql`${issues.suspendedUntil} <= ${now}`,
+          ),
+        )
+        .returning({ id: issues.id, companyId: issues.companyId });
+      return rows;
     },
 
     getById: async (id: string) => {

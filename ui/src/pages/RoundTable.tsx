@@ -81,7 +81,7 @@ function computeMetrics(issues: Issue[]): ProjectMetrics {
 function buildProjectReports(
   issues: Issue[],
   agents: Agent[],
-  projects: Array<{ id: string; name: string; status?: string; leadAgentId?: string | null; targetDate?: string | null; archivedAt?: string | null }>,
+  projects: Array<{ id: string; name: string; status?: string; leadAgentId?: string | null; targetDate?: string | Date | null; archivedAt?: string | Date | null }>,
 ): ProjectReport[] {
   const agentMap = new Map<string, Agent>();
   for (const a of agents) agentMap.set(a.id, a);

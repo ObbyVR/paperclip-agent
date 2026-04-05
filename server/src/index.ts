@@ -29,6 +29,7 @@ import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import { heartbeatService, reconcilePersistedRuntimeServicesOnStartup, routineService } from "./services/index.js";
+import { tickSuspendWakeup } from "./services/issue-suspend-wakeup.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
@@ -605,6 +606,13 @@ export async function startServer(): Promise<StartedServer> {
         .catch((err) => {
           logger.error({ err }, "periodic heartbeat recovery failed");
         });
+
+      // S41 — Inbox suspend wake-up: clear `suspendedUntil` on any issue whose
+      // deadline has passed. Piggybacks on the heartbeat interval to avoid a
+      // second timer; a single UPDATE per tick so the overhead is negligible.
+      void tickSuspendWakeup(db as any).catch((err) => {
+        logger.error({ err }, "suspend wake-up tick failed");
+      });
     }, config.heartbeatSchedulerIntervalMs);
   }
   

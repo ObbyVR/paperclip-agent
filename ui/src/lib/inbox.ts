@@ -14,7 +14,7 @@ export const ACTIONABLE_APPROVAL_STATUSES = new Set(["pending", "revision_reques
 export const DISMISSED_KEY = "paperclip:inbox:dismissed";
 export const READ_ITEMS_KEY = "paperclip:inbox:read-items";
 export const INBOX_LAST_TAB_KEY = "paperclip:inbox:last-tab";
-export type InboxTab = "projects" | "mine" | "recent" | "unread" | "all";
+export type InboxTab = "projects" | "mine" | "recent" | "unread" | "all" | "archive";
 export type InboxApprovalFilter = "all" | "actionable" | "resolved";
 export type InboxWorkItem =
   | {
@@ -89,7 +89,8 @@ export function loadLastInboxTab(): InboxTab {
       raw === "all" ||
       raw === "unread" ||
       raw === "recent" ||
-      raw === "mine"
+      raw === "mine" ||
+      raw === "archive"
     )
       return raw;
     if (raw === "new") return "projects";

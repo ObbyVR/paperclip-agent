@@ -224,11 +224,17 @@ function CommentHistoryPanel({
  * schema ordinato, ... colori hex con codice e render del codice visuale".
  */
 const HEX_TOKEN_RE = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g;
+// Non-global twin used in the walker's acceptNode so the /g lastIndex state of
+// HEX_TOKEN_RE cannot leak across text nodes and accidentally skip matches in
+// later nodes (which used to hide hex chips inside fenced code blocks that
+// happen to appear after a match in free text).
+const HEX_TOKEN_TEST_RE = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/;
 
 function decorateHexTokens(root: HTMLElement) {
-  // Walk all text nodes, skipping ones already inside a chip or a code/pre
-  // block (those are formatted as code and shouldn't be double-decorated —
-  // the chip goes AFTER the code inside the same parent).
+  // Walk all text nodes. We DO decorate inside <code>/<pre> blocks on purpose
+  // — the founder asked for visual color chips next to hex codes wherever they
+  // appear, including code fences. We only skip SCRIPT/STYLE and nodes already
+  // inside an existing chip (so re-runs are idempotent).
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
       let el: Node | null = node.parentNode;
@@ -240,7 +246,7 @@ function decorateHexTokens(root: HTMLElement) {
         }
         el = el.parentNode;
       }
-      return HEX_TOKEN_RE.test(node.nodeValue ?? "")
+      return HEX_TOKEN_TEST_RE.test(node.nodeValue ?? "")
         ? NodeFilter.FILTER_ACCEPT
         : NodeFilter.FILTER_REJECT;
     },
@@ -478,6 +484,7 @@ export function AlertDrawer({
   const [chatDraft, setChatDraft] = useState("");
   const [suspendUntil, setSuspendUntil] = useState<string | null>(null);
   const [suspendCustomDate, setSuspendCustomDate] = useState<string>("");
+  const panelRef = useRef<HTMLElement | null>(null);
 
   const title = useMemo(() => resolveTitle(item, issueById), [item, issueById]);
   const categoryText = CATEGORY_COLOR_TEXT[context.category] ?? CATEGORY_COLOR_TEXT.aggiornamento;
@@ -512,6 +519,81 @@ export function AlertDrawer({
       setChatDraft("");
     },
   });
+
+  // Focus trap: on mount, remember where focus came from, move focus into the
+  // panel so keyboard users land inside the dialog, and intercept Tab /
+  // Shift+Tab so focus cycles within the panel instead of escaping to the
+  // inbox behind. On unmount, restore focus to the originally focused element
+  // (typically the AlertRow that triggered the drawer) so the inbox keeps
+  // its place.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const FOCUSABLE_SELECTOR =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const getFocusable = (): HTMLElement[] => {
+      return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+        (el) => !el.hasAttribute("aria-hidden") && el.offsetParent !== null,
+      );
+    };
+
+    // Delay one frame so the slide-in animation doesn't fight with scroll-to-focus.
+    const rafId = window.requestAnimationFrame(() => {
+      const focusables = getFocusable();
+      if (focusables.length > 0) {
+        focusables[0].focus({ preventScroll: true });
+      } else {
+        panel.focus({ preventScroll: true });
+      }
+    });
+
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const focusables = getFocusable();
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      // If focus somehow escaped the panel, pull it back.
+      if (!active || !panel.contains(active)) {
+        e.preventDefault();
+        first.focus({ preventScroll: true });
+        return;
+      }
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    };
+
+    panel.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      panel.removeEventListener("keydown", onKeyDown);
+      // Only restore focus if the element that opened the drawer is still in
+      // the DOM and focusable; otherwise leave it to the browser default.
+      if (
+        previouslyFocused &&
+        typeof previouslyFocused.focus === "function" &&
+        document.contains(previouslyFocused)
+      ) {
+        previouslyFocused.focus({ preventScroll: true });
+      }
+    };
+    // Intentionally run once per drawer mount (not per item change) — the
+    // keyboard nav between items keeps the same panel and same focusables
+    // list, we don't need to re-run the trap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Close on Escape, navigate with ↑ / ↓ / j / k.
   // The shortcuts are ignored when the user is typing inside an input so
@@ -616,10 +698,12 @@ export function AlertDrawer({
 
       {/* Panel */}
       <aside
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         className={cn(
-          "flex h-full w-full max-w-[640px] flex-col border-l border-border bg-background shadow-2xl",
+          "flex h-full w-full max-w-[640px] flex-col border-l border-border bg-background shadow-2xl outline-none",
           "animate-in slide-in-from-right duration-200",
         )}
       >

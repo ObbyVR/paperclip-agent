@@ -42,7 +42,11 @@ interface InboxProjectsViewProps {
     fallbackHref?: string;
     onApprove?: () => void;
     onReview?: () => void;
-    onSuspend?: () => void;
+    /** Receives the drawer payload `[until=VALUE] motivo` so the caller can
+     *  parse it and POST /issues/:id/suspend. The quick-action shortcut on the
+     *  inbox card (without drawer) passes no argument, so the parameter is
+     *  optional. */
+    onSuspend?: (note?: string) => void;
     onBlock?: () => void;
     onRetry?: () => void;
     onArchive?: () => void;
@@ -374,7 +378,8 @@ export function InboxProjectsView({
             setOpenItem(null);
           }}
           onSuspend={(note) => {
-            void note;
+            const handlers = buildItemHandlers(openItem);
+            handlers.onSuspend?.(note);
             setOpenItem(null);
           }}
           onArchive={() => {

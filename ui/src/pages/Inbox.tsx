@@ -20,6 +20,7 @@ import { SwipeToArchive } from "../components/SwipeToArchive";
 import { InboxItemRow } from "../components/InboxItemRow";
 import { CategoryBadge } from "../components/CategoryBadge";
 import { InboxProjectsView } from "../components/InboxProjectsView";
+import { InboxArchiveView } from "../components/InboxArchiveView";
 import { computeAlertUnreadState, type AlertUnreadState } from "../components/AlertRow";
 import { cn } from "../lib/utils";
 import { Button } from "@/components/ui/button";
@@ -90,7 +91,8 @@ export function Inbox() {
     pathSegment === "mine" ||
     pathSegment === "recent" ||
     pathSegment === "all" ||
-    pathSegment === "unread"
+    pathSegment === "unread" ||
+    pathSegment === "archive"
       ? pathSegment
       : "projects";
   const issueLinkState = useMemo(
@@ -186,6 +188,32 @@ export function Inbox() {
     queryKey: queryKeys.heartbeats(selectedCompanyId!),
     queryFn: () => heartbeatsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
+  });
+
+  // Archive view — only loaded while the user is on the "archive" tab so we
+  // don't slow down the main inbox queries. Fetches every issue the current
+  // user has archived (via `inboxArchivedOnlyForUserId=me`), regardless of
+  // status, so the archive includes done/cancelled work they've stashed.
+  const { data: archivedIssues = [], isLoading: isArchivedLoading } = useQuery({
+    queryKey: queryKeys.issues.listArchivedByMe(selectedCompanyId!),
+    queryFn: () =>
+      issuesApi.list(selectedCompanyId!, {
+        inboxArchivedOnlyForUserId: "me",
+      }),
+    enabled: !!selectedCompanyId && tab === "archive",
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: (id: string) => issuesApi.unarchiveFromInbox(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.issues.listArchivedByMe(selectedCompanyId!),
+      });
+      invalidateInboxIssueQueries();
+    },
+    onError: (err) => {
+      setActionError(err instanceof Error ? err.message : "Failed to restore issue");
+    },
   });
 
   const { data: projects } = useQuery({
@@ -433,6 +461,54 @@ export function Inbox() {
           return next;
         });
       }, 500);
+    },
+  });
+
+  /**
+   * Parse the suspend payload the drawer passes us — the drawer encodes the
+   * user's "until when" choice as `[until=VALUE] motivo` so the wiring layer
+   * stays string-based. VALUE is one of:
+   *   - `1h` / `4h` — relative offsets
+   *   - `tomorrow-9` — tomorrow at 09:00 local
+   *   - an ISO datetime-local string from <input type="datetime-local">
+   *     (e.g. `2026-04-06T14:30`)
+   * Returns {until: Date, reason: string} or null if we couldn't resolve a
+   * future date, in which case the caller should abort the API call.
+   */
+  const parseSuspendPayload = (payload: string): { until: Date; reason: string } | null => {
+    const match = payload.match(/^\s*\[until=([^\]]+)\]\s*(.*)$/);
+    if (!match) return null;
+    const value = match[1].trim();
+    const reason = match[2].trim();
+    const now = new Date();
+    let until: Date | null = null;
+    if (value === "1h") {
+      until = new Date(now.getTime() + 60 * 60 * 1000);
+    } else if (value === "4h") {
+      until = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+    } else if (value === "tomorrow-9") {
+      const t = new Date(now);
+      t.setDate(t.getDate() + 1);
+      t.setHours(9, 0, 0, 0);
+      until = t;
+    } else {
+      // datetime-local output (`YYYY-MM-DDTHH:MM`) has no timezone; we treat
+      // it as local time, which Date() already does.
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        until = parsed;
+      }
+    }
+    if (!until || until.getTime() <= now.getTime()) return null;
+    return { until, reason };
+  };
+
+  const suspendIssueMutation = useMutation({
+    mutationFn: ({ id, until, reason }: { id: string; until: Date; reason: string }) =>
+      issuesApi.suspend(id, until.toISOString(), reason || null),
+    onSuccess: () => invalidateInboxIssueQueries(),
+    onError: (err) => {
+      setActionError(err instanceof Error ? err.message : "Failed to suspend issue");
     },
   });
 
@@ -706,8 +782,21 @@ export function Inbox() {
       return {
         fallbackHref: `/issues/${issuePathId}`,
         onArchive: () => archiveIssueMutation.mutate(item.issue.id),
-        onSuspend: () => {
-          /* S42 — stub */
+        onSuspend: (note?: string) => {
+          // The row-level quick-action fires `onSuspend()` with no argument —
+          // there's no "fino a quando" picker in the row hover, so we treat
+          // that as a no-op and rely on the drawer to capture a real deadline.
+          if (!note) return;
+          const parsed = parseSuspendPayload(note);
+          if (!parsed) {
+            setActionError("Data di sospensione non valida");
+            return;
+          }
+          suspendIssueMutation.mutate({
+            id: item.issue.id,
+            until: parsed.until,
+            reason: parsed.reason,
+          });
         },
       };
     }
@@ -718,8 +807,12 @@ export function Inbox() {
         onApprove: () => approveMutation.mutate(item.approval.id),
         onArchive: () => handleArchiveNonIssue(approvalKey),
         isPending: approveMutation.isPending || rejectMutation.isPending,
-        onSuspend: () => {
-          /* S42 */
+        // Approvals don't have a `suspendedUntil` column of their own — we
+        // piggyback by archiving them on suspend so they disappear from the
+        // inbox. A future iteration can add first-class suspension.
+        onSuspend: (_note?: string) => {
+          void _note;
+          handleArchiveNonIssue(approvalKey);
         },
       };
     }
@@ -773,11 +866,12 @@ export function Inbox() {
                 { value: "recent", label: t("inbox.recent") },
                 { value: "unread", label: t("inbox.unread") },
                 { value: "all", label: t("inbox.all") },
+                { value: "archive", label: t("inbox.archive") },
               ]}
             />
           </Tabs>
 
-          {tab !== "projects" && canMarkAllRead && (
+          {tab !== "projects" && tab !== "archive" && canMarkAllRead && (
             <Button
               type="button"
               variant="outline"
@@ -789,7 +883,7 @@ export function Inbox() {
               {markAllReadMutation.isPending ? t("inbox.marking") : t("inbox.markAllRead")}
             </Button>
           )}
-          {tab !== "projects" && (
+          {tab !== "projects" && tab !== "archive" && (
             <>
               <Button
                 type="button"
@@ -817,7 +911,7 @@ export function Inbox() {
       </div>
 
       {/* Category filter pills (legacy views only — the projects view has its own toolbar) */}
-      {tab !== "projects" && (
+      {tab !== "projects" && tab !== "archive" && (
       <div className="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
@@ -869,14 +963,30 @@ export function Inbox() {
         />
       )}
 
+      {/* Archive view (tab "archive") */}
+      {tab === "archive" && (
+        <InboxArchiveView
+          issues={archivedIssues}
+          isLoading={isArchivedLoading}
+          projectById={projectById}
+          agentById={agentById}
+          onRestore={(id) => unarchiveMutation.mutate(id)}
+          restoringIds={
+            unarchiveMutation.isPending && unarchiveMutation.variables
+              ? new Set([unarchiveMutation.variables as string])
+              : new Set()
+          }
+        />
+      )}
+
       {approvalsError && <p className="text-sm text-destructive">{approvalsError.message}</p>}
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
-      {tab !== "projects" && !allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
+      {tab !== "projects" && tab !== "archive" && !allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
         <PageSkeleton variant="inbox" />
       )}
 
-      {tab !== "projects" && allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
+      {tab !== "projects" && tab !== "archive" && allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
         <EmptyState
           icon={InboxIcon}
           message={
@@ -894,7 +1004,7 @@ export function Inbox() {
       )}
 
       {/* Work items (legacy views) */}
-      {tab !== "projects" && workItemsToRender.length > 0 && (
+      {tab !== "projects" && tab !== "archive" && workItemsToRender.length > 0 && (
         <div className="space-y-4">
           {(groupedWorkItems ?? [{ groupLabel: null, items: workItemsToRender }]).map((group) => (
             <div key={group.groupLabel ?? "all"}>
@@ -916,7 +1026,7 @@ export function Inbox() {
       )}
 
       {/* Alerts section */}
-      {showAlertsSection && (
+      {tab !== "archive" && showAlertsSection && (
         <>
           <Separator />
           <div>

@@ -233,7 +233,9 @@ export function issueRoutes(db: Db, storage: StorageService) {
     const assigneeUserFilterRaw = req.query.assigneeUserId as string | undefined;
     const touchedByUserFilterRaw = req.query.touchedByUserId as string | undefined;
     const inboxArchivedByUserFilterRaw = req.query.inboxArchivedByUserId as string | undefined;
+    const inboxArchivedOnlyForUserFilterRaw = req.query.inboxArchivedOnlyForUserId as string | undefined;
     const unreadForUserFilterRaw = req.query.unreadForUserId as string | undefined;
+    const includeSuspendedRaw = req.query.includeSuspended as string | undefined;
     const assigneeUserId =
       assigneeUserFilterRaw === "me" && req.actor.type === "board"
         ? req.actor.userId
@@ -246,6 +248,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
       inboxArchivedByUserFilterRaw === "me" && req.actor.type === "board"
         ? req.actor.userId
         : inboxArchivedByUserFilterRaw;
+    const inboxArchivedOnlyForUserId =
+      inboxArchivedOnlyForUserFilterRaw === "me" && req.actor.type === "board"
+        ? req.actor.userId
+        : inboxArchivedOnlyForUserFilterRaw;
     const unreadForUserId =
       unreadForUserFilterRaw === "me" && req.actor.type === "board"
         ? req.actor.userId
@@ -263,6 +269,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
       res.status(403).json({ error: "inboxArchivedByUserId=me requires board authentication" });
       return;
     }
+    if (
+      inboxArchivedOnlyForUserFilterRaw === "me" &&
+      (!inboxArchivedOnlyForUserId || req.actor.type !== "board")
+    ) {
+      res.status(403).json({ error: "inboxArchivedOnlyForUserId=me requires board authentication" });
+      return;
+    }
     if (unreadForUserFilterRaw === "me" && (!unreadForUserId || req.actor.type !== "board")) {
       res.status(403).json({ error: "unreadForUserId=me requires board authentication" });
       return;
@@ -275,6 +288,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
       assigneeUserId,
       touchedByUserId,
       inboxArchivedByUserId,
+      inboxArchivedOnlyForUserId,
+      includeSuspended: includeSuspendedRaw === "true" || includeSuspendedRaw === "1",
       unreadForUserId,
       projectId: req.query.projectId as string | undefined,
       parentId: req.query.parentId as string | undefined,
@@ -772,6 +787,100 @@ export function issueRoutes(db: Db, storage: StorageService) {
       agentId: actor.agentId,
       runId: actor.runId,
       action: "issue.inbox_unarchived",
+      entityType: "issue",
+      entityId: issue.id,
+      details: { userId: req.actor.userId },
+    });
+    res.json(removed ?? { ok: true });
+  });
+
+  // S41 — Inbox suspend: hide an issue from the inbox until a deadline.
+  // Body: { until: ISO string, reason?: string }. The wake-up tick clears
+  // the suspension once the deadline passes. Board-user only (same trust
+  // model as inbox-archive) since this is a personal-visibility action.
+  router.post("/issues/:id/suspend", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (req.actor.type !== "board") {
+      res.status(403).json({ error: "Board authentication required" });
+      return;
+    }
+    if (!req.actor.userId) {
+      res.status(403).json({ error: "Board user context required" });
+      return;
+    }
+    const body = (req.body ?? {}) as { until?: unknown; reason?: unknown };
+    if (typeof body.until !== "string" || body.until.trim() === "") {
+      res.status(400).json({ error: "until (ISO timestamp) is required" });
+      return;
+    }
+    const until = new Date(body.until);
+    if (Number.isNaN(until.getTime())) {
+      res.status(400).json({ error: "until must be a valid ISO timestamp" });
+      return;
+    }
+    if (until.getTime() <= Date.now()) {
+      res.status(400).json({ error: "until must be in the future" });
+      return;
+    }
+    const reason =
+      typeof body.reason === "string" && body.reason.trim() !== ""
+        ? body.reason.trim()
+        : null;
+    const updated = await svc.suspend(issue.companyId, issue.id, {
+      until,
+      reason,
+      userId: req.actor.userId,
+    });
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "issue.suspended",
+      entityType: "issue",
+      entityId: issue.id,
+      details: {
+        userId: req.actor.userId,
+        suspendedUntil: until.toISOString(),
+        reason,
+      },
+    });
+    res.json(updated);
+  });
+
+  router.delete("/issues/:id/suspend", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (req.actor.type !== "board") {
+      res.status(403).json({ error: "Board authentication required" });
+      return;
+    }
+    if (!req.actor.userId) {
+      res.status(403).json({ error: "Board user context required" });
+      return;
+    }
+    const removed = await svc.unsuspend(issue.companyId, issue.id);
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "issue.unsuspended",
       entityType: "issue",
       entityId: issue.id,
       details: { userId: req.actor.userId },
