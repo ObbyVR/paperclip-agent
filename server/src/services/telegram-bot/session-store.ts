@@ -10,7 +10,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { defaultNotifyOn, type SessionState } from "./types.js";
+import { defaultNotifyOn, OWNED_ISSUES_MAX, type SessionState } from "./types.js";
 
 export interface SessionStoreLogger {
   info?: (obj: Record<string, unknown>, msg: string) => void;
@@ -91,6 +91,12 @@ export class SessionStore {
       if (typeof obj.userId !== "string" || obj.userId === "") continue;
       const notify = obj.notifyOn as Record<string, unknown> | undefined;
       const defaults = defaultNotifyOn();
+      const ownedRaw = Array.isArray(obj.ownedIssueIds) ? obj.ownedIssueIds : [];
+      const ownedIssueIds: string[] = [];
+      for (const v of ownedRaw) {
+        if (typeof v === "string" && v !== "") ownedIssueIds.push(v);
+        if (ownedIssueIds.length >= OWNED_ISSUES_MAX) break;
+      }
       const session: SessionState = {
         chatId: obj.chatId,
         userId: obj.userId,
@@ -107,7 +113,10 @@ export class SessionStore {
             typeof notify?.issueErrored === "boolean" ? notify.issueErrored : defaults.issueErrored,
           agentHired:
             typeof notify?.agentHired === "boolean" ? notify.agentHired : defaults.agentHired,
+          agentReplied:
+            typeof notify?.agentReplied === "boolean" ? notify.agentReplied : defaults.agentReplied,
         },
+        ownedIssueIds,
         updatedAt:
           typeof obj.updatedAt === "string" ? obj.updatedAt : new Date(0).toISOString(),
       };
@@ -137,6 +146,7 @@ export class SessionStore {
       companyId: null,
       ceoAgentId: null,
       notifyOn: defaultNotifyOn(),
+      ownedIssueIds: [],
       updatedAt: this.now().toISOString(),
     };
     const next: SessionState = {
@@ -151,6 +161,27 @@ export class SessionStore {
     this.sessions.set(chatId, next);
     this.markDirty();
     return next;
+  }
+
+  /**
+   * Record that this chat created the given issue via the bot. Used by the
+   * notifier to filter agent-side events to only the founder's own tasks.
+   * FIFO-bounded to OWNED_ISSUES_MAX per session.
+   */
+  trackOwnedIssue(chatId: string, issueId: string): void {
+    const session = this.sessions.get(chatId);
+    if (!session) return;
+    if (session.ownedIssueIds.includes(issueId)) return;
+    const next = [...session.ownedIssueIds, issueId];
+    while (next.length > OWNED_ISSUES_MAX) next.shift();
+    session.ownedIssueIds = next;
+    session.updatedAt = this.now().toISOString();
+    this.markDirty();
+  }
+
+  /** True iff this chat is the founder-owner of the given issue. */
+  ownsIssue(chatId: string, issueId: string): boolean {
+    return this.sessions.get(chatId)?.ownedIssueIds.includes(issueId) ?? false;
   }
 
   private markDirty(): void {

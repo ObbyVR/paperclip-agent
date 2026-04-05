@@ -48,6 +48,7 @@ export async function handleTask(
   session: SessionState | undefined,
   rawText: string,
   userId: string,
+  onIssueCreated?: (issueId: string) => void,
 ): Promise<CommandResult> {
   if (!session?.companyId) {
     return {
@@ -76,6 +77,7 @@ export async function handleTask(
       assigneeAgentId: session.ceoAgentId,
       createdByUserId: userId,
     });
+    onIssueCreated?.(issue.id);
     return {
       text:
         `✅ Task creato: *${issue.identifier}*\n` +

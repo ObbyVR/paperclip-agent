@@ -78,7 +78,17 @@ export interface SessionState {
     runFailed: boolean;
     issueErrored: boolean;
     agentHired: boolean;
+    // S43-2: agent responded (comment or completion) on a bot-created issue
+    agentReplied: boolean;
   };
+  /**
+   * S43-2: the set of issue UUIDs this chat created via the bot. Used by the
+   * notifier to filter incoming issue.comment_added / issue.updated events
+   * to only those the founder actually cares about (i.e. their own tasks).
+   * Bounded at OWNED_ISSUES_MAX to avoid unbounded growth; older entries are
+   * dropped FIFO when the limit is reached.
+   */
+  ownedIssueIds: string[];
   updatedAt: string;
 }
 
@@ -89,7 +99,11 @@ export const NOTIFY_KEYS: NotifyKey[] = [
   "runFailed",
   "issueErrored",
   "agentHired",
+  "agentReplied",
 ];
+
+/** Maximum number of issue UUIDs tracked per session. */
+export const OWNED_ISSUES_MAX = 200;
 
 /** Result object returned by command handlers. */
 export interface CommandResult {
@@ -107,5 +121,6 @@ export function defaultNotifyOn(): SessionState["notifyOn"] {
     runFailed: true,
     issueErrored: true,
     agentHired: true,
+    agentReplied: true,
   };
 }

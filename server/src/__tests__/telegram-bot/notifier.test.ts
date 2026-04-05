@@ -19,7 +19,7 @@ describe("classifyEvent", () => {
       payload: { status: "failed", agentName: "Alice" },
     });
     expect(m?.key).toBe("runFailed");
-    expect(m?.render({ type: "heartbeat.run.status" })).toContain("Alice");
+    expect(m?.text).toContain("Alice");
   });
 
   it("ignores heartbeat.run.status with non-failed status", () => {
@@ -28,35 +28,126 @@ describe("classifyEvent", () => {
     ).toBeNull();
   });
 
-  it("classifies activity.logged kind=approval.created", () => {
+  it("classifies activity.logged action=approval.created", () => {
     const m = classifyEvent({
       type: "activity.logged",
-      payload: { kind: "approval.created" },
+      payload: { action: "approval.created" },
     });
     expect(m?.key).toBe("approvalsPending");
   });
 
-  it("classifies activity.logged kind=issue.errored", () => {
+  it("classifies activity.logged action=issue.errored", () => {
     const m = classifyEvent({
       type: "activity.logged",
-      payload: { kind: "issue.errored", identifier: "ACM-7" },
+      payload: {
+        action: "issue.errored",
+        actorType: "system",
+        entityType: "issue",
+        entityId: "iss-1",
+        details: { identifier: "ACM-7" },
+      },
     });
     expect(m?.key).toBe("issueErrored");
-    expect(m?.render({ type: "activity.logged" })).toContain("ACM-7");
+    expect(m?.text).toContain("ACM-7");
   });
 
-  it("classifies activity.logged kind=agent.hired", () => {
+  it("classifies activity.logged action=agent.created", () => {
     const m = classifyEvent({
       type: "activity.logged",
-      payload: { kind: "agent.hired", name: "Bob" },
+      payload: { action: "agent.created", details: { name: "Bob" } },
     });
     expect(m?.key).toBe("agentHired");
-    expect(m?.render({ type: "activity.logged" })).toContain("Bob");
+    expect(m?.text).toContain("Bob");
+  });
+
+  it("classifies issue.comment_added by agent → agentReplied + ownerCheck", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "issue.comment_added",
+        actorType: "agent",
+        entityType: "issue",
+        entityId: "iss-42",
+        details: {
+          identifier: "WEB-157",
+          issueTitle: "Test task",
+          bodySnippet: "Completato, ecco il report…",
+        },
+      },
+    });
+    expect(m?.key).toBe("agentReplied");
+    expect(m?.ownerCheckIssueId).toBe("iss-42");
+    expect(m?.text).toContain("WEB-157");
+    expect(m?.text).toContain("Completato");
+  });
+
+  it("ignores issue.comment_added when actorType=user (founder's own comment)", () => {
+    expect(
+      classifyEvent({
+        type: "activity.logged",
+        payload: {
+          action: "issue.comment_added",
+          actorType: "user",
+          entityType: "issue",
+          entityId: "iss-42",
+          details: { identifier: "WEB-157", bodySnippet: "note mine" },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("classifies issue.updated status=done by agent → agentReplied", () => {
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "issue.updated",
+        actorType: "agent",
+        entityType: "issue",
+        entityId: "iss-42",
+        details: { identifier: "WEB-157", status: "done", issueTitle: "Test task" },
+      },
+    });
+    expect(m?.key).toBe("agentReplied");
+    expect(m?.ownerCheckIssueId).toBe("iss-42");
+    expect(m?.text).toContain("completata");
+  });
+
+  it("ignores issue.updated when status is not done", () => {
+    expect(
+      classifyEvent({
+        type: "activity.logged",
+        payload: {
+          action: "issue.updated",
+          actorType: "agent",
+          entityType: "issue",
+          entityId: "iss-42",
+          details: { status: "in_progress" },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("truncates long comment snippets in the notification", () => {
+    const long = "x".repeat(500);
+    const m = classifyEvent({
+      type: "activity.logged",
+      payload: {
+        action: "issue.comment_added",
+        actorType: "agent",
+        entityType: "issue",
+        entityId: "iss-1",
+        details: { identifier: "WEB-1", bodySnippet: long },
+      },
+    });
+    expect(m?.text.length).toBeLessThan(400);
+    expect(m?.text).toContain("…");
   });
 
   it("returns null for unrelated events", () => {
     expect(classifyEvent({ type: "plugin.ui.updated" })).toBeNull();
-    expect(classifyEvent({ type: "activity.logged", payload: { kind: "something.else" } })).toBeNull();
+    expect(
+      classifyEvent({ type: "activity.logged", payload: { action: "something.else" } }),
+    ).toBeNull();
   });
 });
 
@@ -117,6 +208,7 @@ describe("Notifier", () => {
         runFailed: false,
         issueErrored: true,
         agentHired: true,
+        agentReplied: true,
       },
     });
     const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
@@ -182,5 +274,83 @@ describe("Notifier", () => {
     n.stop();
     expect(subscribers.get("co-1")?.length ?? 0).toBe(0);
     expect(subscribers.get("co-2")?.length ?? 0).toBe(0);
+  });
+
+  // S43-2 — agent reply forwarding with ownership gating
+
+  it("forwards agent comment only when the issue is owned by this chat", async () => {
+    const { store, transport, sent, subscribe, emit } = await makeNotifierFixture();
+    store.upsert("1", "u", { companyId: "co-1" });
+    store.trackOwnedIssue("1", "iss-owned");
+    const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
+    n.start();
+    // agent comment on a DIFFERENT issue → ignored
+    emit("co-1", {
+      type: "activity.logged",
+      payload: {
+        action: "issue.comment_added",
+        actorType: "agent",
+        entityType: "issue",
+        entityId: "iss-other",
+        details: { identifier: "ACM-99", bodySnippet: "ignore me" },
+      },
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(sent).toHaveLength(0);
+    // agent comment on the owned issue → delivered
+    emit("co-1", {
+      type: "activity.logged",
+      payload: {
+        action: "issue.comment_added",
+        actorType: "agent",
+        entityType: "issue",
+        entityId: "iss-owned",
+        details: { identifier: "WEB-42", bodySnippet: "all done" },
+      },
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toContain("WEB-42");
+  });
+
+  it("forwards agent completion on owned issue", async () => {
+    const { store, transport, sent, subscribe, emit } = await makeNotifierFixture();
+    store.upsert("1", "u", { companyId: "co-1" });
+    store.trackOwnedIssue("1", "iss-owned");
+    const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
+    n.start();
+    emit("co-1", {
+      type: "activity.logged",
+      payload: {
+        action: "issue.updated",
+        actorType: "agent",
+        entityType: "issue",
+        entityId: "iss-owned",
+        details: { identifier: "WEB-42", status: "done", issueTitle: "X" },
+      },
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toContain("completata");
+  });
+
+  it("does not forward founder's own comments (actorType=user)", async () => {
+    const { store, transport, sent, subscribe, emit } = await makeNotifierFixture();
+    store.upsert("1", "u", { companyId: "co-1" });
+    store.trackOwnedIssue("1", "iss-owned");
+    const n = new Notifier({ transport, store, subscribeCompanyLiveEvents: subscribe });
+    n.start();
+    emit("co-1", {
+      type: "activity.logged",
+      payload: {
+        action: "issue.comment_added",
+        actorType: "user",
+        entityType: "issue",
+        entityId: "iss-owned",
+        details: { identifier: "WEB-42", bodySnippet: "founder note" },
+      },
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(sent).toHaveLength(0);
   });
 });

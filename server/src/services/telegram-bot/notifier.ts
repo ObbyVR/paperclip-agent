@@ -44,41 +44,91 @@ export interface NotifierOptions {
 
 const DEFAULT_DEDUP_MS = 10_000;
 
-type EventMapping = {
+export type EventMapping = {
   key: NotifyKey;
-  render: (event: LiveEventLike) => string;
+  text: string;
+  /**
+   * S43-2: when set, the notifier MUST confirm the session owns this issue
+   * (via SessionStore.ownsIssue) before sending the notification. Used for
+   * agent-initiated events like comment_added / task completed.
+   */
+  ownerCheckIssueId?: string;
 };
+
+function asString(v: unknown, fallback: string): string {
+  return typeof v === "string" && v !== "" ? v : fallback;
+}
 
 /**
  * Classify a live event into a notify key + rendered message. Returns null
- * if the event is not one we want to forward. Exposed for unit tests.
+ * if the event is not one we want to forward.
+ *
+ * Paperclip's activity-log events expose `action` at the top of the
+ * `activity.logged` payload, plus the actor and details. We inspect both.
+ *
+ * This function is pure; `ownerCheckIssueId` is propagated up so the
+ * notifier can gate on ownership before sending.
  */
 export function classifyEvent(event: LiveEventLike): EventMapping | null {
   const payload = event.payload ?? {};
   if (event.type === "heartbeat.run.status" && payload.status === "failed") {
-    const agentName =
-      typeof payload.agentName === "string" ? payload.agentName : "agente";
+    const agentName = asString(payload.agentName, "agente");
+    return { key: "runFailed", text: `🔴 Run fallito (${agentName})` };
+  }
+  if (event.type !== "activity.logged") return null;
+
+  const action = typeof payload.action === "string" ? payload.action : "";
+  const actorType = typeof payload.actorType === "string" ? payload.actorType : "";
+  const entityType = typeof payload.entityType === "string" ? payload.entityType : "";
+  const entityId = typeof payload.entityId === "string" ? payload.entityId : "";
+  const details =
+    typeof payload.details === "object" && payload.details !== null
+      ? (payload.details as Record<string, unknown>)
+      : {};
+
+  if (action === "approval.created") {
     return {
-      key: "runFailed",
-      render: () => `🔴 Run fallito (${agentName})`,
+      key: "approvalsPending",
+      text: "🟡 Nuova approval in pending. Usa /approvals.",
     };
   }
-  if (event.type === "activity.logged") {
-    const kind = typeof payload.kind === "string" ? payload.kind : "";
-    if (kind === "approval.created" || kind === "approval_created") {
-      return {
-        key: "approvalsPending",
-        render: () => `🟡 Nuova approval in pending. Usa /approvals.`,
-      };
-    }
-    if (kind === "issue.errored" || kind === "issue_errored") {
-      const ident = typeof payload.identifier === "string" ? payload.identifier : "—";
-      return { key: "issueErrored", render: () => `⚠️ Issue in errore: ${ident}` };
-    }
-    if (kind === "agent.hired" || kind === "agent_hired") {
-      const name = typeof payload.name === "string" ? payload.name : "nuovo agente";
-      return { key: "agentHired", render: () => `✅ Agente assunto: ${name}` };
-    }
+  if (action === "agent.created" || action === "agent.hired") {
+    const name = asString(details.name, "nuovo agente");
+    return { key: "agentHired", text: `✅ Agente assunto: ${name}` };
+  }
+  if (action === "issue.errored") {
+    const ident = asString(details.identifier, "—");
+    return { key: "issueErrored", text: `⚠️ Issue in errore: ${ident}` };
+  }
+
+  // S43-2: agent-initiated events on bot-owned issues.
+  // We only notify when actorType === "agent" — a comment by the founder
+  // themself would echo back to Telegram otherwise.
+  if (entityType !== "issue" || actorType !== "agent" || entityId === "") return null;
+
+  if (action === "issue.comment_added") {
+    const ident = asString(details.identifier, "—");
+    const title = asString(details.issueTitle, "");
+    const snippet = asString(details.bodySnippet, "").trim();
+    const preview = snippet.length > 300 ? snippet.slice(0, 297) + "…" : snippet;
+    const titleLine = title ? `\n_${title}_` : "";
+    return {
+      key: "agentReplied",
+      text: `💬 *${ident}* — nuovo commento dall'agente${titleLine}\n\n${preview}`,
+      ownerCheckIssueId: entityId,
+    };
+  }
+  if (action === "issue.updated") {
+    const status = typeof details.status === "string" ? details.status : "";
+    if (status !== "done") return null;
+    const ident = asString(details.identifier, "—");
+    const title = asString(details.issueTitle ?? details.title, "");
+    const titleLine = title ? `\n_${title}_` : "";
+    return {
+      key: "agentReplied",
+      text: `✅ *${ident}* completata dall'agente${titleLine}`,
+      ownerCheckIssueId: entityId,
+    };
   }
   return null;
 }
@@ -145,23 +195,31 @@ export class Notifier {
     const mapping = classifyEvent(event);
     if (!mapping) return;
     if (!session.notifyOn[mapping.key]) return;
-    const dedupKey = `${chatId}:${mapping.key}`;
+
+    // S43-2: if the mapping requires ownership (agent-initiated events like
+    // comment_added), verify this chat actually created the issue via the
+    // bot. Otherwise we'd spam the founder with replies to tasks that
+    // agents are discussing among themselves.
+    if (mapping.ownerCheckIssueId) {
+      if (!this.opts.store.ownsIssue(chatId, mapping.ownerCheckIssueId)) return;
+    }
+
+    const dedupKey = `${chatId}:${mapping.key}:${mapping.ownerCheckIssueId ?? ""}`;
     const now = this.now();
     // First time we see this dedup key → always send. The rate limit only
-    // kicks in on the *second* occurrence within the window. (A default of 0
-    // would block the very first event if the real clock is < window ms into
-    // epoch in tests.)
+    // kicks in on the *second* occurrence within the window.
     if (this.lastSent.has(dedupKey)) {
       const last = this.lastSent.get(dedupKey)!;
       if (now - last < this.dedupWindowMs) return;
     }
     this.lastSent.set(dedupKey, now);
-    const text = mapping.render(event);
-    await this.opts.transport.sendMessage(chatId, text).catch((err) => {
-      this.opts.logger?.warn?.(
-        { err: (err as Error).message, chatId },
-        "notifier send failed",
-      );
-    });
+    await this.opts.transport
+      .sendMessage(chatId, mapping.text, { parse_mode: "Markdown" })
+      .catch((err) => {
+        this.opts.logger?.warn?.(
+          { err: (err as Error).message, chatId },
+          "notifier send failed",
+        );
+      });
   }
 }

@@ -99,9 +99,12 @@ export class Dispatcher {
         this.deps.onSessionChange?.(next);
         return next;
       };
+      const trackIssue = (issueId: string) => {
+        this.deps.store.trackOwnedIssue(chatId, issueId);
+      };
 
       const { command, args } = parseCommand(msg.text);
-      const result = await this.route(command, args, msg.text, session, chatId, userId, upsert);
+      const result = await this.route(command, args, msg.text, session, chatId, userId, upsert, trackIssue);
 
       await this.send(msg.chat.id, result);
     } catch (err) {
@@ -120,11 +123,12 @@ export class Dispatcher {
     chatId: string,
     userId: string,
     upsert: (patch: Partial<Omit<SessionState, "chatId" | "userId">>) => SessionState,
+    trackIssue: (issueId: string) => void,
   ): Promise<CommandResult> {
     const svc = this.deps.svc;
     if (command === null) {
       // Free-form → /task
-      return handleTask(svc, session, fullText, userId);
+      return handleTask(svc, session, fullText, userId, trackIssue);
     }
     switch (command) {
       case "/start":
@@ -142,7 +146,7 @@ export class Dispatcher {
       case "/setceo":
         return handleSetCeo(svc, session, args, upsert);
       case "/task":
-        return handleTask(svc, session, args, userId);
+        return handleTask(svc, session, args, userId, trackIssue);
       case "/status":
         return handleStatus(svc, session);
       case "/issues":
