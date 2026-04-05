@@ -24,6 +24,7 @@ import { approvalLabel, defaultTypeIcon, typeIcon } from "./ApprovalPayload";
 import { MarkdownBody } from "./MarkdownBody";
 import { issuesApi } from "../api/issues";
 import { queryKeys } from "../lib/queryKeys";
+import { useCompany } from "../context/CompanyContext";
 
 /**
  * AlertDrawer — a right-side slide-out panel shown when the user clicks an
@@ -479,9 +480,20 @@ export function AlertDrawer({
 }: AlertDrawerProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { selectedCompanyId } = useCompany();
   const [pendingAction, setPendingAction] = useState<DrawerAction | null>(null);
   const [actionNote, setActionNote] = useState("");
   const [chatDraft, setChatDraft] = useState("");
+  // S42 — "Richiama l'agente" toggle (default on). When enabled, the comment
+  // asks the backend to wake up the assignee regardless of issue status:
+  //   - closed (done/cancelled) → `reopen: true` re-activates it and triggers
+  //     wake-up via `issue_reopened_via_comment`.
+  //   - in_progress with a running run → `interrupt: true` cancels the current
+  //     run and re-queues the wake, guaranteeing the agent picks up the comment.
+  //   - other statuses → the backend already wakes the assignee automatically;
+  //     the flag is a no-op but kept consistent so the user sees predictable
+  //     behaviour.
+  const [wakeAgentOnSend, setWakeAgentOnSend] = useState(true);
   const [suspendUntil, setSuspendUntil] = useState<string | null>(null);
   const [suspendCustomDate, setSuspendCustomDate] = useState<string>("");
   const panelRef = useRef<HTMLElement | null>(null);
@@ -505,18 +517,66 @@ export function AlertDrawer({
     return null;
   }, [item]);
 
+  // Derive the current status of the target issue so we can decide whether
+  // a comment needs `reopen` / `interrupt` to actually wake the agent. The
+  // server auto-wakes the assignee for open statuses, but closed issues
+  // require an explicit `reopen: true` — otherwise the comment lands in the
+  // database and the agent never hears about it.
+  const chatTargetIssue = chatTargetIssueId ? issueById.get(chatTargetIssueId) ?? null : null;
+  const chatTargetStatus = chatTargetIssue?.status ?? null;
+  const chatTargetIsClosed = chatTargetStatus === "done" || chatTargetStatus === "cancelled";
+  const chatTargetIsRunning = chatTargetStatus === "in_progress";
+
   const addCommentMutation = useMutation({
-    mutationFn: async (body: string) => {
+    mutationFn: async ({ body, wake }: { body: string; wake: boolean }) => {
       if (!chatTargetIssueId) throw new Error("No issue target for chat");
-      return issuesApi.addComment(chatTargetIssueId, body);
+      // Closed issue + wake requested → reopen the issue (server triggers
+      // the wake via `issue_reopened_via_comment`).
+      const reopen = wake && chatTargetIsClosed ? true : undefined;
+      // Running issue + wake requested → interrupt the active run so the
+      // re-queue picks up the new comment. Board users only; the server
+      // returns 403 otherwise, which bubbles up through onError.
+      const interrupt = wake && chatTargetIsRunning ? true : undefined;
+      return issuesApi.addComment(chatTargetIssueId, body, reopen, interrupt);
     },
     onSuccess: () => {
+      // Invalidate every query that shows this comment or the related
+      // activity/feeds. Live-updates via WebSocket should cover most of
+      // these on their own, but an explicit invalidation guarantees the
+      // UI converges even when the socket is stale or disconnected.
       if (chatTargetIssueId) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.issues.comments(chatTargetIssueId),
         });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.issues.detail(chatTargetIssueId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.issues.activity(chatTargetIssueId),
+        });
+      }
+      if (selectedCompanyId) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.activity(selectedCompanyId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.issues.list(selectedCompanyId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.dashboard(selectedCompanyId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.sidebarBadges(selectedCompanyId),
+        });
       }
       setChatDraft("");
+    },
+    onError: (err) => {
+      // Surface the failure to devtools — the UI already shows a small
+      // "Errore invio — riprova" chip via `isError`, but the console log
+      // helps pinpoint 403/500/network issues.
+      // eslint-disable-next-line no-console
+      console.error("[AlertDrawer] addComment failed", err);
     },
   });
 
@@ -665,7 +725,7 @@ export function AlertDrawer({
   const sendChat = () => {
     const body = chatDraft.trim();
     if (!body || !chatTargetIssueId) return;
-    addCommentMutation.mutate(body);
+    addCommentMutation.mutate({ body, wake: wakeAgentOnSend });
   };
 
   const handleChatKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -984,9 +1044,29 @@ export function AlertDrawer({
                 {addCommentMutation.isPending ? "..." : "Invia"}
               </Button>
             </div>
+            <div className="mt-1.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={wakeAgentOnSend}
+                  onChange={(e) => setWakeAgentOnSend(e.target.checked)}
+                  disabled={addCommentMutation.isPending}
+                  className="h-3 w-3 cursor-pointer rounded border-border"
+                />
+                <span className={wakeAgentOnSend ? "text-foreground" : ""}>
+                  Richiama l'agente
+                </span>
+              </label>
+              {wakeAgentOnSend && chatTargetIsClosed && (
+                <span className="text-amber-400/80">· riaprirà il task</span>
+              )}
+              {wakeAgentOnSend && chatTargetIsRunning && (
+                <span className="text-amber-400/80">· interromperà il run in corso</span>
+              )}
+            </div>
             {addCommentMutation.isError && (
               <div className="mt-1 text-[10px] text-destructive">
-                Errore invio — riprova.
+                Errore invio — riprova. Dettagli in console.
               </div>
             )}
           </footer>

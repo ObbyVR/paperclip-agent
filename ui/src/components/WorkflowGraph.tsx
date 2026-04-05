@@ -5,7 +5,7 @@ import { Identity } from "./Identity";
 import { Button } from "@/components/ui/button";
 import {
   AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock,
-  FileText, Layers, List, Loader2, RotateCcw, Square, XCircle,
+  EyeOff, FileText, Layers, List, Loader2, RotateCcw, Square, XCircle,
 } from "lucide-react";
 import type { LiveRunForIssue } from "../api/heartbeats";
 import type { Issue, Agent } from "@paperclipai/shared";
@@ -156,7 +156,11 @@ function cloneTree(node: TreeNode): TreeNode {
   return { ...node, children: node.children.map(cloneTree) };
 }
 
-function layoutTree(inputRoot: TreeNode): { root: TreeNode; totalWidth: number; totalHeight: number; treeHeight: number; compactNodes: TreeNode[] } {
+function layoutTree(
+  inputRoot: TreeNode,
+  options: { completedColumnOpen?: boolean } = {},
+): { root: TreeNode; totalWidth: number; totalHeight: number; treeHeight: number; compactNodes: TreeNode[] } {
+  const { completedColumnOpen = false } = options;
   // Clone to avoid mutating the memoized tree (React StrictMode calls useMemo twice)
   const root = cloneTree(inputRoot);
 
@@ -170,8 +174,9 @@ function layoutTree(inputRoot: TreeNode): { root: TreeNode; totalWidth: number; 
   // Pass 1: measure widths bottom-up
   measureWidth(root);
 
-  // Pass 2: assign positions top-down (leave space on left for compact lane)
-  const compactLaneWidth = compactNodes.length > 0 ? COMPACT_W + 20 : 0;
+  // Pass 2: assign positions top-down. Leave space on the left for the
+  // compact lane only if the user has opened the "Completati" column.
+  const compactLaneWidth = compactNodes.length > 0 && completedColumnOpen ? COMPACT_W + 20 : 0;
   assignPositions(root, compactLaneWidth);
 
   // Layout compact nodes in left lane
@@ -750,6 +755,12 @@ export function WorkflowGraph({
   failedIssueErrors = new Map(),
   activeRuns = [],
   onCancelRun,
+  hiddenWorkflowIds,
+  collapsedWorkflowIds,
+  openCompletedColumnIds,
+  onHideWorkflow,
+  onToggleCollapseWorkflow,
+  onToggleCompletedColumn,
 }: {
   issues: Issue[];
   agents: Agent[];
@@ -761,19 +772,40 @@ export function WorkflowGraph({
   failedIssueErrors?: Map<string, string>;
   activeRuns?: LiveRunForIssue[];
   onCancelRun?: (runId: string) => void;
+  /** Workflow roots (by root issue id) hidden from the dashboard. */
+  hiddenWorkflowIds?: Set<string>;
+  /** Workflow roots (by root issue id) collapsed to header-only. */
+  collapsedWorkflowIds?: Set<string>;
+  /** Workflow roots whose "Completati" column is open (default closed). */
+  openCompletedColumnIds?: Set<string>;
+  onHideWorkflow?: (rootIssueId: string) => void;
+  onToggleCollapseWorkflow?: (rootIssueId: string) => void;
+  onToggleCompletedColumn?: (rootIssueId: string) => void;
 }) {
   const [blockedIssue, setBlockedIssue] = useState<Issue | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<TreeNode | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("chronological");
 
   const trees = useMemo(() => buildTree(issues, agents, viewMode), [issues, agents, viewMode]);
-  const layouts = useMemo(() => trees.map((t) => layoutTree(t)), [trees]);
+  // Drop trees whose root the user has hidden from the dashboard.
+  const visibleTrees = useMemo(
+    () => (hiddenWorkflowIds && hiddenWorkflowIds.size > 0
+      ? trees.filter((t) => !hiddenWorkflowIds.has(t.issue.id))
+      : trees),
+    [trees, hiddenWorkflowIds],
+  );
+  const layouts = useMemo(
+    () => visibleTrees.map((t) =>
+      layoutTree(t, { completedColumnOpen: openCompletedColumnIds?.has(t.issue.id) ?? false }),
+    ),
+    [visibleTrees, openCompletedColumnIds],
+  );
 
-  if (trees.length === 0) return null;
+  if (visibleTrees.length === 0) return null;
 
   return (
     <div className="space-y-4">
-      {layouts.map(({ root, totalWidth, totalHeight, treeHeight, compactNodes }, idx) => {
+      {layouts.map(({ root, totalWidth, totalHeight, treeHeight, compactNodes }) => {
         const edges = buildEdges(root, failedIssueIds);
         const nodes: TreeNode[] = [];
         function collectNodes(node: TreeNode) {
@@ -786,110 +818,179 @@ export function WorkflowGraph({
         const treeIssueIds = new Set(nodes.map((n) => n.issue.id));
         const treeRuns = activeRuns.filter((r) => r.issueId && treeIssueIds.has(r.issueId));
 
+        const rootId = root.issue.id;
+        const isCollapsed = collapsedWorkflowIds?.has(rootId) ?? false;
+        const isCompletedColumnOpen = openCompletedColumnIds?.has(rootId) ?? false;
+
+        // Summary counters for the collapsed header strip
+        const statusCounts: Record<string, number> = {};
+        for (const n of nodes) {
+          const s = n.issue.status;
+          statusCounts[s] = (statusCounts[s] ?? 0) + 1;
+        }
+        const activeCount = (statusCounts.in_progress ?? 0) + (statusCounts.blocked ?? 0) + (statusCounts.in_review ?? 0);
+        const doneCount = (statusCounts.done ?? 0) + (statusCounts.cancelled ?? 0);
+        const todoCount = statusCounts.todo ?? 0;
+
         return (
-          <div key={root.issue.id} className="rounded-xl border border-border bg-[#0c0e14] p-4 overflow-x-auto">
+          <div key={rootId} className="rounded-xl border border-border bg-[#0c0e14] p-4 overflow-x-auto">
+            {/* Header: collapse toggle + title + view toggle + hide button */}
             <div className="flex items-center justify-between mb-3 gap-2">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">
+              <button
+                type="button"
+                onClick={() => onToggleCollapseWorkflow?.(rootId)}
+                className="flex items-center gap-2 min-w-0 flex-1 text-left group"
+                aria-expanded={!isCollapsed}
+                aria-label={`${isCollapsed ? "Espandi" : "Riduci"} workflow ${root.issue.title}`}
+              >
+                {isCollapsed
+                  ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                }
+                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm font-medium truncate group-hover:text-foreground transition-colors">
                   {root.issue.identifier && <span className="text-muted-foreground mr-1.5">{root.issue.identifier}</span>}
                   {root.issue.title}
                 </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <ViewToggle mode={viewMode} onChange={setViewMode} />
-                <Legend />
-              </div>
-            </div>
-
-            <div className="relative" style={{ width: totalWidth, height: totalHeight, minWidth: "100%" }}>
-              {/* Compact lane — scrollable, height constrained to tree */}
-              {compactNodes.length > 0 && (
-                <div
-                  className="absolute"
-                  style={{ left: 0, top: root.y - 16, width: COMPACT_W }}
-                >
-                  <div className="text-[9px] text-muted-foreground/50 uppercase tracking-wider font-medium mb-1">
-                    Completati ({compactNodes.length})
-                  </div>
-                  <div
-                    className="overflow-y-auto pr-1"
-                    style={{ maxHeight: Math.max(treeHeight, NODE_H * 2) }}
+                {isCollapsed && (
+                  <span className="flex items-center gap-2 text-[10px] text-muted-foreground/70 ml-2 shrink-0">
+                    <span>{nodes.length} task</span>
+                    {activeCount > 0 && <span className="text-cyan-400">{activeCount} attivi</span>}
+                    {todoCount > 0 && <span>{todoCount} da fare</span>}
+                    {doneCount > 0 && <span className="text-emerald-400/70">{doneCount} completati</span>}
+                  </span>
+                )}
+              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {!isCollapsed && <ViewToggle mode={viewMode} onChange={setViewMode} />}
+                {!isCollapsed && <Legend />}
+                {onHideWorkflow && (
+                  <button
+                    type="button"
+                    onClick={() => onHideWorkflow(rootId)}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/60 hover:bg-accent/50 hover:text-foreground transition-colors"
+                    title="Nascondi questo workflow dalla dashboard (reversibile)"
+                    aria-label="Nascondi workflow dalla dashboard"
                   >
-                    <div className="space-y-1">
-                      {compactNodes.map((cn) => (
-                        <CompactNodeCard key={cn.issue.id} node={cn} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* SVG connectors layer */}
-              <svg
-                className="absolute inset-0 pointer-events-none"
-                width={totalWidth}
-                height={totalHeight}
-                style={{ overflow: "visible" }}
-              >
-                <defs>
-                  <style>{`
-                    @keyframes dash-flow {
-                      to { stroke-dashoffset: -20; }
-                    }
-                  `}</style>
-                </defs>
-                {edges.map((edge, i) => (
-                  <g key={i} style={{ pointerEvents: edge.blocked || edge.failed ? "auto" : "none" }}>
-                    <ConnectorPath
-                      edge={edge}
-                      onBlockedClick={(issue) => setBlockedIssue(issue)}
-                    />
-                  </g>
-                ))}
-              </svg>
-
-              {/* HTML node cards */}
-              {nodes.map((node) => (
-                <NodeCard
-                  key={node.issue.id}
-                  node={node}
-                  onGroupClick={setExpandedGroup}
-                  failedIssueIds={failedIssueIds}
-                />
-              ))}
+                    <EyeOff className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Active runs for this workflow */}
-            {treeRuns.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border/30">
-                {treeRuns.map((run) => {
-                  const issue = issues.find((i) => i.id === run.issueId);
-                  return (
-                    <div key={run.id} className="flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] px-3 py-1.5 text-xs">
-                      <span className="relative flex h-2 w-2 shrink-0">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
-                      </span>
-                      <span className="font-medium text-foreground">{run.agentName}</span>
-                      {issue && (
-                        <span className="text-muted-foreground truncate max-w-[200px]">
-                          su {issue.identifier} {issue.title}
-                        </span>
-                      )}
-                      {onCancelRun && (
-                        <button
-                          onClick={() => onCancelRun(run.id)}
-                          className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
-                        >
-                          <Square className="h-2.5 w-2.5" />
-                          Stop
-                        </button>
-                      )}
+            {!isCollapsed && (
+              <>
+                {/* Completed column toggle header — always visible when there are completed tasks */}
+                {compactNodes.length > 0 && (
+                  <div className="flex items-center mb-2">
+                    <button
+                      type="button"
+                      onClick={() => onToggleCompletedColumn?.(rootId)}
+                      className="flex items-center gap-1 rounded-md border border-border/40 bg-background/40 px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+                      aria-expanded={isCompletedColumnOpen}
+                      aria-label={`${isCompletedColumnOpen ? "Chiudi" : "Apri"} colonna task completati`}
+                    >
+                      {isCompletedColumnOpen
+                        ? <ChevronDown className="h-3 w-3" />
+                        : <ChevronRight className="h-3 w-3" />
+                      }
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500/70" />
+                      Completati
+                      <span className="text-muted-foreground/60">({compactNodes.length})</span>
+                    </button>
+                  </div>
+                )}
+
+                <div className="relative" style={{ width: totalWidth, height: totalHeight, minWidth: "100%" }}>
+                  {/* Compact lane — only rendered when the user has opened the column */}
+                  {compactNodes.length > 0 && isCompletedColumnOpen && (
+                    <div
+                      className="absolute"
+                      style={{ left: 0, top: root.y - 16, width: COMPACT_W }}
+                    >
+                      <div className="text-[9px] text-muted-foreground/50 uppercase tracking-wider font-medium mb-1">
+                        Completati ({compactNodes.length})
+                      </div>
+                      <div
+                        className="overflow-y-auto pr-1"
+                        style={{ maxHeight: Math.max(treeHeight, NODE_H * 2) }}
+                      >
+                        <div className="space-y-1">
+                          {compactNodes.map((cn) => (
+                            <CompactNodeCard key={cn.issue.id} node={cn} />
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                  )}
+
+                  {/* SVG connectors layer */}
+                  <svg
+                    className="absolute inset-0 pointer-events-none"
+                    width={totalWidth}
+                    height={totalHeight}
+                    style={{ overflow: "visible" }}
+                  >
+                    <defs>
+                      <style>{`
+                        @keyframes dash-flow {
+                          to { stroke-dashoffset: -20; }
+                        }
+                      `}</style>
+                    </defs>
+                    {edges.map((edge, i) => (
+                      <g key={i} style={{ pointerEvents: edge.blocked || edge.failed ? "auto" : "none" }}>
+                        <ConnectorPath
+                          edge={edge}
+                          onBlockedClick={(issue) => setBlockedIssue(issue)}
+                        />
+                      </g>
+                    ))}
+                  </svg>
+
+                  {/* HTML node cards */}
+                  {nodes.map((node) => (
+                    <NodeCard
+                      key={node.issue.id}
+                      node={node}
+                      onGroupClick={setExpandedGroup}
+                      failedIssueIds={failedIssueIds}
+                    />
+                  ))}
+                </div>
+
+                {/* Active runs for this workflow */}
+                {treeRuns.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border/30">
+                    {treeRuns.map((run) => {
+                      const issue = issues.find((i) => i.id === run.issueId);
+                      return (
+                        <div key={run.id} className="flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] px-3 py-1.5 text-xs">
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
+                          </span>
+                          <span className="font-medium text-foreground">{run.agentName}</span>
+                          {issue && (
+                            <span className="text-muted-foreground truncate max-w-[200px]">
+                              su {issue.identifier} {issue.title}
+                            </span>
+                          )}
+                          {onCancelRun && (
+                            <button
+                              onClick={() => onCancelRun(run.id)}
+                              className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+                            >
+                              <Square className="h-2.5 w-2.5" />
+                              Stop
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         );

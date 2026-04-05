@@ -16,8 +16,9 @@ import { StatusIcon } from "../components/StatusIcon";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { formatCents } from "../lib/utils";
-import { Bot, ChevronDown, ChevronRight, CircleDot, DollarSign, FolderOpen, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
+import { Bot, ChevronDown, ChevronRight, CircleDot, DollarSign, EyeOff, FolderOpen, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
 import { WorkflowGraph } from "../components/WorkflowGraph";
+import { dashboardPrefs, useDashboardPrefs } from "../lib/dashboardPrefs";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 // Error boundary to prevent WorkflowGraph crashes from killing the whole dashboard
@@ -48,47 +49,73 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
 
-/* ── Collapsible project section for "all projects" view ── */
+/* ── Collapsible project section for "all projects" view ──
+ *
+ * Collapse + hide state persisted in localStorage via dashboardPrefs.
+ * `projectKey` is the stable id used for persistence: real projectId for
+ * DB-backed projects, or the sentinel "__unassigned__" for the catch-all
+ * section.
+ */
 function CollapsibleProjectSection({
+  projectKey,
   name,
   issueCount,
   activeRunCount,
+  collapsed,
+  onToggleCollapse,
+  onHide,
   children,
 }: {
+  projectKey: string;
   name: string;
   issueCount: number;
   activeRunCount: number;
+  collapsed: boolean;
+  onToggleCollapse: (key: string) => void;
+  onHide: (key: string) => void;
   children: React.ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
-
   return (
     <div className="space-y-1">
-      <button
-        type="button"
-        onClick={() => setCollapsed((c) => !c)}
-        className="flex items-center gap-2 w-full text-left group"
-      >
-        {collapsed
-          ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-          : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-        }
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
-          {name}
-        </h3>
-        <span className="text-[10px] text-muted-foreground/60">
-          {issueCount} task{issueCount !== 1 ? "" : ""}
-        </span>
-        {activeRunCount > 0 && (
-          <span className="flex items-center gap-1 text-[10px] text-cyan-400">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-500" />
-            </span>
-            {activeRunCount} attivi
+      <div className="flex items-center gap-2 group">
+        <button
+          type="button"
+          onClick={() => onToggleCollapse(projectKey)}
+          className="flex items-center gap-2 flex-1 min-w-0 text-left"
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? "Espandi" : "Riduci"} ${name}`}
+        >
+          {collapsed
+            ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          }
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors truncate">
+            {name}
+          </h3>
+          <span className="text-[10px] text-muted-foreground/60 shrink-0">
+            {issueCount} task
           </span>
-        )}
-      </button>
+          {activeRunCount > 0 && (
+            <span className="flex items-center gap-1 text-[10px] text-cyan-400 shrink-0">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-500" />
+              </span>
+              {activeRunCount} attivi
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onHide(projectKey); }}
+          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/60 opacity-0 group-hover:opacity-100 hover:bg-accent/50 hover:text-foreground transition-all"
+          title="Nascondi dalla dashboard (reversibile)"
+          aria-label={`Nascondi ${name} dalla dashboard`}
+        >
+          <EyeOff className="h-3 w-3" />
+          Nascondi
+        </button>
+      </div>
       {!collapsed && children}
     </div>
   );
@@ -134,6 +161,15 @@ export function Dashboard() {
     enabled: !!selectedCompanyId,
   });
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  // Dashboard visual preferences (collapse / hide) — persisted in localStorage
+  const prefs = useDashboardPrefs();
+  const UNASSIGNED_KEY = "__unassigned__";
+  const handleToggleCollapseProject = (key: string) => dashboardPrefs.toggleCollapsedProject(key);
+  const handleHideProject = (key: string) => dashboardPrefs.hideProject(key);
+  const handleHideWorkflow = (rootIssueId: string) => dashboardPrefs.hideWorkflow(rootIssueId);
+  const handleToggleCollapseWorkflow = (rootIssueId: string) => dashboardPrefs.toggleCollapsedWorkflow(rootIssueId);
+  const handleToggleCompletedColumn = (rootIssueId: string) => dashboardPrefs.toggleCompletedColumn(rootIssueId);
 
   // Filter issues by selected project (null = all, "__none__" = unassigned)
   const filteredIssues = useMemo(() => {
@@ -328,6 +364,12 @@ export function Dashboard() {
           failedIssueIds,
           failedIssueErrors,
           onCancelRun: handleCancelRun,
+          hiddenWorkflowIds: prefs.hiddenWorkflows,
+          collapsedWorkflowIds: prefs.collapsedWorkflows,
+          openCompletedColumnIds: prefs.openCompletedColumns,
+          onHideWorkflow: handleHideWorkflow,
+          onToggleCollapseWorkflow: handleToggleCollapseWorkflow,
+          onToggleCompletedColumn: handleToggleCompletedColumn,
         };
 
         if (selectedProjectId) {
@@ -337,7 +379,9 @@ export function Dashboard() {
             return filteredIssues.some((i) => i.id === r.issueId);
           });
 
-          const otherProjects = (projectsList ?? []).filter((p) => p.id !== selectedProjectId);
+          const otherProjects = (projectsList ?? [])
+            .filter((p) => p.id !== selectedProjectId)
+            .filter((p) => !prefs.hiddenProjects.has(p.id));
 
           return (
             <>
@@ -353,7 +397,16 @@ export function Dashboard() {
                 if (projectIssues.length === 0) return null;
                 const projRuns = activeRuns.filter((r) => r.issueId && projectIssues.some((i) => i.id === r.issueId));
                 return (
-                  <CollapsibleProjectSection key={project.id} name={project.name} issueCount={projectIssues.length} activeRunCount={projRuns.length}>
+                  <CollapsibleProjectSection
+                    key={project.id}
+                    projectKey={project.id}
+                    name={project.name}
+                    issueCount={projectIssues.length}
+                    activeRunCount={projRuns.length}
+                    collapsed={prefs.collapsedProjects.has(project.id)}
+                    onToggleCollapse={handleToggleCollapseProject}
+                    onHide={handleHideProject}
+                  >
                     <WorkflowGraphSafe
                       issues={projectIssues}
                       activeRuns={projRuns}
@@ -367,7 +420,7 @@ export function Dashboard() {
         }
 
         // "All projects" view — each project gets its own collapsible section
-        const projects = projectsList ?? [];
+        const projects = (projectsList ?? []).filter((p) => !prefs.hiddenProjects.has(p.id));
         // Group issues by project
         const issuesByProject = new Map<string | null, Issue[]>();
         for (const issue of issues) {
@@ -384,6 +437,8 @@ export function Dashboard() {
           ) : null;
         }
 
+        const unassignedHidden = prefs.hiddenProjects.has(UNASSIGNED_KEY);
+
         return (
           <>
             {projects.map((project) => {
@@ -391,7 +446,16 @@ export function Dashboard() {
               if (projectIssues.length === 0) return null;
               const projRuns = activeRuns.filter((r) => r.issueId && projectIssues.some((i) => i.id === r.issueId));
               return (
-                <CollapsibleProjectSection key={project.id} name={project.name} issueCount={projectIssues.length} activeRunCount={projRuns.length}>
+                <CollapsibleProjectSection
+                  key={project.id}
+                  projectKey={project.id}
+                  name={project.name}
+                  issueCount={projectIssues.length}
+                  activeRunCount={projRuns.length}
+                  collapsed={prefs.collapsedProjects.has(project.id)}
+                  onToggleCollapse={handleToggleCollapseProject}
+                  onHide={handleHideProject}
+                >
                   <WorkflowGraphSafe
                     issues={projectIssues}
                     activeRuns={projRuns}
@@ -402,11 +466,20 @@ export function Dashboard() {
             })}
             {/* Unassigned issues */}
             {(() => {
+              if (unassignedHidden) return null;
               const unassigned = issuesByProject.get(null) ?? [];
               if (unassigned.length === 0) return null;
               const unassignedRuns = activeRuns.filter((r) => r.issueId && unassigned.some((i) => i.id === r.issueId));
               return (
-                <CollapsibleProjectSection name="Senza progetto" issueCount={unassigned.length} activeRunCount={unassignedRuns.length}>
+                <CollapsibleProjectSection
+                  projectKey={UNASSIGNED_KEY}
+                  name="Senza progetto"
+                  issueCount={unassigned.length}
+                  activeRunCount={unassignedRuns.length}
+                  collapsed={prefs.collapsedProjects.has(UNASSIGNED_KEY)}
+                  onToggleCollapse={handleToggleCollapseProject}
+                  onHide={handleHideProject}
+                >
                   <WorkflowGraphSafe
                     issues={unassigned}
                     activeRuns={unassignedRuns}
@@ -416,6 +489,73 @@ export function Dashboard() {
               );
             })()}
           </>
+        );
+      })()}
+
+      {/* ── Restore bar: hidden projects + hidden workflows ── */}
+      {(prefs.hiddenProjects.size > 0 || prefs.hiddenWorkflows.size > 0) && (() => {
+        const hiddenProjectNames = [...prefs.hiddenProjects].map((key) => {
+          if (key === UNASSIGNED_KEY) return { key, name: "Senza progetto" };
+          const p = projectsList?.find((p) => p.id === key);
+          return { key, name: p?.name ?? "Progetto nascosto" };
+        });
+        const hiddenWorkflowTitles = [...prefs.hiddenWorkflows].map((id) => {
+          const i = issues?.find((x) => x.id === id);
+          return { id, title: i?.title ?? "Workflow nascosto", identifier: i?.identifier };
+        });
+        return (
+          <div className="rounded-lg border border-border/50 bg-card/30 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              <EyeOff className="h-3 w-3" />
+              Elementi nascosti dalla dashboard
+              <span className="text-muted-foreground/60 font-normal normal-case">
+                ({prefs.hiddenProjects.size + prefs.hiddenWorkflows.size})
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  dashboardPrefs.unhideAllProjects();
+                  dashboardPrefs.unhideAllWorkflows();
+                }}
+                className="ml-auto text-[10px] font-medium text-cyan-400 hover:text-cyan-300 normal-case"
+              >
+                Mostra tutto
+              </button>
+            </div>
+            {hiddenProjectNames.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {hiddenProjectNames.map(({ key, name }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => dashboardPrefs.unhideProject(key)}
+                    className="flex items-center gap-1 rounded-full border border-border bg-background/60 px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+                    title="Ripristina"
+                  >
+                    <FolderOpen className="h-2.5 w-2.5" />
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {hiddenWorkflowTitles.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {hiddenWorkflowTitles.map(({ id, title, identifier }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => dashboardPrefs.unhideWorkflow(id)}
+                    className="flex items-center gap-1 rounded-full border border-border bg-background/60 px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors max-w-[260px]"
+                    title="Ripristina"
+                  >
+                    <CircleDot className="h-2.5 w-2.5 shrink-0" />
+                    {identifier && <span className="font-mono text-muted-foreground/60 shrink-0">{identifier}</span>}
+                    <span className="truncate">{title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         );
       })()}
 

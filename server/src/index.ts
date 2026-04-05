@@ -30,6 +30,7 @@ import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import { heartbeatService, reconcilePersistedRuntimeServicesOnStartup, routineService } from "./services/index.js";
 import { tickSuspendWakeup } from "./services/issue-suspend-wakeup.js";
+import { tickIssueLockWatchdog } from "./services/issue-lock-watchdog.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
@@ -612,6 +613,15 @@ export async function startServer(): Promise<StartedServer> {
       // second timer; a single UPDATE per tick so the overhead is negligible.
       void tickSuspendWakeup(db as any).catch((err) => {
         logger.error({ err }, "suspend wake-up tick failed");
+      });
+
+      // S42 — Issue-lock watchdog: safety net for stuck execution locks that
+      // `reapOrphanedRuns` missed (e.g. `checkoutRunId` left attached after a
+      // partial release, or `executionLockedAt` pinned past a terminal run
+      // status due to a race). Releases lock fields only; never touches
+      // `status`. Bounded at 50 releases/tick.
+      void tickIssueLockWatchdog(db as any).catch((err) => {
+        logger.error({ err }, "issue-lock watchdog tick failed");
       });
     }, config.heartbeatSchedulerIntervalMs);
   }
