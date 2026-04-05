@@ -98,6 +98,7 @@ export async function startTelegramBot(opts: StartTelegramBotOptions): Promise<T
       { command: "approve", description: "Approva approval" },
       { command: "reject", description: "Rifiuta approval" },
       { command: "notify", description: "Toggle notifiche" },
+      { command: "digest", description: "Raggruppa risposte agente" },
       { command: "whoami", description: "Sessione corrente" },
     ])
     .catch((err) => {
@@ -153,6 +154,7 @@ export async function startTelegramBot(opts: StartTelegramBotOptions): Promise<T
     stop: async () => {
       stopped = true;
       abort.abort();
+      notifier.flushDigests();
       notifier.stop();
       await store.flush().catch(() => void 0);
       store.cancel();

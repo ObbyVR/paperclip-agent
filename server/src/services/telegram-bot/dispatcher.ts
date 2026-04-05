@@ -20,6 +20,7 @@ import {
 } from "./commands/approvals.js";
 import { handleAgentsList, handleSetCeo } from "./commands/agents.js";
 import { handleCompaniesList, handleCompanySelect } from "./commands/companies.js";
+import { handleDigest } from "./commands/digest.js";
 import { handleHelp, handleStart } from "./commands/help.js";
 import { handleNotify } from "./commands/notify.js";
 import { handleIssueDetail, handleIssuesList, handleStatus } from "./commands/status.js";
@@ -186,6 +187,8 @@ export class Dispatcher {
       }
       case "/notify":
         return handleNotify(session, args, upsert);
+      case "/digest":
+        return handleDigest(session, args, upsert);
       default:
         return { text: `Comando sconosciuto: \`${command}\`. /help per la lista.`, parseMode: "Markdown", readonly: true };
     }
