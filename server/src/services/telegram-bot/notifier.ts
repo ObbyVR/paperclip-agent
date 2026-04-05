@@ -82,6 +82,12 @@ function asString(v: unknown, fallback: string): string {
 export function classifyEvent(event: LiveEventLike): EventMapping | null {
   const payload = event.payload ?? {};
   if (event.type === "heartbeat.run.status" && payload.status === "failed") {
+    // S43-3 hotfix: `process_lost` failures are always followed by an
+    // automatic retry (see heartbeat.ts#reapOrphanedRuns → enqueueProcessLossRetry).
+    // They happen after every server restart for any run that was in
+    // progress, which would flood the founder's phone with "Run fallito"
+    // pings that are not actionable. Drop them.
+    if (payload.errorCode === "process_lost") return null;
     const agentName = asString(payload.agentName, "agente");
     return { key: "runFailed", text: `🔴 Run fallito (${agentName})` };
   }

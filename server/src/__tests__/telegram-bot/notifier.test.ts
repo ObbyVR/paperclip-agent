@@ -28,6 +28,26 @@ describe("classifyEvent", () => {
     ).toBeNull();
   });
 
+  it("drops process_lost failures (auto-retried, not actionable)", () => {
+    // These fire after every server restart for any run that was in flight
+    // and would flood the founder with non-actionable pings.
+    expect(
+      classifyEvent({
+        type: "heartbeat.run.status",
+        payload: { status: "failed", errorCode: "process_lost", agentName: "Marco" },
+      }),
+    ).toBeNull();
+  });
+
+  it("still reports real failures with other errorCode", () => {
+    const m = classifyEvent({
+      type: "heartbeat.run.status",
+      payload: { status: "failed", errorCode: "adapter_crashed", agentName: "Marco" },
+    });
+    expect(m?.key).toBe("runFailed");
+    expect(m?.text).toContain("Marco");
+  });
+
   it("classifies activity.logged action=approval.created", () => {
     const m = classifyEvent({
       type: "activity.logged",
