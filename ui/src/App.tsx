@@ -176,6 +176,7 @@ function boardRoutes() {
       <Route path="activity/in_corso" element={<Activity />} />
       <Route path="activity/completate" element={<Activity />} />
       <Route path="inbox" element={<InboxRootRedirect />} />
+      <Route path="inbox/projects" element={<Inbox />} />
       <Route path="inbox/mine" element={<Inbox />} />
       <Route path="inbox/recent" element={<Inbox />} />
       <Route path="inbox/unread" element={<Inbox />} />

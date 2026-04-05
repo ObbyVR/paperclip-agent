@@ -19,6 +19,8 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { SwipeToArchive } from "../components/SwipeToArchive";
 import { InboxItemRow } from "../components/InboxItemRow";
 import { CategoryBadge } from "../components/CategoryBadge";
+import { InboxProjectsView } from "../components/InboxProjectsView";
+import { computeAlertUnreadState, type AlertUnreadState } from "../components/AlertRow";
 import { cn } from "../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -82,11 +84,15 @@ export function Inbox() {
   const { dismissed, dismiss } = useDismissedInboxItems();
   const { readItems, markRead: markItemRead } = useReadInboxItems();
 
-  const pathSegment = location.pathname.split("/").pop() ?? "mine";
+  const pathSegment = location.pathname.split("/").pop() ?? "projects";
   const tab: InboxTab =
-    pathSegment === "mine" || pathSegment === "recent" || pathSegment === "all" || pathSegment === "unread"
+    pathSegment === "projects" ||
+    pathSegment === "mine" ||
+    pathSegment === "recent" ||
+    pathSegment === "all" ||
+    pathSegment === "unread"
       ? pathSegment
-      : "mine";
+      : "projects";
   const issueLinkState = useMemo(
     () =>
       createIssueDetailLocationState(
@@ -199,6 +205,7 @@ export function Inbox() {
   const issuesToRender = useMemo(() => {
     if (tab === "mine") return mineIssues;
     if (tab === "unread") return unreadTouchedIssues;
+    // "recent", "all", "projects" all share the broader touchedIssues pool.
     return touchedIssues;
   }, [tab, mineIssues, touchedIssues, unreadTouchedIssues]);
 
@@ -670,6 +677,70 @@ export function Inbox() {
     return null;
   }
 
+  // ── Projects view helpers ─────────────────────────────────────────
+
+  const keyForItem = (item: InboxWorkItem): string => {
+    if (item.kind === "issue") return `issue:${item.issue.id}`;
+    if (item.kind === "approval") return `approval:${item.approval.id}`;
+    if (item.kind === "failed_run") return `run:${item.run.id}`;
+    return `join:${item.joinRequest.id}`;
+  };
+
+  // The "unread" semantics for the projects view: if it's a read non-issue item,
+  // or an issue we've already marked read, treat as "read". Otherwise defer to
+  // the generic computeAlertUnreadState helper which handles actionable vs new.
+  const computeProjectsUnreadState = (item: InboxWorkItem): AlertUnreadState => {
+    const readKeys = new Set<string>();
+    for (const k of readItems) readKeys.add(k);
+    // Issues track their own isUnreadForMe bit; if we've locally faded them
+    // we still want them to appear "read" in the projects card.
+    if (item.kind === "issue" && (fadingOutIssues.has(item.issue.id) || !item.issue.isUnreadForMe)) {
+      return "read";
+    }
+    return computeAlertUnreadState(item, readKeys, keyForItem);
+  };
+
+  const buildProjectsItemHandlers = (item: InboxWorkItem) => {
+    if (item.kind === "issue") {
+      const issuePathId = item.issue.identifier ?? item.issue.id;
+      return {
+        fallbackHref: `/issues/${issuePathId}`,
+        onArchive: () => archiveIssueMutation.mutate(item.issue.id),
+        onSuspend: () => {
+          /* S42 — stub */
+        },
+      };
+    }
+    if (item.kind === "approval") {
+      const approvalKey = `approval:${item.approval.id}`;
+      return {
+        fallbackHref: `/approvals/${item.approval.id}`,
+        onApprove: () => approveMutation.mutate(item.approval.id),
+        onArchive: () => handleArchiveNonIssue(approvalKey),
+        isPending: approveMutation.isPending || rejectMutation.isPending,
+        onSuspend: () => {
+          /* S42 */
+        },
+      };
+    }
+    if (item.kind === "failed_run") {
+      const runKey = `run:${item.run.id}`;
+      return {
+        fallbackHref: `/agents/${item.run.agentId}/runs/${item.run.id}`,
+        onRetry: () => retryRunMutation.mutate(item.run),
+        onArchive: () => handleArchiveNonIssue(runKey),
+        isRetrying: retryingRunIds.has(item.run.id),
+      };
+    }
+    // join_request — no direct detail route, fallback undefined
+    const joinKey = `join:${item.joinRequest.id}`;
+    return {
+      onApprove: () => approveJoinMutation.mutate(item.joinRequest),
+      onArchive: () => handleArchiveNonIssue(joinKey),
+      isPending: approveJoinMutation.isPending || rejectJoinMutation.isPending,
+    };
+  };
+
   // ── Main render ────────────────────────────────────────────────────
 
   return (
@@ -680,6 +751,24 @@ export function Inbox() {
           <Tabs value={tab} onValueChange={(value) => navigate(`/inbox/${value}`)}>
             <PageTabBar
               items={[
+                {
+                  value: "projects",
+                  label: (() => {
+                    const unreadCount = allWorkItems.filter(
+                      (it) => computeProjectsUnreadState(it) !== "read",
+                    ).length;
+                    return (
+                      <span className="inline-flex items-center gap-1.5">
+                        {t("inbox.projects")}
+                        {unreadCount > 0 && (
+                          <span className="inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })(),
+                },
                 { value: "mine", label: t("inbox.mine") },
                 { value: "recent", label: t("inbox.recent") },
                 { value: "unread", label: t("inbox.unread") },
@@ -688,7 +777,7 @@ export function Inbox() {
             />
           </Tabs>
 
-          {canMarkAllRead && (
+          {tab !== "projects" && canMarkAllRead && (
             <Button
               type="button"
               variant="outline"
@@ -700,30 +789,35 @@ export function Inbox() {
               {markAllReadMutation.isPending ? t("inbox.marking") : t("inbox.markAllRead")}
             </Button>
           )}
-          <Button
-            type="button"
-            variant={groupByAgent ? "default" : "outline"}
-            size="sm"
-            className="h-8 shrink-0 gap-1.5"
-            onClick={() => { setGroupByAgent((p) => !p); setGroupByProject(false); }}
-          >
-            <Group className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{groupByAgent ? t("inbox.grouped") : t("inbox.groupByAgent")}</span>
-          </Button>
-          <Button
-            type="button"
-            variant={groupByProject ? "default" : "outline"}
-            size="sm"
-            className="h-8 shrink-0 gap-1.5"
-            onClick={() => { setGroupByProject((p) => !p); setGroupByAgent(false); }}
-          >
-            <Folder className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{groupByProject ? "Raggruppati" : "Per progetto"}</span>
-          </Button>
+          {tab !== "projects" && (
+            <>
+              <Button
+                type="button"
+                variant={groupByAgent ? "default" : "outline"}
+                size="sm"
+                className="h-8 shrink-0 gap-1.5"
+                onClick={() => { setGroupByAgent((p) => !p); setGroupByProject(false); }}
+              >
+                <Group className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{groupByAgent ? t("inbox.grouped") : t("inbox.groupByAgent")}</span>
+              </Button>
+              <Button
+                type="button"
+                variant={groupByProject ? "default" : "outline"}
+                size="sm"
+                className="h-8 shrink-0 gap-1.5"
+                onClick={() => { setGroupByProject((p) => !p); setGroupByAgent(false); }}
+              >
+                <Folder className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{groupByProject ? "Raggruppati" : "Per progetto"}</span>
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Category filter pills */}
+      {/* Category filter pills (legacy views only — the projects view has its own toolbar) */}
+      {tab !== "projects" && (
       <div className="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
@@ -760,15 +854,29 @@ export function Inbox() {
           </button>
         ))}
       </div>
+      )}
+
+      {/* Projects view (default) */}
+      {tab === "projects" && (
+        <InboxProjectsView
+          allWorkItems={allWorkItems}
+          agentById={agentById}
+          issueById={issueById}
+          projectById={projectById}
+          projects={projects ?? []}
+          computeUnreadState={computeProjectsUnreadState}
+          buildItemHandlers={buildProjectsItemHandlers}
+        />
+      )}
 
       {approvalsError && <p className="text-sm text-destructive">{approvalsError.message}</p>}
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
-      {!allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
+      {tab !== "projects" && !allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
         <PageSkeleton variant="inbox" />
       )}
 
-      {allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
+      {tab !== "projects" && allLoaded && workItemsToRender.length === 0 && !showAlertsSection && (
         <EmptyState
           icon={InboxIcon}
           message={
@@ -785,8 +893,8 @@ export function Inbox() {
         />
       )}
 
-      {/* Work items */}
-      {workItemsToRender.length > 0 && (
+      {/* Work items (legacy views) */}
+      {tab !== "projects" && workItemsToRender.length > 0 && (
         <div className="space-y-4">
           {(groupedWorkItems ?? [{ groupLabel: null, items: workItemsToRender }]).map((group) => (
             <div key={group.groupLabel ?? "all"}>

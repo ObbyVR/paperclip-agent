@@ -22,9 +22,21 @@ import "./index.css";
 
 initPluginBridge(React, ReactDOM);
 
+// Service worker registration intentionally removed.
+// public/sw.js is now a kill-switch that unregisters itself on activation;
+// previously-installed workers will self-destruct on their next update check
+// (Cache-Control: max-age=0 guarantees this happens on the next reload).
+// We can reintroduce a versioned worker later if we need offline support.
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js");
+  // Also proactively unregister any existing registration on this tab, so the
+  // first reload after shipping this change clears everything without needing
+  // the kill-switch worker to also activate. Both paths end in the same state.
+  navigator.serviceWorker.getRegistrations?.().then((regs) => {
+    for (const reg of regs) {
+      reg.unregister().catch(() => {
+        /* ignored */
+      });
+    }
   });
 }
 

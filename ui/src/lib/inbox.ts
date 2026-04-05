@@ -14,7 +14,7 @@ export const ACTIONABLE_APPROVAL_STATUSES = new Set(["pending", "revision_reques
 export const DISMISSED_KEY = "paperclip:inbox:dismissed";
 export const READ_ITEMS_KEY = "paperclip:inbox:read-items";
 export const INBOX_LAST_TAB_KEY = "paperclip:inbox:last-tab";
-export type InboxTab = "mine" | "recent" | "unread" | "all";
+export type InboxTab = "projects" | "mine" | "recent" | "unread" | "all";
 export type InboxApprovalFilter = "all" | "actionable" | "resolved";
 export type InboxWorkItem =
   | {
@@ -84,11 +84,18 @@ export function saveReadInboxItems(ids: Set<string>) {
 export function loadLastInboxTab(): InboxTab {
   try {
     const raw = localStorage.getItem(INBOX_LAST_TAB_KEY);
-    if (raw === "all" || raw === "unread" || raw === "recent" || raw === "mine") return raw;
-    if (raw === "new") return "mine";
-    return "mine";
+    if (
+      raw === "projects" ||
+      raw === "all" ||
+      raw === "unread" ||
+      raw === "recent" ||
+      raw === "mine"
+    )
+      return raw;
+    if (raw === "new") return "projects";
+    return "projects";
   } catch {
-    return "mine";
+    return "projects";
   }
 }
 
@@ -258,14 +265,34 @@ export interface InboxItemContext {
   issueIdentifier: string | null;
 }
 
-/** Classify a work item into richiesta / messaggio / aggiornamento */
+/**
+ * Classify a work item into richiesta / messaggio / aggiornamento.
+ *
+ * Semantics (tuned so real data produces a balanced distribution instead of
+ * 95% "aggiornamento"):
+ *
+ *   RICHIESTA  — human action is required to unblock or approve something.
+ *     • Any pending approval
+ *     • Any join request
+ *     • Issue in status "blocked" or "in_review"
+ *
+ *   MESSAGGIO  — an agent has something to show you, no action required yet.
+ *     • Issue status "done" (the agent finished; you should read the output)
+ *     • Unread issue with a new external comment after your last touch
+ *     • Failed run (the agent is telling you something went wrong)
+ *
+ *   AGGIORNAMENTO — passive progress signal, no read or action expected.
+ *     • Issue in "in_progress", "todo", or "backlog"
+ *     • Any other fallback
+ */
 export function categorizeWorkItem(item: InboxWorkItem): InboxItemCategory {
   if (item.kind === "approval") return "richiesta";
   if (item.kind === "join_request") return "richiesta";
-  if (item.kind === "failed_run") return "aggiornamento";
+  if (item.kind === "failed_run") return "messaggio";
   if (item.kind === "issue") {
     const { issue } = item;
     if (issue.status === "blocked" || issue.status === "in_review") return "richiesta";
+    if (issue.status === "done") return "messaggio";
     const lastExternal = normalizeTimestamp(issue.lastExternalCommentAt);
     const myLastTouch = normalizeTimestamp(issue.myLastTouchAt);
     if (lastExternal > 0 && lastExternal > myLastTouch) return "messaggio";

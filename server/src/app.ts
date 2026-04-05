@@ -245,10 +245,44 @@ export async function createApp(
     ];
     const uiDist = candidates.find((p) => fs.existsSync(path.join(p, "index.html")));
     if (uiDist) {
-      const indexHtml = applyUiBranding(fs.readFileSync(path.join(uiDist, "index.html"), "utf-8"));
       app.use(express.static(uiDist));
-      app.get(/.*/, (_req, res) => {
-        res.status(200).set("Content-Type", "text/html").end(indexHtml);
+
+      // Paths that should NEVER fall back to index.html. If the matching file
+      // is missing (typical after a UI rebuild invalidates old chunk hashes),
+      // the browser must see a real 404 — not an HTML document with MIME type
+      // text/html, which triggers "Failed to load module script" errors and
+      // leaves the page blank.
+      const STATIC_ASSET_PREFIXES = ["/assets/", "/sw.js"];
+      const STATIC_ASSET_EXT_RE =
+        /\.(?:js|mjs|css|map|json|woff2?|ttf|otf|png|jpg|jpeg|gif|svg|webp|ico|wasm)$/i;
+
+      app.get(/.*/, (req, res, next) => {
+        const p = req.path;
+        if (
+          STATIC_ASSET_PREFIXES.some((pref) => p.startsWith(pref)) ||
+          STATIC_ASSET_EXT_RE.test(p)
+        ) {
+          return next(); // fall through to express 404
+        }
+
+        // SPA fallback — re-read index.html from disk on every request so UI
+        // rebuilds take effect without a server restart. Also send no-cache
+        // headers so the browser can never hold onto a stale shell that
+        // references hashes from a previous build.
+        try {
+          const html = applyUiBranding(
+            fs.readFileSync(path.join(uiDist, "index.html"), "utf-8"),
+          );
+          res
+            .status(200)
+            .set("Content-Type", "text/html; charset=utf-8")
+            .set("Cache-Control", "no-cache, no-store, must-revalidate")
+            .set("Pragma", "no-cache")
+            .set("Expires", "0")
+            .end(html);
+        } catch (err) {
+          next(err);
+        }
       });
     } else {
       console.warn("[paperclip] UI dist not found; running in API-only mode");
@@ -274,12 +308,37 @@ export async function createApp(
     });
 
     app.use(vite.middlewares);
+
+    // Same guard as the static-mode branch above: /assets/* and anything that
+    // looks like a real static file extension must never fall through to the
+    // SPA HTML handler. Otherwise a missing JS chunk returns index.html with
+    // Content-Type text/html and the browser explodes with "Failed to load
+    // module script: Expected a JavaScript-or-Wasm module script…".
+    const STATIC_ASSET_PREFIXES = ["/assets/", "/sw.js"];
+    const STATIC_ASSET_EXT_RE =
+      /\.(?:js|mjs|css|map|json|woff2?|ttf|otf|png|jpg|jpeg|gif|svg|webp|ico|wasm)$/i;
+
     app.get(/.*/, async (req, res, next) => {
+      const p = req.path;
+      if (
+        STATIC_ASSET_PREFIXES.some((pref) => p.startsWith(pref)) ||
+        STATIC_ASSET_EXT_RE.test(p)
+      ) {
+        return next(); // let vite middleware or express 404 handle it
+      }
       try {
         const templatePath = path.resolve(uiRoot, "index.html");
         const template = fs.readFileSync(templatePath, "utf-8");
         const html = applyUiBranding(await vite.transformIndexHtml(req.originalUrl, template));
-        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+        res
+          .status(200)
+          .set({
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          })
+          .end(html);
       } catch (err) {
         next(err);
       }
