@@ -1757,13 +1757,23 @@ export function heartbeatService(db: Db) {
     for (const { run, adapterType } of activeRuns) {
       if (runningProcesses.has(run.id) || activeRunExecutions.has(run.id)) continue;
 
-      // Apply staleness threshold to avoid false positives
-      if (staleThresholdMs > 0) {
+      const tracksLocalChild = isTrackedLocalChildProcessAdapter(adapterType);
+
+      // S43-3: determine process liveness FIRST, apply stale threshold only
+      // as a safety net when we can't prove the process is dead. Previously
+      // the threshold was checked before any liveness check — so a run whose
+      // process was definitively dead still waited the full threshold
+      // (5 min) before being reaped, blocking the agent's queue. When we
+      // have a tracked adapter + PID and the PID is NOT alive, reap
+      // immediately. Only fall back to the time-based threshold when the
+      // evidence is inconclusive (no adapter tracking, or no PID recorded).
+      const hasTrackedDeadProcess =
+        tracksLocalChild && run.processPid !== null && run.processPid !== undefined && !isProcessAlive(run.processPid);
+      if (!hasTrackedDeadProcess && staleThresholdMs > 0) {
         const refTime = run.updatedAt ? new Date(run.updatedAt).getTime() : 0;
         if (now.getTime() - refTime < staleThresholdMs) continue;
       }
 
-      const tracksLocalChild = isTrackedLocalChildProcessAdapter(adapterType);
       if (tracksLocalChild && run.processPid && isProcessAlive(run.processPid)) {
         if (run.errorCode !== DETACHED_PROCESS_ERROR_CODE) {
           const detachedMessage = `Lost in-memory process handle, but child pid ${run.processPid} is still alive`;
