@@ -190,6 +190,19 @@ export {
 } from "./secret.js";
 
 export {
+  createBlueprintSchema,
+  updateBlueprintSchema,
+  runBlueprintSchema,
+  updateBlueprintRunSchema,
+  completeBlueprintStepSchema,
+  type CreateBlueprint,
+  type UpdateBlueprint,
+  type RunBlueprint,
+  type UpdateBlueprintRun,
+  type CompleteBlueprintStep,
+} from "./blueprint.js";
+
+export {
   createRoutineSchema,
   updateRoutineSchema,
   createRoutineTriggerSchema,

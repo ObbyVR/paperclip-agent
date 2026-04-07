@@ -11,6 +11,7 @@ import {
   Network,
   Boxes,
   Repeat,
+  Map,
   Settings,
   Users,
 } from "lucide-react";
@@ -105,6 +106,7 @@ export function Sidebar() {
 
         <SidebarSection label={t("nav.work")}>
           <SidebarNavItem to="/issues" label={t("nav.issues")} icon={CircleDot} badge={inboxBadge.mineIssues > 0 ? inboxBadge.mineIssues : undefined} badgeTone="danger" />
+          <SidebarNavItem to="/blueprints" label={t("nav.blueprints", "Blueprints")} icon={Map} textBadge="New" textBadgeTone="blue" />
           <SidebarNavItem to="/routines" label={t("nav.routines")} icon={Repeat} textBadge="Beta" textBadgeTone="amber" />
           <SidebarNavItem to="/goals" label={t("nav.goals")} icon={Target} />
         </SidebarSection>

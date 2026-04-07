@@ -140,6 +140,14 @@ export type {
 } from "./access.js";
 export type { QuotaWindow, ProviderQuotaResult } from "./quota.js";
 export type {
+  BlueprintStepDef,
+  BlueprintStepResult,
+  Blueprint,
+  BlueprintListItem,
+  BlueprintRun,
+  BlueprintRunDetail,
+} from "./blueprint.js";
+export type {
   CompanyPortabilityInclude,
   CompanyPortabilityEnvInput,
   CompanyPortabilityFileEntry,
