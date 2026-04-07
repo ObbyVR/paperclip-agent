@@ -146,7 +146,7 @@ export function BlueprintRunDetail() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: t("nav.blueprints", "Blueprints"), to: "/blueprints" },
+      { label: t("nav.blueprints", "Blueprints"), href: "/blueprints" },
       { label: run?.blueprint?.title ?? "Run" },
     ]);
   }, [setBreadcrumbs, t, run]);

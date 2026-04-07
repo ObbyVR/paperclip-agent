@@ -89,10 +89,10 @@ function BlueprintCard({ bp, onRun }: { bp: BlueprintListItem; onRun: (id: strin
 
 export function Blueprints() {
   const { t } = useTranslation();
-  const { company } = useCompany();
+  const { selectedCompany: company } = useCompany();
   const navigate = useNavigate();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const { toast } = useToast();
+  const { pushToast } = useToast();
   const queryClient = useQueryClient();
   const [showAll, setShowAll] = useState(false);
 
@@ -101,19 +101,20 @@ export function Blueprints() {
   }, [setBreadcrumbs, t]);
 
   const { data: blueprints, isLoading } = useQuery({
-    queryKey: queryKeys.blueprints.list(company.id),
-    queryFn: () => blueprintsApi.list(company.id, showAll),
+    queryKey: queryKeys.blueprints.list(company?.id ?? ""),
+    queryFn: () => blueprintsApi.list(company!.id, showAll),
+    enabled: !!company,
   });
 
   const runMutation = useMutation({
     mutationFn: (blueprintId: string) => blueprintsApi.startRun(blueprintId),
     onSuccess: (run) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.blueprints.list(company.id) });
-      toast({ title: "Blueprint run avviato", variant: "default" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.blueprints.list(company?.id ?? "") });
+      pushToast({ title: "Blueprint run avviato", tone: "success" });
       navigate(`/blueprint-runs/${run.id}`);
     },
     onError: () => {
-      toast({ title: "Errore avvio run", variant: "destructive" });
+      pushToast({ title: "Errore avvio run", tone: "error" });
     },
   });
 
@@ -123,8 +124,7 @@ export function Blueprints() {
     return (
       <EmptyState
         icon={Layers}
-        title="Nessun Blueprint"
-        description="I Blueprints sono workflow pre-costruiti e riusabili. Saranno disponibili qui una volta creati."
+        message="I Blueprints sono workflow pre-costruiti e riusabili. Saranno disponibili qui una volta creati."
       />
     );
   }
