@@ -114,7 +114,7 @@ export function classifyEvent(event: LiveEventLike): EventMapping | null {
     const name = asString(details.name, "nuovo agente");
     const role = asString(details.role, "");
     const roleSuffix = role ? ` (${role})` : "";
-    return { key: "agentHired", text: `✅ Agente assunto: *${name}*${roleSuffix}` };
+    return { key: "agentHired", text: `✅ Nuovo agente AI creato: *${name}*${roleSuffix}` };
   }
 
   // S43-3: approval resolved by someone other than the founder. We emit the
@@ -201,7 +201,7 @@ export function classifyEvent(event: LiveEventLike): EventMapping | null {
     const errSuffix = err ? `\n_${err}_` : "";
     return {
       key: "hireFailed",
-      text: `❌ Hire hook fallito per *${name}*.${errSuffix}`,
+      text: `❌ Attivazione agente fallita per *${name}*.${errSuffix}`,
     };
   }
 

@@ -149,8 +149,11 @@ function IssueContent({ issue, issueLinkState }: { issue: Issue; issueLinkState?
 }
 
 function ApprovalContent({ approval }: { approval: Approval }) {
+  const { t } = useTranslation();
   const Icon = typeIcon[approval.type] ?? defaultTypeIcon;
   const label = approvalLabel(approval.type, approval.payload as Record<string, unknown> | null);
+  const isHire = approval.type === "hire_agent";
+  const isApproved = approval.status === "approved";
   return (
     <Link
       to={`/approvals/${approval.id}`}
@@ -164,7 +167,13 @@ function ApprovalContent({ approval }: { approval: Approval }) {
           {label}
         </span>
         <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="capitalize">{approval.status.replaceAll("_", " ")}</span>
+          {isHire && isApproved ? (
+            <span className="text-green-600 dark:text-green-400">{t("approval.agentActivated")}</span>
+          ) : isHire ? (
+            <span>{t("approval.newAiAgent")} · <span className="capitalize">{approval.status.replaceAll("_", " ")}</span></span>
+          ) : (
+            <span className="capitalize">{approval.status.replaceAll("_", " ")}</span>
+          )}
         </span>
       </span>
     </Link>

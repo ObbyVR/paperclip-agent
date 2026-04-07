@@ -7,7 +7,7 @@ import { logger } from "../middleware/logger.js";
 import { logActivity } from "./activity-log.js";
 
 const HIRE_APPROVED_MESSAGE =
-  "Tell your user that your hire was approved, now they should assign you a task in Paperclip or ask you to create issues.";
+  "Your agent creation was approved and you are now activated. Tell your user you are ready to receive tasks in Paperclip.";
 
 export interface NotifyHireApprovedInput {
   companyId: string;

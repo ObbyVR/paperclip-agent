@@ -97,6 +97,7 @@ function ApprovalQuickCard({
       {/* Payload summary */}
       {approval.type === "hire_agent" && !!payload.name && (
         <div className="text-xs text-muted-foreground space-y-0.5 pl-10">
+          <p className="italic text-[11px]">{t("approval.newAiAgent")}</p>
           {payload.role ? <p><span className="font-medium">Ruolo:</span> {String(payload.role)}</p> : null}
           {payload.adapterType ? <p><span className="font-medium">Adapter:</span> {String(payload.adapterType)}</p> : null}
           {Array.isArray(payload.desiredSkills) && (payload.desiredSkills as string[]).length > 0 ? (

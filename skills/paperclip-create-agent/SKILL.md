@@ -1,14 +1,14 @@
 ---
 name: paperclip-create-agent
 description: >
-  Create new agents in Paperclip with governance-aware hiring. Use when you need
+  Create new AI agents in Paperclip with governance-aware approval. Use when you need
   to inspect adapter configuration options, compare existing agent configs,
-  draft a new agent prompt/config, and submit a hire request.
+  draft a new agent prompt/config, and submit a creation request.
 ---
 
 # Paperclip Create Agent Skill
 
-Use this skill when you are asked to hire/create an agent.
+Use this skill when you need to create a new AI agent.
 
 ## Preconditions
 
@@ -56,7 +56,7 @@ curl -sS "$PAPERCLIP_API_URL/llms/agent-icons.txt" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY"
 ```
 
-6. Draft the new hire config:
+6. Draft the new agent config:
 - role/title/name
 - icon (required in practice; use one from `/llms/agent-icons.txt`)
 - reporting line (`reportsTo`)
@@ -65,9 +65,9 @@ curl -sS "$PAPERCLIP_API_URL/llms/agent-icons.txt" \
 - adapter and runtime config aligned to this environment
 - capabilities
 - run prompt in adapter config (`promptTemplate` where applicable)
-- source issue linkage (`sourceIssueId` or `sourceIssueIds`) when this hire came from an issue
+- source issue linkage (`sourceIssueId` or `sourceIssueIds`) when this agent creation came from an issue
 
-7. Submit hire request.
+7. Submit agent creation request.
 
 ```sh
 curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" \
@@ -89,9 +89,9 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-h
 ```
 
 8. Handle governance state:
-- if response has `approval`, hire is `pending_approval`
+- if response has `approval`, the agent is `pending_approval` (waiting for board to approve its creation)
 - monitor and discuss on approval thread
-- when the board approves, you will be woken with `PAPERCLIP_APPROVAL_ID`; read linked issues and close/comment follow-up
+- when the board approves, the agent is activated automatically and you will be woken with `PAPERCLIP_APPROVAL_ID`; read linked issues and close/comment follow-up
 
 ```sh
 curl -sS "$PAPERCLIP_API_URL/api/approvals/<approval-id>" \
@@ -100,7 +100,7 @@ curl -sS "$PAPERCLIP_API_URL/api/approvals/<approval-id>" \
 curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/<approval-id>/comments" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"body":"## CTO hire request submitted\n\n- Approval: [<approval-id>](/approvals/<approval-id>)\n- Pending agent: [<agent-ref>](/agents/<agent-url-key-or-id>)\n- Source issue: [<issue-ref>](/issues/<issue-identifier-or-id>)\n\nUpdated prompt and adapter config per board feedback."}'
+  -d '{"body":"## Richiesta creazione agente AI: CTO\n\n- Approvazione: [<approval-id>](/approvals/<approval-id>)\n- Agente in attesa: [<agent-ref>](/agents/<agent-url-key-or-id>)\n- Issue origine: [<issue-ref>](/issues/<issue-identifier-or-id>)\n\nConfigurazione aggiornata secondo feedback del board."}'
 ```
 
 If the approval already exists and needs manual linking to the issue:
@@ -128,11 +128,11 @@ For each linked issue, either:
 
 ## Quality Bar
 
-Before sending a hire request:
+Before submitting a creation request:
 
 - if the role needs skills, make sure they already exist in the company library or install them first using the Paperclip company-skills workflow
 - Reuse proven config patterns from related agents where possible.
-- Set a concrete `icon` from `/llms/agent-icons.txt` so the new hire is identifiable in org and task views.
+- Set a concrete `icon` from `/llms/agent-icons.txt` so the new agent is identifiable in org and task views.
 - Avoid secrets in plain text unless required by adapter behavior.
 - Ensure reporting line is correct and in-company.
 - Ensure prompt is role-specific and operationally scoped.

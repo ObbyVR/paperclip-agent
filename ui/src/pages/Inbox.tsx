@@ -516,6 +516,20 @@ export function Inbox() {
     mutationFn: (id: string) => issuesApi.markRead(id),
     onMutate: (id) => {
       setFadingOutIssues((prev) => new Set(prev).add(id));
+      // Optimistically set isUnreadForMe = false in all issue caches so the
+      // dot cannot reappear if the refetch is slower than the 300ms fade-out.
+      if (selectedCompanyId) {
+        const issueQueryKeys = [
+          queryKeys.issues.listMineByMe(selectedCompanyId),
+          queryKeys.issues.listTouchedByMe(selectedCompanyId),
+          queryKeys.issues.listUnreadTouchedByMe(selectedCompanyId),
+        ];
+        for (const qk of issueQueryKeys) {
+          queryClient.setQueryData<Issue[]>(qk, (old) =>
+            old?.map((issue) => (issue.id === id ? { ...issue, isUnreadForMe: false } : issue)),
+          );
+        }
+      }
     },
     onSuccess: () => invalidateInboxIssueQueries(),
     onSettled: (_data, _error, id) => {
@@ -534,11 +548,24 @@ export function Inbox() {
       await Promise.all(issueIds.map((issueId) => issuesApi.markRead(issueId)));
     },
     onMutate: (issueIds) => {
+      const idSet = new Set(issueIds);
       setFadingOutIssues((prev) => {
         const next = new Set(prev);
         for (const issueId of issueIds) next.add(issueId);
         return next;
       });
+      if (selectedCompanyId) {
+        const issueQueryKeys = [
+          queryKeys.issues.listMineByMe(selectedCompanyId),
+          queryKeys.issues.listTouchedByMe(selectedCompanyId),
+          queryKeys.issues.listUnreadTouchedByMe(selectedCompanyId),
+        ];
+        for (const qk of issueQueryKeys) {
+          queryClient.setQueryData<Issue[]>(qk, (old) =>
+            old?.map((issue) => (idSet.has(issue.id) ? { ...issue, isUnreadForMe: false } : issue)),
+          );
+        }
+      }
     },
     onSuccess: () => invalidateInboxIssueQueries(),
     onSettled: (_data, _error, issueIds) => {

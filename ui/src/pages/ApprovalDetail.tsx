@@ -210,7 +210,14 @@ export function ApprovalDetail() {
               <p className="text-xs text-muted-foreground font-mono">{approval.id}</p>
             </div>
           </div>
-          <StatusBadge status={approval.status} />
+          {approval.type === "hire_agent" && approval.status === "approved" ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/50 dark:text-green-300">
+              <CheckCircle2 className="h-3 w-3" />
+              {t("approval.agentActivated")}
+            </span>
+          ) : (
+            <StatusBadge status={approval.status} />
+          )}
         </div>
         <div className="text-sm space-y-1">
           {approval.requestedByAgentId && (
