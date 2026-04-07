@@ -53,6 +53,7 @@ interface InboxProjectsViewProps {
     isPending?: boolean;
     isRetrying?: boolean;
   };
+  onSendMessageToLead?: (projectId: string | null, message: string) => void;
 }
 
 function itemSearchHaystack(
@@ -110,6 +111,7 @@ export function InboxProjectsView({
   projects,
   computeUnreadState,
   buildItemHandlers,
+  onSendMessageToLead,
 }: InboxProjectsViewProps) {
   const { t } = useTranslation();
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -333,6 +335,7 @@ export function InboxProjectsView({
                   : null
               }
               issueById={issueById}
+              onSendMessageToLead={onSendMessageToLead}
               onBulkArchiveRead={() => {
                 // Archive every already-read item in this bucket. Each item's
                 // onArchive handler is fired sequentially — the queries will

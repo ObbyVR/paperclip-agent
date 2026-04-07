@@ -49,7 +49,7 @@ interface ProjectInboxCardProps {
   items: ProjectInboxCardItem[];
   leadAgent: Agent | null;
   issueById: Map<string, Issue>;
-  onSendMessageToLead?: (projectId: string | null, message: string) => void;
+  onSendMessageToLead?: (projectId: string | null, message: string) => Promise<void> | void;
   /** Bulk-archive: fires each item's own onArchive (if present) for items
    *  currently marked as read. The caller decides whether to require confirm. */
   onBulkArchiveRead?: () => void;
@@ -87,12 +87,21 @@ export function ProjectInboxCard({
   const projectHref = project ? `/projects/${project.urlKey ?? project.id}` : null;
   const accentColor = project?.color ?? null;
 
-  const handleSend = () => {
+  const [sending, setSending] = useState(false);
+
+  const handleSend = async () => {
     const trimmed = draft.trim();
-    if (!trimmed) return;
-    onSendMessageToLead?.(project?.id ?? null, trimmed);
-    setDraft("");
-    setComposerOpen(false);
+    if (!trimmed || sending) return;
+    setSending(true);
+    try {
+      await onSendMessageToLead?.(project?.id ?? null, trimmed);
+      setDraft("");
+      setComposerOpen(false);
+    } catch {
+      // error is handled by the caller (Inbox.tsx sets actionError)
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleComposerKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -226,14 +235,20 @@ export function ProjectInboxCard({
         <div className="border-t border-border bg-muted/20">
           {!composerOpen ? (
             <div className="flex items-center justify-between gap-2 px-3 py-2">
-              <button
-                type="button"
-                onClick={() => setComposerOpen(true)}
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <Send className="h-3 w-3" />
-                {t("inbox.writeToLead")}
-              </button>
+              {leadAgent ? (
+                <button
+                  type="button"
+                  onClick={() => setComposerOpen(true)}
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Send className="h-3 w-3" />
+                  {t("inbox.writeToLead")}
+                </button>
+              ) : (
+                <span className="text-[10px] text-muted-foreground/50">
+                  {t("inbox.noLeadAssigned", { defaultValue: "Nessun responsabile" })}
+                </span>
+              )}
               {unreadCount > 0 && (
                 <span className="text-[10px] font-medium text-muted-foreground">
                   {unreadCount === 1
@@ -270,11 +285,11 @@ export function ProjectInboxCard({
                   type="button"
                   size="sm"
                   className="h-7 px-2.5 text-xs"
-                  disabled={!draft.trim()}
+                  disabled={!draft.trim() || sending}
                   onClick={handleSend}
                 >
                   <Send className="mr-1 h-3 w-3" />
-                  {t("inbox.send")}
+                  {sending ? "..." : t("inbox.send")}
                 </Button>
               </div>
             </div>

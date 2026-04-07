@@ -552,6 +552,32 @@ export function Inbox() {
     },
   });
 
+  const sendMessageToLeadMutation = useMutation({
+    mutationFn: ({ projectId, message }: { projectId: string | null; message: string }) => {
+      if (!selectedCompanyId) throw new Error("Nessuna azienda selezionata");
+      const project = projectId ? projectById.get(projectId) ?? null : null;
+      const leadAgentId = project?.leadAgentId;
+      if (!leadAgentId) throw new Error("Nessun responsabile assegnato al progetto");
+      const title = message.length > 120 ? message.slice(0, 117) + "..." : message;
+      return issuesApi.create(selectedCompanyId, {
+        title,
+        description: message,
+        assigneeAgentId: leadAgentId,
+        projectId: projectId ?? undefined,
+        status: "todo",
+        priority: "medium",
+      });
+    },
+    onSuccess: () => {
+      setActionError(null);
+      invalidateInboxIssueQueries();
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+    },
+    onError: (err) => {
+      setActionError(err instanceof Error ? err.message : "Invio messaggio fallito");
+    },
+  });
+
   const handleMarkNonIssueRead = (key: string) => {
     setFadingNonIssueItems((prev) => new Set(prev).add(key));
     markItemRead(key);
@@ -960,6 +986,9 @@ export function Inbox() {
           projects={projects ?? []}
           computeUnreadState={computeProjectsUnreadState}
           buildItemHandlers={buildProjectsItemHandlers}
+          onSendMessageToLead={(projectId, message) =>
+            sendMessageToLeadMutation.mutateAsync({ projectId, message })
+          }
         />
       )}
 
