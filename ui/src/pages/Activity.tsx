@@ -288,7 +288,7 @@ interface FeedRow {
 }
 
 const BURST_WINDOW_MS = 5 * 60 * 1000;
-const BURST_MIN_SIZE = 3;
+const BURST_MIN_SIZE = 2;
 
 function buildFeedRows(events: ActivityEvent[]): FeedRow[] {
   // Events arrive newest-first from the API. Walk linearly and merge

@@ -950,7 +950,7 @@ export function Inbox() {
                 onClick={() => { setGroupByAgent((p) => !p); setGroupByProject(false); }}
               >
                 <Group className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{groupByAgent ? t("inbox.grouped") : t("inbox.groupByAgent")}</span>
+                <span>{groupByAgent ? t("inbox.grouped") : t("inbox.groupByAgent")}</span>
               </Button>
               <Button
                 type="button"
@@ -960,7 +960,7 @@ export function Inbox() {
                 onClick={() => { setGroupByProject((p) => !p); setGroupByAgent(false); }}
               >
                 <Folder className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{groupByProject ? t("inbox.grouped") : t("inbox.groupByProject", "Per progetto")}</span>
+                <span>{groupByProject ? t("inbox.grouped") : t("inbox.groupByProject", "Per progetto")}</span>
               </Button>
             </>
           )}

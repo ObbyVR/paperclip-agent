@@ -301,17 +301,17 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ── Project filter + Stats inline header bar ─────────────── */}
+      {/* ── Project filter + Stats card grid ─────────────── */}
       {data && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground -mt-1">
+        <div className="space-y-2 -mt-1">
           {projectsList && projectsList.length > 1 && (
-            <div className="flex items-center gap-1.5 mr-2 pr-2 border-r border-border">
-              <FolderOpen className="h-3 w-3" />
+            <div className="flex items-center gap-1.5">
+              <FolderOpen className="h-3 w-3 text-muted-foreground" />
               <select
                 value={selectedProjectId ?? ""}
                 onChange={(e) => setSelectedProjectId(e.target.value || null)}
-                className="bg-transparent text-xs font-medium text-foreground border-none outline-none cursor-pointer appearance-none pr-4"
-                style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0 center" }}
+                className="bg-transparent text-xs font-medium text-foreground border border-border/50 rounded-md px-2 outline-none cursor-pointer appearance-none pr-4"
+                style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center" }}
               >
                 <option value="">{t("dashboard.allProjects", "Tutti i progetti")}</option>
                 {projectsList.map((p) => (
@@ -323,33 +323,48 @@ export function Dashboard() {
               </select>
             </div>
           )}
-          {data.budgets.activeIncidents > 0 && (
-            <Link to="/costs" className="flex items-center gap-1 font-medium text-red-400 hover:text-red-300">
-              <PauseCircle className="h-3 w-3" />
-              {data.budgets.activeIncidents} {t("dashboard.incidents", "incidenti")}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            {data.budgets.activeIncidents > 0 && (
+              <Link to="/costs" className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 hover:bg-red-500/20 transition-colors no-underline text-inherit">
+                <PauseCircle className="h-3.5 w-3.5 text-red-400" />
+                <div>
+                  <div className="font-semibold text-red-400">{data.budgets.activeIncidents}</div>
+                  <div className="text-[10px] text-red-400/70">{t("dashboard.incidents", "incidenti")}</div>
+                </div>
+              </Link>
+            )}
+            <Link to="/agents" className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/50 px-3 py-2 hover:bg-accent/50 transition-colors no-underline text-inherit">
+              <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+              <div>
+                <div className="font-semibold text-foreground">
+                  {data.agents.active + data.agents.running + data.agents.paused + data.agents.error}
+                  {data.agents.running > 0 && <span className="text-emerald-400 text-[10px] ml-1">({data.agents.running} {t("dashboard.active", "attivi")})</span>}
+                </div>
+                <div className="text-[10px] text-muted-foreground">{t("dashboard.agents", "agenti")}</div>
+              </div>
             </Link>
-          )}
-          <Link to="/agents" className="flex items-center gap-1 hover:text-foreground">
-            <Bot className="h-3 w-3" />
-            <span className="font-semibold text-foreground">{data.agents.active + data.agents.running + data.agents.paused + data.agents.error}</span>
-            {t("dashboard.agents", "agenti")}
-            {data.agents.running > 0 && <span className="text-emerald-400 text-[10px]">({data.agents.running} {t("dashboard.active", "attivi")})</span>}
-          </Link>
-          <Link to="/issues" className="flex items-center gap-1 hover:text-foreground">
-            <CircleDot className="h-3 w-3" />
-            <span className="font-semibold text-foreground">{data.tasks.inProgress}</span>
-            {t("dashboard.inProgress", "in corso")}
-          </Link>
-          <Link to="/costs" className="flex items-center gap-1 hover:text-foreground">
-            <DollarSign className="h-3 w-3" />
-            <span className="font-semibold text-foreground">{formatCents(data.costs.monthSpendCents)}</span>
-            {t("dashboard.month", "mese")}
-          </Link>
-          <Link to="/approvals" className="flex items-center gap-1 hover:text-foreground">
-            <ShieldCheck className="h-3 w-3" />
-            <span className="font-semibold text-foreground">{data.pendingApprovals + data.budgets.pendingApprovals + (issues?.filter((i) => i.status === "in_review").length ?? 0)}</span>
-            {t("dashboard.approvals", "approvazioni")}
-          </Link>
+            <Link to="/issues" className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/50 px-3 py-2 hover:bg-accent/50 transition-colors no-underline text-inherit">
+              <CircleDot className="h-3.5 w-3.5 text-muted-foreground" />
+              <div>
+                <div className="font-semibold text-foreground">{data.tasks.inProgress}</div>
+                <div className="text-[10px] text-muted-foreground">{t("dashboard.inProgress", "in corso")}</div>
+              </div>
+            </Link>
+            <Link to="/costs" className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/50 px-3 py-2 hover:bg-accent/50 transition-colors no-underline text-inherit">
+              <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+              <div>
+                <div className="font-semibold text-foreground">{formatCents(data.costs.monthSpendCents)}</div>
+                <div className="text-[10px] text-muted-foreground">{t("dashboard.month", "mese")}</div>
+              </div>
+            </Link>
+            <Link to="/approvals" className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/50 px-3 py-2 hover:bg-accent/50 transition-colors no-underline text-inherit">
+              <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
+              <div>
+                <div className="font-semibold text-foreground">{data.pendingApprovals + data.budgets.pendingApprovals + (issues?.filter((i) => i.status === "in_review").length ?? 0)}</div>
+                <div className="text-[10px] text-muted-foreground">{t("dashboard.approvals", "approvazioni")}</div>
+              </div>
+            </Link>
+          </div>
         </div>
       )}
 

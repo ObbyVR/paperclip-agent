@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import { Link } from "@/lib/router";
 import { cn } from "../lib/utils";
 import { Identity } from "./Identity";
@@ -407,6 +407,7 @@ function CompactNodeCard({ node }: { node: TreeNode }) {
   return (
     <Link
       to={`/issues/${node.issue.identifier ?? node.issue.id}`}
+      data-wf-node
       className={cn(
         "rounded border px-2 py-1 no-underline text-inherit block",
         "hover:ring-1 hover:ring-white/10 transition-all",
@@ -471,6 +472,7 @@ function NodeCard({
     return (
       <button
         type="button"
+        data-wf-node
         onClick={() => onGroupClick?.(node)}
         className={cn(
           "absolute rounded-lg border-l-[3px] px-3 py-2 text-left",
@@ -508,6 +510,7 @@ function NodeCard({
   return (
     <Link
       to={`/issues/${node.issue.identifier ?? node.issue.id}`}
+      data-wf-node
       className={cn(
         "absolute rounded-lg border-l-[3px] px-3 py-2 no-underline text-inherit block",
         "hover:ring-1 hover:ring-white/10 transition-all",
@@ -786,6 +789,43 @@ export function WorkflowGraph({
   const [expandedGroup, setExpandedGroup] = useState<TreeNode | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("chronological");
 
+  /* ── Zoom / pan state ── */
+  const graphContainerRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  const handleWheelZoom = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const container = graphContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const newZoom = Math.min(2, Math.max(0.15, zoom * factor));
+    const scale = newZoom / zoom;
+    setPan({ x: mouseX - scale * (mouseX - pan.x), y: mouseY - scale * (mouseY - pan.y) });
+    setZoom(newZoom);
+  }, [zoom, pan]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("[data-wf-node], button, a")) return;
+    setDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+  }, [pan]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragging) return;
+    setPan({
+      x: dragStart.current.panX + (e.clientX - dragStart.current.x),
+      y: dragStart.current.panY + (e.clientY - dragStart.current.y),
+    });
+  }, [dragging]);
+
+  const handleMouseUp = useCallback(() => setDragging(false), []);
+
   const trees = useMemo(() => buildTree(issues, agents, viewMode), [issues, agents, viewMode]);
   // Drop trees whose root the user has hidden from the dashboard.
   const visibleTrees = useMemo(
@@ -833,7 +873,17 @@ export function WorkflowGraph({
         const todoCount = statusCounts.todo ?? 0;
 
         return (
-          <div key={rootId} className="rounded-xl border border-border bg-[#0c0e14] p-4 overflow-x-auto">
+          <div
+            key={rootId}
+            ref={graphContainerRef}
+            className="rounded-xl border border-border bg-[#0c0e14] p-4 overflow-hidden relative"
+            style={{ cursor: dragging ? "grabbing" : "grab" }}
+            onWheel={handleWheelZoom}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
             {/* Header: collapse toggle + title + view toggle + hide button */}
             <div className="flex items-center justify-between mb-3 gap-2">
               <button
@@ -880,6 +930,55 @@ export function WorkflowGraph({
 
             {!isCollapsed && (
               <>
+                {/* Zoom / pan controls */}
+                <div className="absolute top-2 right-2 z-10 flex flex-col gap-1">
+                  <button
+                    type="button"
+                    className="w-7 h-7 flex items-center justify-center bg-background border border-border rounded text-sm hover:bg-accent transition-colors"
+                    onClick={() => {
+                      const nz = Math.min(zoom * 1.2, 2);
+                      const c = graphContainerRef.current;
+                      if (c) {
+                        const cx = c.clientWidth / 2;
+                        const cy = c.clientHeight / 2;
+                        const s = nz / zoom;
+                        setPan({ x: cx - s * (cx - pan.x), y: cy - s * (cy - pan.y) });
+                      }
+                      setZoom(nz);
+                    }}
+                  >+</button>
+                  <button
+                    type="button"
+                    className="w-7 h-7 flex items-center justify-center bg-background border border-border rounded text-sm hover:bg-accent transition-colors"
+                    onClick={() => {
+                      const nz = Math.max(zoom * 0.8, 0.15);
+                      const c = graphContainerRef.current;
+                      if (c) {
+                        const cx = c.clientWidth / 2;
+                        const cy = c.clientHeight / 2;
+                        const s = nz / zoom;
+                        setPan({ x: cx - s * (cx - pan.x), y: cy - s * (cy - pan.y) });
+                      }
+                      setZoom(nz);
+                    }}
+                  >&minus;</button>
+                  <button
+                    type="button"
+                    className="w-7 h-7 flex items-center justify-center bg-background border border-border rounded text-[10px] hover:bg-accent transition-colors"
+                    onClick={() => {
+                      const c = graphContainerRef.current;
+                      if (!c) return;
+                      const cW = c.clientWidth;
+                      const cH = c.clientHeight;
+                      const scaleX = (cW - 40) / totalWidth;
+                      const scaleY = (cH - 40) / totalHeight;
+                      const fitZoom = Math.min(scaleX, scaleY, 1);
+                      setZoom(fitZoom);
+                      setPan({ x: (cW - totalWidth * fitZoom) / 2, y: (cH - totalHeight * fitZoom) / 2 });
+                    }}
+                  >Fit</button>
+                </div>
+
                 {/* Completed column toggle header — always visible when there are completed tasks */}
                 {compactNodes.length > 0 && (
                   <div className="flex items-center mb-2">
@@ -901,7 +1000,7 @@ export function WorkflowGraph({
                   </div>
                 )}
 
-                <div className="relative" style={{ width: totalWidth, height: totalHeight, minWidth: "100%" }}>
+                <div className="relative" style={{ width: totalWidth, height: totalHeight, minWidth: "100%", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}>
                   {/* Compact lane — only rendered when the user has opened the column */}
                   {compactNodes.length > 0 && isCompletedColumnOpen && (
                     <div
