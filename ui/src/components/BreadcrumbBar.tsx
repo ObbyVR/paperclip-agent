@@ -143,6 +143,7 @@ export function BreadcrumbBar() {
           </BreadcrumbList>
         </Breadcrumb>
       </div>
+      <NotificationBell />
       {tierSelector}
       <HeartbeatGlobalToggle />
       {globalToolbarSlots}

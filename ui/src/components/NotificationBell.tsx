@@ -20,10 +20,10 @@ export function NotificationBell() {
 
   const items = [
     { label: "Issue non lette", count: badge.mineIssues, path: "/inbox/mine" },
-    { label: "Approvazioni", count: badge.approvals, path: "/approvals/pending" },
+    { label: "Approvazioni", count: badge.approvals, path: "/inbox/all" },
     { label: "Run fallite", count: badge.failedRuns, path: "/inbox/all" },
-    { label: "Richieste accesso", count: badge.joinRequests, path: "/settings" },
-    { label: "Avvisi agenti", count: badge.alerts, path: "/dashboard" },
+    { label: "Richieste accesso", count: badge.joinRequests, path: "/instance/settings/general" },
+    { label: "Avvisi agenti", count: badge.alerts, path: "/inbox/all" },
   ].filter((i) => i.count > 0);
 
   return (

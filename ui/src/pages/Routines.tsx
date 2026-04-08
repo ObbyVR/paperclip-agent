@@ -38,13 +38,13 @@ import {
 const concurrencyPolicies = ["coalesce_if_active", "always_enqueue", "skip_if_active"];
 const catchUpPolicies = ["skip_missed", "enqueue_missed_with_cap"];
 const concurrencyPolicyDescriptions: Record<string, string> = {
-  coalesce_if_active: "If a run is already active, keep just one follow-up run queued.",
-  always_enqueue: "Queue every trigger occurrence, even if the routine is already running.",
-  skip_if_active: "Drop new trigger occurrences while a run is still active.",
+  coalesce_if_active: "Se un'esecuzione e' gia' attiva, accoda solo un follow-up.",
+  always_enqueue: "Accoda ogni occorrenza del trigger, anche se la routine e' gia' in esecuzione.",
+  skip_if_active: "Scarta le nuove occorrenze finche' un'esecuzione e' ancora attiva.",
 };
 const catchUpPolicyDescriptions: Record<string, string> = {
-  skip_missed: "Ignore windows that were missed while the scheduler or routine was paused.",
-  enqueue_missed_with_cap: "Catch up missed schedule windows in capped batches after recovery.",
+  skip_missed: "Ignora le finestre perse mentre lo scheduler o la routine era in pausa.",
+  enqueue_missed_with_cap: "Recupera le finestre di schedule perse in batch limitati dopo il ripristino.",
 };
 
 function autoResizeTextarea(element: HTMLTextAreaElement | null) {
@@ -54,7 +54,7 @@ function autoResizeTextarea(element: HTMLTextAreaElement | null) {
 }
 
 function formatLastRunTimestamp(value: Date | string | null | undefined) {
-  if (!value) return "Never";
+  if (!value) return "Mai";
   return new Date(value).toLocaleString();
 }
 
@@ -156,8 +156,8 @@ export function Routines() {
     },
     onError: (mutationError) => {
       pushToast({
-        title: "Failed to update routine",
-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not update the routine.",
+        title: t("routine.updateFailed", "Aggiornamento routine fallito"),
+        body: mutationError instanceof Error ? mutationError.message : t("routine.updateFailedBody", "Impossibile aggiornare la routine."),
         tone: "error",
       });
     },
@@ -179,8 +179,8 @@ export function Routines() {
     },
     onError: (mutationError) => {
       pushToast({
-        title: "Routine run failed",
-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not start the routine run.",
+        title: t("routine.runFailed"),
+        body: mutationError instanceof Error ? mutationError.message : t("routine.runFailedBody", "Impossibile avviare l'esecuzione della routine."),
         tone: "error",
       });
     },
@@ -311,15 +311,15 @@ export function Routines() {
           <div className="px-5 pb-3">
             <div className="overflow-x-auto overscroll-x-contain">
               <div className="inline-flex min-w-full flex-wrap items-center gap-2 text-sm text-muted-foreground sm:min-w-max sm:flex-nowrap">
-                <span>For</span>
+                <span>{t("common.for", "Per")}</span>
                 <InlineEntitySelector
                   ref={assigneeSelectorRef}
                   value={draft.assigneeAgentId}
                   options={assigneeOptions}
-                  placeholder="Assignee"
-                  noneLabel="No assignee"
-                  searchPlaceholder="Search assignees..."
-                  emptyMessage="No assignees found."
+                  placeholder={t("common.assignee", "Assegnatario")}
+                  noneLabel={t("common.noAssignee", "Nessun assegnatario")}
+                  searchPlaceholder={t("common.searchAssignees", "Cerca assegnatari...")}
+                  emptyMessage={t("common.noAssigneesFound", "Nessun assegnatario trovato.")}
                   onChange={(assigneeAgentId) => {
                     if (assigneeAgentId) trackRecentAssignee(assigneeAgentId);
                     setDraft((current) => ({ ...current, assigneeAgentId }));
@@ -342,7 +342,7 @@ export function Routines() {
                         <span className="truncate">{option.label}</span>
                       )
                     ) : (
-                      <span className="text-muted-foreground">Assignee</span>
+                      <span className="text-muted-foreground">{t("common.assignee", "Assegnatario")}</span>
                     )
                   }
                   renderOption={(option) => {
@@ -356,15 +356,15 @@ export function Routines() {
                     );
                   }}
                 />
-                <span>in</span>
+                <span>{t("common.in", "in")}</span>
                 <InlineEntitySelector
                   ref={projectSelectorRef}
                   value={draft.projectId}
                   options={projectOptions}
-                  placeholder="Project"
-                  noneLabel="No project"
-                  searchPlaceholder="Search projects..."
-                  emptyMessage="No projects found."
+                  placeholder={t("common.project", "Progetto")}
+                  noneLabel={t("common.noProject", "Nessun progetto")}
+                  searchPlaceholder={t("common.searchProjects", "Cerca progetti...")}
+                  emptyMessage={t("common.noProjectsFound", "Nessun progetto trovato.")}
                   onChange={(projectId) => setDraft((current) => ({ ...current, projectId }))}
                   onConfirm={() => descriptionEditorRef.current?.focus()}
                   renderTriggerValue={(option) =>
@@ -377,7 +377,7 @@ export function Routines() {
                         <span className="truncate">{option.label}</span>
                       </>
                     ) : (
-                      <span className="text-muted-foreground">Project</span>
+                      <span className="text-muted-foreground">{t("common.project", "Progetto")}</span>
                     )
                   }
                   renderOption={(option) => {
@@ -403,7 +403,7 @@ export function Routines() {
               ref={descriptionEditorRef}
               value={draft.description}
               onChange={(description) => setDraft((current) => ({ ...current, description }))}
-              placeholder="Add instructions..."
+              placeholder={t("routine.addInstructions", "Aggiungi istruzioni...")}
               bordered={false}
               contentClassName="min-h-[160px] text-sm text-muted-foreground"
               onSubmit={() => {
@@ -418,15 +418,15 @@ export function Routines() {
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
               <CollapsibleTrigger className="flex w-full items-center justify-between text-left">
                 <div>
-                  <p className="text-sm font-medium">Advanced delivery settings</p>
-                  <p className="text-sm text-muted-foreground">Keep policy controls secondary to the work definition.</p>
+                  <p className="text-sm font-medium">{t("routine.advancedSettings", "Impostazioni avanzate di consegna")}</p>
+                  <p className="text-sm text-muted-foreground">{t("routine.advancedSettingsDesc", "I controlli di policy restano secondari alla definizione del lavoro.")}</p>
                 </div>
                 {advancedOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-3">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Concurrency</p>
+                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("routine.concurrency", "Concorrenza")}</p>
                     <Select
                       value={draft.concurrencyPolicy}
                       onValueChange={(concurrencyPolicy) => setDraft((current) => ({ ...current, concurrencyPolicy }))}
@@ -443,7 +443,7 @@ export function Routines() {
                     <p className="text-xs text-muted-foreground">{concurrencyPolicyDescriptions[draft.concurrencyPolicy]}</p>
                   </div>
                   <div className="space-y-2">
-                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Catch-up</p>
+                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("routine.catchUp", "Recupero")}</p>
                     <Select
                       value={draft.catchUpPolicy}
                       onValueChange={(catchUpPolicy) => setDraft((current) => ({ ...current, catchUpPolicy }))}
@@ -466,7 +466,7 @@ export function Routines() {
 
           <div className="flex flex-col gap-3 border-t border-border/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-muted-foreground">
-              After creation, Paperclip takes you straight to trigger setup for schedules, webhooks, or internal runs.
+              {t("routine.afterCreationHint", "Dopo la creazione, Paperclip ti porta alla configurazione dei trigger per schedule, webhook o run interni.")}
             </div>
             <div className="flex flex-col gap-2 sm:items-end">
               <Button
@@ -483,7 +483,7 @@ export function Routines() {
               </Button>
               {createRoutine.isError ? (
                 <p className="text-sm text-destructive">
-                  {createRoutine.error instanceof Error ? createRoutine.error.message : "Failed to create routine"}
+                  {createRoutine.error instanceof Error ? createRoutine.error.message : t("routine.createFailed", "Creazione routine fallita")}
                 </p>
               ) : null}
             </div>
@@ -494,7 +494,7 @@ export function Routines() {
       {error ? (
         <Card>
           <CardContent className="pt-6 text-sm text-destructive">
-            {error instanceof Error ? error.message : "Failed to load routines"}
+            {error instanceof Error ? error.message : t("routine.loadFailed", "Caricamento routine fallito")}
           </CardContent>
         </Card>
       ) : null}
@@ -505,6 +505,8 @@ export function Routines() {
             <EmptyState
               icon={Repeat}
               message={t("routine.noRoutines")}
+              action={t("routine.createRoutine")}
+              onAction={() => setComposerOpen(true)}
             />
           </div>
         ) : (
@@ -512,11 +514,11 @@ export function Routines() {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                  <th className="px-3 py-2 font-medium">Name</th>
-                  <th className="px-3 py-2 font-medium">Project</th>
-                  <th className="px-3 py-2 font-medium">Agent</th>
-                  <th className="px-3 py-2 font-medium">Last run</th>
-                  <th className="px-3 py-2 font-medium">Enabled</th>
+                  <th className="px-3 py-2 font-medium">{t("common.name", "Nome")}</th>
+                  <th className="px-3 py-2 font-medium">{t("common.project", "Progetto")}</th>
+                  <th className="px-3 py-2 font-medium">{t("common.agent", "Agente")}</th>
+                  <th className="px-3 py-2 font-medium">{t("routine.lastRun", "Ultima esecuzione")}</th>
+                  <th className="px-3 py-2 font-medium">{t("routine.enabled", "Attiva")}</th>
                   <th className="w-12 px-3 py-2" />
                 </tr>
               </thead>
@@ -538,7 +540,7 @@ export function Routines() {
                           </span>
                           {(isArchived || routine.status === "paused") && (
                             <div className="mt-1 text-xs text-muted-foreground">
-                              {isArchived ? "archived" : "paused"}
+                              {isArchived ? t("status.archived", "archiviata") : t("status.paused", "in pausa")}
                             </div>
                           )}
                         </div>
@@ -550,7 +552,7 @@ export function Routines() {
                               className="shrink-0 h-3 w-3 rounded-sm"
                               style={{ backgroundColor: projectById.get(routine.projectId)?.color ?? "#6366f1" }}
                             />
-                            <span className="truncate">{projectById.get(routine.projectId)?.name ?? "Unknown"}</span>
+                            <span className="truncate">{projectById.get(routine.projectId)?.name ?? "—"}</span>
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
@@ -603,7 +605,7 @@ export function Routines() {
                             />
                           </button>
                           <span className="text-xs text-muted-foreground">
-                            {isArchived ? "Archived" : enabled ? "On" : "Off"}
+                            {isArchived ? t("status.archived", "Archiviata") : enabled ? "On" : "Off"}
                           </span>
                         </div>
                       </td>
@@ -616,13 +618,13 @@ export function Routines() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => navigate(`/routines/${routine.id}`)}>
-                              Edit
+                              {t("common.edit", "Modifica")}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               disabled={runningRoutineId === routine.id || isArchived}
                               onClick={() => runRoutine.mutate(routine.id)}
                             >
-                              {runningRoutineId === routine.id ? "Running..." : "Run now"}
+                              {runningRoutineId === routine.id ? t("routine.running", "In esecuzione...") : t("routine.runNow", "Esegui ora")}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -634,7 +636,7 @@ export function Routines() {
                               }
                               disabled={isStatusPending || isArchived}
                             >
-                              {enabled ? "Pause" : "Enable"}
+                              {enabled ? t("common.pause", "Pausa") : t("common.enable", "Attiva")}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
@@ -645,7 +647,7 @@ export function Routines() {
                               }
                               disabled={isStatusPending}
                             >
-                              {routine.status === "archived" ? "Restore" : "Archive"}
+                              {routine.status === "archived" ? t("common.restore", "Ripristina") : t("common.archive", "Archivia")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

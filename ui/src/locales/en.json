@@ -277,6 +277,7 @@
   },
   "cost": {
     "title": "Costs",
+    "subtitle": "Inference spend, platform fees, credits, and live quota windows.",
     "selectCompany": "Select a company to view costs",
     "budget": "Budget",
     "setBudget": "Set budget",

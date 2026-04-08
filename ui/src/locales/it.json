@@ -278,6 +278,7 @@
   },
   "cost": {
     "title": "Costi",
+    "subtitle": "Spesa per inferenza, costi piattaforma, crediti e finestre di quota.",
     "selectCompany": "Seleziona un'azienda per vedere i costi",
     "budget": "Budget",
     "setBudget": "Imposta budget",
