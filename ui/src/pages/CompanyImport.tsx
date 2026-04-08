@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CompanyPortabilityCollisionStrategy,
@@ -644,6 +645,7 @@ async function readLocalPackageZip(file: File): Promise<{
 // ── Main page ─────────────────────────────────────────────────────────
 
 export function CompanyImport() {
+  const { t } = useTranslation();
   const {
     selectedCompanyId,
     selectedCompany,
@@ -1085,7 +1087,7 @@ export function CompanyImport() {
   const selectedAction = selectedFile ? (actionMap.get(selectedFile) ?? null) : null;
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Download} message="Select a company to import into." />;
+    return <EmptyState icon={Download} message={t("company.selectCompanyImport", "Seleziona un'azienda in cui importare.")} />;
   }
 
   return (

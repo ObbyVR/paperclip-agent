@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type SVGProps } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -795,6 +796,7 @@ function SkillPane({
 }
 
 export function CompanySkills() {
+  const { t } = useTranslation();
   const { "*": routePath } = useParams<{ "*": string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -1050,7 +1052,7 @@ export function CompanySkills() {
   });
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Boxes} message="Select a company to manage skills." />;
+    return <EmptyState icon={Boxes} message={t("skill.selectCompany", "Seleziona un'azienda per gestire le competenze.")} />;
   }
 
   function handleAddSkillSource() {

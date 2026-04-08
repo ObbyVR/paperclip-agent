@@ -75,6 +75,7 @@ function CollapsibleProjectSection({
   onHide: (key: string) => void;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2 group">
@@ -93,7 +94,7 @@ function CollapsibleProjectSection({
             {name}
           </h3>
           <span className="text-[10px] text-muted-foreground/60 shrink-0">
-            {issueCount} task
+            {issueCount} {t("common.task", "task")}
           </span>
           {activeRunCount > 0 && (
             <span className="flex items-center gap-1 text-[10px] text-cyan-400 shrink-0">
@@ -312,12 +313,12 @@ export function Dashboard() {
                 className="bg-transparent text-xs font-medium text-foreground border-none outline-none cursor-pointer appearance-none pr-4"
                 style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0 center" }}
               >
-                <option value="">Tutti i progetti</option>
+                <option value="">{t("dashboard.allProjects", "Tutti i progetti")}</option>
                 {projectsList.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
                 {unassignedCount > 0 && (
-                  <option value="__none__">Senza progetto ({unassignedCount})</option>
+                  <option value="__none__">{t("dashboard.noProject", "Senza progetto")} ({unassignedCount})</option>
                 )}
               </select>
             </div>
@@ -325,29 +326,29 @@ export function Dashboard() {
           {data.budgets.activeIncidents > 0 && (
             <Link to="/costs" className="flex items-center gap-1 font-medium text-red-400 hover:text-red-300">
               <PauseCircle className="h-3 w-3" />
-              {data.budgets.activeIncidents} incidenti
+              {data.budgets.activeIncidents} {t("dashboard.incidents", "incidenti")}
             </Link>
           )}
           <Link to="/agents" className="flex items-center gap-1 hover:text-foreground">
             <Bot className="h-3 w-3" />
             <span className="font-semibold text-foreground">{data.agents.active + data.agents.running + data.agents.paused + data.agents.error}</span>
-            agenti
-            {data.agents.running > 0 && <span className="text-emerald-400 text-[10px]">({data.agents.running} attivi)</span>}
+            {t("dashboard.agents", "agenti")}
+            {data.agents.running > 0 && <span className="text-emerald-400 text-[10px]">({data.agents.running} {t("dashboard.active", "attivi")})</span>}
           </Link>
           <Link to="/issues" className="flex items-center gap-1 hover:text-foreground">
             <CircleDot className="h-3 w-3" />
             <span className="font-semibold text-foreground">{data.tasks.inProgress}</span>
-            in corso
+            {t("dashboard.inProgress", "in corso")}
           </Link>
           <Link to="/costs" className="flex items-center gap-1 hover:text-foreground">
             <DollarSign className="h-3 w-3" />
             <span className="font-semibold text-foreground">{formatCents(data.costs.monthSpendCents)}</span>
-            mese
+            {t("dashboard.month", "mese")}
           </Link>
           <Link to="/approvals" className="flex items-center gap-1 hover:text-foreground">
             <ShieldCheck className="h-3 w-3" />
             <span className="font-semibold text-foreground">{data.pendingApprovals + data.budgets.pendingApprovals + (issues?.filter((i) => i.status === "in_review").length ?? 0)}</span>
-            approvazioni
+            {t("dashboard.approvals", "approvazioni")}
           </Link>
         </div>
       )}
@@ -512,7 +513,7 @@ export function Dashboard() {
           <div className="rounded-lg border border-border/50 bg-card/30 p-3 space-y-2">
             <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
               <EyeOff className="h-3 w-3" />
-              Elementi nascosti dalla dashboard
+              {t("dashboard.hiddenElements", "Elementi nascosti dalla dashboard")}
               <span className="text-muted-foreground/60 font-normal normal-case">
                 ({prefs.hiddenProjects.size + prefs.hiddenWorkflows.size})
               </span>
@@ -524,7 +525,7 @@ export function Dashboard() {
                 }}
                 className="ml-auto text-[10px] font-medium text-cyan-400 hover:text-cyan-300 normal-case"
               >
-                Mostra tutto
+                {t("dashboard.showAll", "Mostra tutto")}
               </button>
             </div>
             {hiddenProjectNames.length > 0 && (
@@ -582,7 +583,7 @@ export function Dashboard() {
                   className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
                 >
                   <Square className="h-2.5 w-2.5" />
-                  Stop
+                  {t("common.stop", "Ferma")}
                 </button>
               </div>
             ))}
@@ -607,7 +608,7 @@ export function Dashboard() {
         return (
           <div>
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Issue recenti
+              {t("dashboard.recentIssues", "Attivita' recenti")}
             </h3>
             {recentIssues.length > 0 ? (
               <div className="border border-border divide-y divide-border overflow-hidden rounded-lg">

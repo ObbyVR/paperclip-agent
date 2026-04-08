@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { issuesApi } from "../api/issues";
 import { useCompany } from "../context/CompanyContext";
@@ -13,6 +14,7 @@ import { formatDate } from "../lib/utils";
 import { ListTodo } from "lucide-react";
 
 export function MyIssues() {
+  const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
 
@@ -27,7 +29,7 @@ export function MyIssues() {
   });
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={ListTodo} message="Select a company to view your issues." />;
+    return <EmptyState icon={ListTodo} message={t("issue.selectCompany")} />;
   }
 
   if (isLoading) {

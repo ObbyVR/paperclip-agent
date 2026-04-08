@@ -956,7 +956,7 @@ export function Inbox() {
                 onClick={() => { setGroupByProject((p) => !p); setGroupByAgent(false); }}
               >
                 <Folder className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{groupByProject ? "Raggruppati" : "Per progetto"}</span>
+                <span className="hidden sm:inline">{groupByProject ? t("inbox.grouped") : t("inbox.groupByProject", "Per progetto")}</span>
               </Button>
             </>
           )}
@@ -1087,7 +1087,7 @@ export function Inbox() {
           <Separator />
           <div>
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Alerts
+              {t("inbox.alerts", "Avvisi")}
             </h3>
             <div className="divide-y divide-border rounded-xl border border-border">
               {showAggregateAgentError && (
@@ -1099,7 +1099,9 @@ export function Inbox() {
                     <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
                     <span className="text-sm">
                       <span className="font-medium">{dashboard!.agents.error}</span>{" "}
-                      {dashboard!.agents.error === 1 ? "agent has" : "agents have"} errors
+                      {dashboard!.agents.error === 1
+                        ? t("inbox.agentHasErrors", "agente con errori")
+                        : t("inbox.agentsHaveErrors", "agenti con errori")}
                     </span>
                   </Link>
                   <button
@@ -1120,9 +1122,9 @@ export function Inbox() {
                   >
                     <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-400" />
                     <span className="text-sm">
-                      Budget at{" "}
+                      {t("inbox.budgetAt", "Budget al")}{" "}
                       <span className="font-medium">{dashboard!.costs.monthUtilizationPercent}%</span>{" "}
-                      utilization this month
+                      {t("inbox.utilizationThisMonth", "di utilizzo questo mese")}
                     </span>
                   </Link>
                   <button

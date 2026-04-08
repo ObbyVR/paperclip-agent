@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
   Agent,
@@ -578,6 +579,7 @@ function expandAncestors(filePath: string): string[] {
 }
 
 export function CompanyExport() {
+  const { t } = useTranslation();
   const { selectedCompanyId, selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { pushToast } = useToast();
@@ -911,7 +913,7 @@ export function CompanyExport() {
   }
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Package} message="Select a company to export." />;
+    return <EmptyState icon={Package} message={t("company.selectCompanyExport", "Seleziona un'azienda da esportare.")} />;
   }
 
   if (exportPreviewMutation.isPending && !exportData) {
