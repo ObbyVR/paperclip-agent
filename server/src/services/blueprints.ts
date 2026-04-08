@@ -295,23 +295,59 @@ export function blueprintService(db: Db) {
     let newTotalCost: number;
 
     try {
-      const execResult = await executeStep(
-        currentStep,
-        { ...(runDetail.params ?? {}), ...collectPreviousOutputs(runDetail.stepResults) },
-        { companyId: runDetail.companyId, runId },
-      );
+      const stepParams = {
+        ...(runDetail.params ?? {}),
+        ...collectPreviousOutputs(runDetail.stepResults),
+      };
+      const variantCount = currentStep.variants ?? 1;
+
+      let execOutput: unknown;
+      let execCostCents: number;
+      let execDurationMs: number;
+
+      if (variantCount > 1) {
+        // Run N variants in parallel; collect all that succeed
+        const settled = await Promise.allSettled(
+          Array.from({ length: variantCount }, (_, i) =>
+            executeStep(currentStep, { ...stepParams, variantIndex: i }, { companyId: runDetail.companyId, runId }),
+          ),
+        );
+
+        const succeeded = settled.filter(
+          (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof executeStep>>> =>
+            r.status === "fulfilled",
+        );
+
+        if (succeeded.length === 0) {
+          const first = settled[0];
+          throw new Error(first.status === "rejected" ? String(first.reason) : "All variants failed");
+        }
+
+        execOutput = succeeded.map((r) => r.value.output);
+        execCostCents = succeeded.reduce((sum, r) => sum + r.value.costCents, 0);
+        execDurationMs = Math.max(...succeeded.map((r) => r.value.durationMs));
+      } else {
+        const execResult = await executeStep(
+          currentStep,
+          stepParams,
+          { companyId: runDetail.companyId, runId },
+        );
+        execOutput = execResult.output;
+        execCostCents = execResult.costCents;
+        execDurationMs = execResult.durationMs;
+      }
 
       completedResults = {
         ...runningResults,
         [currentStep.id]: {
           status: "completed",
-          output: execResult.output,
-          costCents: execResult.costCents,
-          durationMs: execResult.durationMs,
-          iterations: 1,
+          output: execOutput,
+          costCents: execCostCents,
+          durationMs: execDurationMs,
+          iterations: variantCount,
         },
       };
-      newTotalCost = (runDetail.totalCostCents ?? 0) + execResult.costCents;
+      newTotalCost = (runDetail.totalCostCents ?? 0) + execCostCents;
     } catch (err) {
       const failedResults: Record<string, BlueprintStepResult> = {
         ...runningResults,

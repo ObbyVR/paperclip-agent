@@ -21,6 +21,7 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
+  blueprintService,
   executionWorkspaceService,
   goalService,
   heartbeatService,
@@ -54,6 +55,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
   const workProductsSvc = workProductService(db);
   const documentsSvc = documentService(db);
   const routinesSvc = routineService(db);
+  const blueprintSvc = blueprintService(db);
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1 },
@@ -994,6 +996,49 @@ export function issueRoutes(db: Db, storage: StorageService) {
       requestedByActorType: actor.actorType,
       requestedByActorId: actor.actorId,
     });
+
+    // Blueprint trigger matching: if issue title matches a Blueprint trigger, start a run
+    void (async () => {
+      try {
+        const titleLower = (issue.title ?? "").toLowerCase();
+        const bps = await blueprintSvc.list(companyId);
+        const matched = bps.find((bp) =>
+          (bp.triggers ?? []).some((t) => titleLower.includes(t.toLowerCase())),
+        );
+        if (matched) {
+          const run = await blueprintSvc.startRun(
+            matched.id,
+            companyId,
+            { params: { issueId: issue.id, issueTitle: issue.title } },
+            { agentId: actor.agentId ?? null, userId: actor.actorType === "user" ? actor.actorId : null },
+          );
+          await logActivity(db, {
+            companyId,
+            actorType: actor.actorType,
+            actorId: actor.actorId,
+            agentId: actor.agentId,
+            runId: actor.runId,
+            action: "blueprint_run.triggered",
+            entityType: "blueprint_run",
+            entityId: run.id,
+            details: {
+              blueprintId: matched.id,
+              blueprintTitle: matched.title,
+              triggeredByIssueId: issue.id,
+              triggerMatched: (matched.triggers ?? []).find((t) =>
+                titleLower.includes(t.toLowerCase()),
+              ),
+            },
+          });
+          logger.info(
+            { blueprintId: matched.id, issueId: issue.id, runId: run.id },
+            "blueprint run triggered by issue title",
+          );
+        }
+      } catch (err) {
+        logger.error({ err, issueId: issue.id }, "blueprint trigger matching failed");
+      }
+    })();
 
     // Auto-block parent when child is created for a different agent
     if (issue.parentId && issue.assigneeAgentId) {

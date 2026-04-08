@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@/lib/router";
@@ -17,8 +17,41 @@ import { queryKeys } from "../lib/queryKeys";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { BlueprintStepDef, BlueprintStepResult } from "@paperclipai/shared";
 
+// ---------------------------------------------------------------------------
+// Local JSON-Schema helpers (subset we actually use)
+// ---------------------------------------------------------------------------
+interface JsonSchemaProp {
+  type?: string;
+  title?: string;
+  enum?: string[];
+  default?: string;
+}
+
+interface JsonSchema {
+  type?: string;
+  properties?: Record<string, JsonSchemaProp>;
+  required?: string[];
+}
+
+function isJsonSchema(v: unknown): v is JsonSchema {
+  return typeof v === "object" && v !== null;
+}
+
+// ---------------------------------------------------------------------------
+// Formatters
+// ---------------------------------------------------------------------------
 function formatCost(cents: number | null | undefined): string {
   if (cents == null) return "---";
   return `$${(cents / 100).toFixed(2)}`;
@@ -32,6 +65,9 @@ function formatDuration(ms: number | null | undefined): string {
   return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
+// ---------------------------------------------------------------------------
+// Status icons
+// ---------------------------------------------------------------------------
 const STATUS_ICON: Record<string, React.ReactNode> = {
   pending: <Circle className="h-4 w-4 text-muted-foreground" />,
   running: <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />,
@@ -42,11 +78,142 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
   cancelled: <XCircle className="h-4 w-4 text-muted-foreground" />,
 };
 
+// ---------------------------------------------------------------------------
+// InputStepForm — renders a dynamic form from paramsSchema
+// ---------------------------------------------------------------------------
+function InputStepForm({
+  schema,
+  defaultValues,
+  isPending,
+  onSubmit,
+  onReject,
+}: {
+  schema: JsonSchema;
+  defaultValues: Record<string, unknown>;
+  isPending: boolean;
+  onSubmit: (values: Record<string, string>) => void;
+  onReject: () => void;
+}) {
+  const properties = schema.properties ?? {};
+  const required = schema.required ?? [];
+
+  const initialValues: Record<string, string> = {};
+  for (const [key, prop] of Object.entries(properties)) {
+    const defVal = defaultValues[key];
+    initialValues[key] =
+      typeof defVal === "string" ? defVal : (prop.default ?? "");
+  }
+
+  const [values, setValues] = useState<Record<string, string>>(initialValues);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    onSubmit(values);
+  }
+
+  const isMultiline = (key: string) =>
+    key.toLowerCase().includes("desc") || key.toLowerCase().includes("note");
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-3 space-y-3">
+      {Object.entries(properties).map(([key, prop]) => {
+        const isRequired = required.includes(key);
+        const label = prop.title ?? key;
+
+        if (prop.enum && prop.enum.length > 0) {
+          return (
+            <div key={key} className="space-y-1">
+              <Label htmlFor={key} className="text-xs font-medium">
+                {label}
+                {isRequired && <span className="text-destructive ml-1">*</span>}
+              </Label>
+              <Select
+                value={values[key]}
+                onValueChange={(v) => setValues((prev) => ({ ...prev, [key]: v }))}
+              >
+                <SelectTrigger id={key} size="sm" className="w-full">
+                  <SelectValue placeholder={`Seleziona ${label.toLowerCase()}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {prop.enum.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          );
+        }
+
+        if (isMultiline(key)) {
+          return (
+            <div key={key} className="space-y-1">
+              <Label htmlFor={key} className="text-xs font-medium">
+                {label}
+                {isRequired && <span className="text-destructive ml-1">*</span>}
+              </Label>
+              <Textarea
+                id={key}
+                required={isRequired}
+                rows={3}
+                className="text-sm resize-none"
+                value={values[key]}
+                onChange={(e) =>
+                  setValues((prev) => ({ ...prev, [key]: e.target.value }))
+                }
+              />
+            </div>
+          );
+        }
+
+        return (
+          <div key={key} className="space-y-1">
+            <Label htmlFor={key} className="text-xs font-medium">
+              {label}
+              {isRequired && <span className="text-destructive ml-1">*</span>}
+            </Label>
+            <Input
+              id={key}
+              required={isRequired}
+              className="h-8 text-sm"
+              value={values[key]}
+              onChange={(e) =>
+                setValues((prev) => ({ ...prev, [key]: e.target.value }))
+              }
+            />
+          </div>
+        );
+      })}
+
+      <div className="flex items-center gap-2 pt-1">
+        <Button type="submit" size="sm" disabled={isPending}>
+          {isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+          Conferma
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          onClick={onReject}
+        >
+          Annulla
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StepRow
+// ---------------------------------------------------------------------------
 function StepRow({
   step,
   result,
   isCurrent,
   runPaused,
+  defaultParams,
   onApprove,
   onReject,
   isPending,
@@ -55,17 +222,22 @@ function StepRow({
   result?: BlueprintStepResult;
   isCurrent: boolean;
   runPaused: boolean;
-  onApprove: () => void;
+  defaultParams: Record<string, unknown>;
+  onApprove: (output?: Record<string, string>) => void;
   onReject: () => void;
   isPending: boolean;
 }) {
   const status = result?.status ?? "pending";
   const showActions = isCurrent && runPaused && !step.auto;
+  const isInputStep = step.type === "input";
+  const schema = isJsonSchema(step.paramsSchema) ? (step.paramsSchema as JsonSchema) : null;
 
   return (
     <div
       className={`flex items-start gap-3 px-4 py-3 rounded-md transition-colors ${
-        isCurrent ? "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" : "bg-muted/30"
+        isCurrent
+          ? "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800"
+          : "bg-muted/30"
       }`}
     >
       <div className="flex-shrink-0 pt-0.5">{STATUS_ICON[status] ?? STATUS_ICON.pending}</div>
@@ -80,17 +252,35 @@ function StepRow({
               review
             </span>
           )}
+          {step.variants != null && step.variants > 1 && (
+            <span className="text-[10px] text-violet-600 bg-violet-50 dark:bg-violet-950/30 px-1.5 py-0.5 rounded">
+              {step.variants}×
+            </span>
+          )}
         </div>
         {step.description && (
           <p className="text-xs text-muted-foreground mt-0.5 truncate">{step.description}</p>
         )}
-        {showActions && (
+
+        {/* Input step: render dynamic form */}
+        {showActions && isInputStep && schema && Object.keys(schema.properties ?? {}).length > 0 && (
+          <InputStepForm
+            schema={schema}
+            defaultValues={defaultParams}
+            isPending={isPending}
+            onSubmit={onApprove}
+            onReject={onReject}
+          />
+        )}
+
+        {/* Non-input review step: simple approve/reject buttons */}
+        {showActions && !isInputStep && (
           <div className="flex items-center gap-2 mt-2">
             <Button
               size="sm"
               variant="default"
               disabled={isPending}
-              onClick={onApprove}
+              onClick={() => onApprove()}
             >
               {isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
               Approva
@@ -120,6 +310,9 @@ function StepRow({
   );
 }
 
+// ---------------------------------------------------------------------------
+// BlueprintRunDetail page
+// ---------------------------------------------------------------------------
 export function BlueprintRunDetail() {
   const { t } = useTranslation();
   const { runId } = useParams<{ runId: string }>();
@@ -137,8 +330,19 @@ export function BlueprintRunDetail() {
   });
 
   const completeStepMutation = useMutation({
-    mutationFn: ({ stepId, status }: { stepId: string; status: "completed" | "failed" }) =>
-      blueprintsApi.completeStep(runId!, stepId, { status }),
+    mutationFn: ({
+      stepId,
+      status,
+      output,
+    }: {
+      stepId: string;
+      status: "completed" | "failed";
+      output?: Record<string, string>;
+    }) =>
+      blueprintsApi.completeStep(runId!, stepId, {
+        status,
+        ...(output != null ? { output } : {}),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.blueprints.runDetail(runId!) });
     },
@@ -155,6 +359,7 @@ export function BlueprintRunDetail() {
 
   const steps = [...(run.blueprint?.steps ?? [])].sort((a, b) => a.order - b.order);
   const runStatus = run.status;
+  const defaultParams = (run.blueprint as unknown as { defaultParams?: Record<string, unknown> })?.defaultParams ?? {};
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -186,8 +391,13 @@ export function BlueprintRunDetail() {
               result={run.stepResults[step.id]}
               isCurrent={run.currentStepId === step.id}
               runPaused={runStatus === "paused"}
-              onApprove={() => completeStepMutation.mutate({ stepId: step.id, status: "completed" })}
-              onReject={() => completeStepMutation.mutate({ stepId: step.id, status: "failed" })}
+              defaultParams={defaultParams}
+              onApprove={(output) =>
+                completeStepMutation.mutate({ stepId: step.id, status: "completed", output })
+              }
+              onReject={() =>
+                completeStepMutation.mutate({ stepId: step.id, status: "failed" })
+              }
               isPending={completeStepMutation.isPending}
             />
           ))}

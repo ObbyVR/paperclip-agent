@@ -26,7 +26,7 @@ import { buildFileServeUrl, isPreviewableInBrowser } from "../lib/file-paths";
 import type { Agent, Issue, IssueComment } from "@paperclipai/shared";
 import type { InboxWorkItem, InboxItemContext } from "../lib/inbox";
 import { ACTIONABLE_APPROVAL_STATUSES } from "../lib/inbox";
-import { approvalLabel, defaultTypeIcon, typeIcon } from "./ApprovalPayload";
+import { approvalLabel, ApprovalPayloadRenderer, defaultTypeIcon, typeIcon } from "./ApprovalPayload";
 import { MarkdownBody } from "./MarkdownBody";
 import { IssueResultsInline } from "./IssueResultsInline";
 import { issuesApi } from "../api/issues";
@@ -743,13 +743,15 @@ function DrawerBody({
       <div className="space-y-3 text-sm">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Icon className="h-4 w-4" />
-          <span className="text-xs uppercase tracking-wide">{item.approval.type}</span>
+          <span className="text-xs font-medium text-foreground/80">
+            {approvalLabel(item.approval.type, payload)}
+          </span>
         </div>
-        <div className="rounded-md border border-border bg-muted/30 p-3">
-          <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-foreground/80">
-            {payload ? JSON.stringify(payload, null, 2) : "(nessun payload)"}
-          </pre>
-        </div>
+        {payload ? (
+          <ApprovalPayloadRenderer type={item.approval.type} payload={payload} />
+        ) : (
+          <p className="text-xs text-muted-foreground">(nessun payload)</p>
+        )}
         <div className="text-xs text-muted-foreground">
           Stato:{" "}
           <span className="font-medium text-foreground/80">{item.approval.status}</span>

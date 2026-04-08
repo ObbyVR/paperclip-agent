@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck } from "lucide-react";
+import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck, Clapperboard } from "lucide-react";
+import { Link } from "@/lib/router";
 import { formatCents } from "../lib/utils";
 
 export function useTypeLabel(): Record<string, string> {
@@ -8,6 +9,8 @@ export function useTypeLabel(): Record<string, string> {
     hire_agent: t("approval.typeHireAgent"),
     approve_ceo_strategy: t("approval.typeCeoStrategy"),
     budget_override_required: t("approval.typeBudgetOverride"),
+    blueprint_step_input: "Blueprint — Compila brief",
+    blueprint_step_review: "Blueprint — Review step",
   };
 }
 
@@ -16,6 +19,8 @@ export const typeLabel: Record<string, string> = {
   hire_agent: "Assunzione Agente",
   approve_ceo_strategy: "Strategia CEO",
   budget_override_required: "Sovrascrittura Budget",
+  blueprint_step_input: "Blueprint — Compila brief",
+  blueprint_step_review: "Blueprint — Review step",
 };
 
 /** Build a contextual label for an approval, e.g. "Hire Agent: Designer" */
@@ -27,6 +32,9 @@ export function approvalLabel(type: string, payload?: Record<string, unknown> | 
   if (type === "approve_ceo_strategy" && payload?.title) {
     return String(payload.title);
   }
+  if ((type === "blueprint_step_input" || type === "blueprint_step_review") && payload?.stepTitle) {
+    return `Blueprint: ${String(payload.stepTitle)}`;
+  }
   return base;
 }
 
@@ -34,6 +42,8 @@ export const typeIcon: Record<string, typeof UserPlus> = {
   hire_agent: UserPlus,
   approve_ceo_strategy: Lightbulb,
   budget_override_required: ShieldAlert,
+  blueprint_step_input: Clapperboard,
+  blueprint_step_review: Clapperboard,
 };
 
 export const defaultTypeIcon = ShieldCheck;
@@ -159,8 +169,77 @@ export function BudgetOverridePayload({ payload }: { payload: Record<string, unk
   );
 }
 
+export function BlueprintStepInputPayload({ payload }: { payload: Record<string, unknown> }) {
+  const runId = typeof payload.blueprintRunId === "string" ? payload.blueprintRunId : null;
+  const stepTitle = typeof payload.stepTitle === "string" ? payload.stepTitle : null;
+  return (
+    <div className="mt-3 space-y-2 text-sm">
+      <p className="text-xs text-muted-foreground">
+        Questo step richiede che tu compili un brief prima che il Blueprint possa continuare.
+      </p>
+      {stepTitle && (
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground text-xs w-20 shrink-0">Step</span>
+          <span className="font-medium">{stepTitle}</span>
+        </div>
+      )}
+      {runId && (
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground text-xs w-20 shrink-0">Run</span>
+          <Link
+            to={`/blueprint-runs/${runId}`}
+            className="text-xs text-blue-500 hover:underline font-mono"
+          >
+            #{runId.slice(0, 8)} →
+          </Link>
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground mt-1">
+        Apri il run per compilare il form e continuare il workflow.
+      </p>
+    </div>
+  );
+}
+
+export function BlueprintStepReviewPayload({ payload }: { payload: Record<string, unknown> }) {
+  const runId = typeof payload.blueprintRunId === "string" ? payload.blueprintRunId : null;
+  const stepTitle = typeof payload.stepTitle === "string" ? payload.stepTitle : null;
+  const stepOutput = payload.stepOutput;
+  return (
+    <div className="mt-3 space-y-2 text-sm">
+      <p className="text-xs text-muted-foreground">
+        Uno step automatico ha prodotto un risultato — verifica e approva per continuare.
+      </p>
+      {stepTitle && (
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground text-xs w-20 shrink-0">Step</span>
+          <span className="font-medium">{stepTitle}</span>
+        </div>
+      )}
+      {runId && (
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground text-xs w-20 shrink-0">Run</span>
+          <Link
+            to={`/blueprint-runs/${runId}`}
+            className="text-xs text-blue-500 hover:underline font-mono"
+          >
+            #{runId.slice(0, 8)} →
+          </Link>
+        </div>
+      )}
+      {stepOutput != null && (
+        <pre className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground overflow-x-auto max-h-40">
+          {JSON.stringify(stepOutput, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 export function ApprovalPayloadRenderer({ type, payload }: { type: string; payload: Record<string, unknown> }) {
   if (type === "hire_agent") return <HireAgentPayload payload={payload} />;
   if (type === "budget_override_required") return <BudgetOverridePayload payload={payload} />;
+  if (type === "blueprint_step_input") return <BlueprintStepInputPayload payload={payload} />;
+  if (type === "blueprint_step_review") return <BlueprintStepReviewPayload payload={payload} />;
   return <CeoStrategyPayload payload={payload} />;
 }
