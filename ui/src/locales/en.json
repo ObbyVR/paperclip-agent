@@ -10,6 +10,7 @@
     "projects": "Projects",
     "company": "Company",
     "org": "Org",
+    "roundTable": "Round Table",
     "skills": "Skills",
     "costs": "Costs",
     "activity": "Activity",
@@ -124,6 +125,7 @@
   },
   "agent": {
     "title": "Agents",
+    "selectCompany": "Select a company to view agents",
     "newAgent": "New Agent",
     "createAgent": "Create agent",
     "createNewAgent": "Create new agent",

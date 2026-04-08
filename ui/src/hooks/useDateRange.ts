@@ -2,7 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 export type DatePreset = "mtd" | "7d" | "30d" | "ytd" | "all" | "custom";
 
-export const PRESET_LABELS: Record<DatePreset, string> = {
+// Labels keyed by locale — the active locale is resolved at render time via i18n,
+// but these are consumed outside React (static record), so we keep both maps here.
+export const PRESET_LABELS_IT: Record<DatePreset, string> = {
+  mtd: "Mese corrente",
+  "7d": "Ultimi 7 giorni",
+  "30d": "Ultimi 30 giorni",
+  ytd: "Anno corrente",
+  all: "Tutto",
+  custom: "Personalizzato",
+};
+
+export const PRESET_LABELS_EN: Record<DatePreset, string> = {
   mtd: "Month to Date",
   "7d": "Last 7 Days",
   "30d": "Last 30 Days",
@@ -10,6 +21,9 @@ export const PRESET_LABELS: Record<DatePreset, string> = {
   all: "All Time",
   custom: "Custom",
 };
+
+/** @deprecated — use locale-specific maps or resolve via i18n at call site */
+export const PRESET_LABELS = PRESET_LABELS_EN;
 
 export const PRESET_KEYS: DatePreset[] = ["mtd", "7d", "30d", "ytd", "all", "custom"];
 

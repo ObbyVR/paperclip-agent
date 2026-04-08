@@ -27,7 +27,7 @@ import { ProviderQuotaCard } from "../components/ProviderQuotaCard";
 import { StatusBadge } from "../components/StatusBadge";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
-import { useDateRange, PRESET_KEYS, PRESET_LABELS } from "../hooks/useDateRange";
+import { useDateRange, PRESET_KEYS, PRESET_LABELS_IT, PRESET_LABELS_EN } from "../hooks/useDateRange";
 import { queryKeys } from "../lib/queryKeys";
 import { billingTypeDisplayName, cn, formatCents, formatTokens, providerDisplayName } from "../lib/utils";
 import { estimateRunCostEur, formatEur } from "../lib/modelPricing";
@@ -150,7 +150,8 @@ function FinanceSummaryCard({
 }
 
 export function Costs() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const presetLabels = i18n.language === "it" ? PRESET_LABELS_IT : PRESET_LABELS_EN;
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
@@ -573,7 +574,7 @@ export function Costs() {
                   size="sm"
                   onClick={() => setPreset(key)}
                 >
-                  {PRESET_LABELS[key]}
+                  {presetLabels[key]}
                 </Button>
               ))}
             </div>

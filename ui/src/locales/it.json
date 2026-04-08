@@ -10,6 +10,7 @@
     "projects": "Progetti",
     "company": "Azienda",
     "org": "Organigramma",
+    "roundTable": "Tavola Rotonda",
     "skills": "Competenze",
     "costs": "Costi",
     "activity": "Attivita' Recenti",
@@ -125,6 +126,7 @@
   },
   "agent": {
     "title": "Agenti",
+    "selectCompany": "Seleziona un'azienda per visualizzare gli agenti",
     "newAgent": "Nuovo Agente",
     "createAgent": "Crea agente",
     "createNewAgent": "Crea nuovo agente",

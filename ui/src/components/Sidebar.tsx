@@ -117,7 +117,7 @@ export function Sidebar() {
 
         <SidebarSection label={t("nav.company")}>
           <SidebarNavItem to="/org" label={t("nav.org")} icon={Network} />
-          <SidebarNavItem to="/round-table" label="Round Table" icon={Users} />
+          <SidebarNavItem to="/round-table" label={t("nav.roundTable", "Tavola Rotonda")} icon={Users} />
           <SidebarNavItem to="/skills" label={t("nav.skills")} icon={Boxes} />
           <SidebarNavItem to="/costs" label={t("nav.costs")} icon={DollarSign} />
           <SidebarNavItem to="/activity" label={t("nav.activity")} icon={History} />

@@ -124,7 +124,7 @@ export function Agents() {
   }, [setBreadcrumbs]);
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Bot} message="Select a company to view agents." />;
+    return <EmptyState icon={Bot} message={t("agent.selectCompany")} />;
   }
 
   if (isLoading) {

@@ -220,7 +220,7 @@ export function Routines() {
   const currentProject = draft.projectId ? projectById.get(draft.projectId) ?? null : null;
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Repeat} message="Select a company to view routines." />;
+    return <EmptyState icon={Repeat} message={t("routine.selectCompany", "Seleziona un'azienda per visualizzare le routine.")} />;
   }
 
   if (isLoading) {
