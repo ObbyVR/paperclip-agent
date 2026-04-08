@@ -1034,14 +1034,14 @@ export function NewIssueDialog() {
         <div className="px-4 pb-2 shrink-0">
           <div className="overflow-x-auto overscroll-x-contain">
             <div className="inline-flex items-center gap-2 text-sm text-muted-foreground flex-wrap sm:flex-nowrap sm:min-w-max">
-              <span>For</span>
+              <span>{t("common.for", "Per")}</span>
               <InlineEntitySelector
                 ref={assigneeSelectorRef}
                 value={assigneeValue}
                 options={assigneeOptions}
-                placeholder="Assignee"
+                placeholder={t("common.assignee", "Assegnatario")}
                 disablePortal
-                noneLabel="No assignee"
+                noneLabel={t("common.noAssignee", "Nessun assegnatario")}
                 searchPlaceholder="Search assignees..."
                 emptyMessage="No assignees found."
                 onChange={(value) => {
@@ -1069,7 +1069,7 @@ export function NewIssueDialog() {
                       <span className="truncate">{option.label}</span>
                     )
                   ) : (
-                    <span className="text-muted-foreground">Assignee</span>
+                    <span className="text-muted-foreground">{t("common.assignee", "Assegnatario")}</span>
                   )
                 }
                 renderOption={(option) => {
@@ -1090,11 +1090,11 @@ export function NewIssueDialog() {
                 ref={projectSelectorRef}
                 value={projectId}
                 options={projectOptions}
-                placeholder="Project"
+                placeholder={t("common.project", "Progetto")}
                 disablePortal
-                noneLabel="No project"
-                searchPlaceholder="Search projects..."
-                emptyMessage="No projects found."
+                noneLabel={t("common.noProject", "Nessun progetto")}
+                searchPlaceholder={t("common.searchProjects", "Cerca progetti...")}
+                emptyMessage={t("common.noProjectsFound", "Nessun progetto trovato.")}
                 onChange={handleProjectChange}
                 onConfirm={() => {
                   descriptionEditorRef.current?.focus();
@@ -1109,7 +1109,7 @@ export function NewIssueDialog() {
                       <span className="truncate">{option.label}</span>
                     </>
                   ) : (
-                    <span className="text-muted-foreground">Project</span>
+                    <span className="text-muted-foreground">{t("common.project", "Progetto")}</span>
                   )
                 }
                 renderOption={(option) => {
@@ -1464,7 +1464,7 @@ export function NewIssueDialog() {
             onClick={discardDraft}
             disabled={createIssue.isPending || !canDiscardDraft}
           >
-            Discard Draft
+            {t("issue.discardDraft", "Scarta bozza")}
           </Button>
           <div className="flex items-center gap-3">
             <div className="min-h-5 text-right">

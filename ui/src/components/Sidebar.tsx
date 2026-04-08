@@ -113,16 +113,16 @@ export function Sidebar() {
 
         <SidebarProjects />
 
-        <SidebarAgents />
-
         <SidebarSection label={t("nav.company")}>
           <SidebarNavItem to="/org" label={t("nav.org")} icon={Network} />
           <SidebarNavItem to="/round-table" label={t("nav.roundTable", "Tavola Rotonda")} icon={Users} />
-          <SidebarNavItem to="/skills" label={t("nav.skills")} icon={Boxes} />
           <SidebarNavItem to="/costs" label={t("nav.costs")} icon={DollarSign} />
+          <SidebarNavItem to="/skills" label={t("nav.skills")} icon={Boxes} />
           <SidebarNavItem to="/activity" label={t("nav.activity")} icon={History} />
           <SidebarNavItem to="/company/settings" label={t("nav.settings")} icon={Settings} />
         </SidebarSection>
+
+        <SidebarAgents />
 
         <PluginSlotOutlet
           slotTypes={["sidebarPanel"]}
