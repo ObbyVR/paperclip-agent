@@ -367,7 +367,7 @@ export function Inbox() {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
     },
     onError: (err) => {
-      setActionError(err instanceof Error ? err.message : "Failed to approve join request");
+      setActionError(err instanceof Error ? err.message : t("inbox.joinApproveFailed", "Approvazione richiesta fallita"));
     },
   });
 
@@ -380,7 +380,7 @@ export function Inbox() {
       queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId!) });
     },
     onError: (err) => {
-      setActionError(err instanceof Error ? err.message : "Failed to reject join request");
+      setActionError(err instanceof Error ? err.message : t("inbox.joinRejectFailed", "Rifiuto richiesta fallito"));
     },
   });
 
@@ -976,7 +976,7 @@ export function Inbox() {
               : "bg-muted text-muted-foreground hover:bg-accent",
           )}
         >
-          Tutto ({allWorkItems.length})
+          {t("inbox.allCategories", "Tutto")} ({allWorkItems.length})
         </button>
         {(["richiesta", "messaggio", "aggiornamento"] as InboxItemCategory[]).map((cat) => (
           <button

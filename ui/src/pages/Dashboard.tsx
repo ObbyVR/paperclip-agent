@@ -84,7 +84,7 @@ function CollapsibleProjectSection({
           onClick={() => onToggleCollapse(projectKey)}
           className="flex items-center gap-2 flex-1 min-w-0 text-left"
           aria-expanded={!collapsed}
-          aria-label={`${collapsed ? "Espandi" : "Riduci"} ${name}`}
+          aria-label={`${collapsed ? t("common.expand", "Espandi") : t("common.collapse", "Riduci")} ${name}`}
         >
           {collapsed
             ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -102,7 +102,7 @@ function CollapsibleProjectSection({
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-500" />
               </span>
-              {activeRunCount} attivi
+              {activeRunCount} {t("dashboard.active", "attivi")}
             </span>
           )}
         </button>
@@ -110,11 +110,11 @@ function CollapsibleProjectSection({
           type="button"
           onClick={(e) => { e.stopPropagation(); onHide(projectKey); }}
           className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/60 opacity-0 group-hover:opacity-100 hover:bg-accent/50 hover:text-foreground transition-all"
-          title="Nascondi dalla dashboard (reversibile)"
-          aria-label={`Nascondi ${name} dalla dashboard`}
+          title={t("dashboard.hideTooltip", "Nascondi dalla dashboard (reversibile)")}
+          aria-label={`${t("dashboard.hide", "Nascondi")} ${name} ${t("dashboard.fromDashboard", "dalla dashboard")}`}
         >
           <EyeOff className="h-3 w-3" />
-          Nascondi
+          {t("dashboard.hide", "Nascondi")}
         </button>
       </div>
       {!collapsed && children}
@@ -479,7 +479,7 @@ export function Dashboard() {
               return (
                 <CollapsibleProjectSection
                   projectKey={UNASSIGNED_KEY}
-                  name="Senza progetto"
+                  name={t("dashboard.unassigned", "Senza progetto")}
                   issueCount={unassigned.length}
                   activeRunCount={unassignedRuns.length}
                   collapsed={prefs.collapsedProjects.has(UNASSIGNED_KEY)}
@@ -501,13 +501,13 @@ export function Dashboard() {
       {/* ── Restore bar: hidden projects + hidden workflows ── */}
       {(prefs.hiddenProjects.size > 0 || prefs.hiddenWorkflows.size > 0) && (() => {
         const hiddenProjectNames = [...prefs.hiddenProjects].map((key) => {
-          if (key === UNASSIGNED_KEY) return { key, name: "Senza progetto" };
+          if (key === UNASSIGNED_KEY) return { key, name: t("dashboard.unassigned", "Senza progetto") };
           const p = projectsList?.find((p) => p.id === key);
-          return { key, name: p?.name ?? "Progetto nascosto" };
+          return { key, name: p?.name ?? t("dashboard.hiddenProject", "Progetto nascosto") };
         });
         const hiddenWorkflowTitles = [...prefs.hiddenWorkflows].map((id) => {
           const i = issues?.find((x) => x.id === id);
-          return { id, title: i?.title ?? "Workflow nascosto", identifier: i?.identifier };
+          return { id, title: i?.title ?? t("dashboard.hiddenWorkflow", "Workflow nascosto"), identifier: i?.identifier };
         });
         return (
           <div className="rounded-lg border border-border/50 bg-card/30 p-3 space-y-2">

@@ -194,7 +194,7 @@ interface EventTarget {
   identifier: string | null;
 }
 
-function resolveTarget(ev: ActivityEvent, issueMap: Map<string, Issue>): EventTarget {
+function resolveTarget(ev: ActivityEvent, issueMap: Map<string, Issue>, t: (key: string, fallback: string) => string): EventTarget {
   if (ev.entityType === "issue") {
     const issue = issueMap.get(ev.entityId);
     if (issue) {
@@ -207,7 +207,7 @@ function resolveTarget(ev: ActivityEvent, issueMap: Map<string, Issue>): EventTa
     // Issue we don't have cached yet — details often carry identifier/title
     const det = ev.details as Record<string, unknown> | null;
     const ident = det && typeof det.identifier === "string" ? det.identifier : null;
-    const title = det && typeof det.issueTitle === "string" ? det.issueTitle : "Issue";
+    const title = det && typeof det.issueTitle === "string" ? det.issueTitle : t("activity.issue", "Attivita'");
     return {
       href: ident ? `/issues/${ident}` : `/issues/${ev.entityId}`,
       label: title,
@@ -308,23 +308,23 @@ const DAY_FMT = new Intl.DateTimeFormat("it-IT", {
   month: "long",
 });
 
-function formatDayLabel(d: Date, now: Date = new Date()): string {
+function formatDayLabel(d: Date, now: Date = new Date(), t?: (key: string, fallback: string) => string): string {
   const today = startOfDay(now);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   const day = startOfDay(d);
-  if (day.getTime() === today.getTime()) return "Oggi";
-  if (day.getTime() === yesterday.getTime()) return "Ieri";
+  if (day.getTime() === today.getTime()) return t ? t("activity.today", "Oggi") : "Oggi";
+  if (day.getTime() === yesterday.getTime()) return t ? t("activity.yesterday", "Ieri") : "Ieri";
   return DAY_FMT.format(d);
 }
 
-function groupByDay(rows: FeedRow[], now: Date = new Date()): DayGroup[] {
+function groupByDay(rows: FeedRow[], now: Date = new Date(), t?: (key: string, fallback: string) => string): DayGroup[] {
   const byDay = new Map<string, { label: string; rows: FeedRow[] }>();
   for (const row of rows) {
     const day = startOfDay(row.firstEventAt);
     const key = day.toISOString();
     if (!byDay.has(key)) {
-      byDay.set(key, { label: formatDayLabel(day, now), rows: [] });
+      byDay.set(key, { label: formatDayLabel(day, now, t), rows: [] });
     }
     byDay.get(key)!.rows.push(row);
   }
@@ -350,6 +350,7 @@ function ActivityFeedRow({
   issueMap: Map<string, Issue>;
   projectMap: Map<string, Project>;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(!row.collapsed);
   const latest = row.events[row.events.length - 1]; // oldest in this burst
   const head = row.events[0]; // most recent
@@ -360,7 +361,7 @@ function ActivityFeedRow({
   const time = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" })
     .format(row.firstEventAt);
 
-  const target = resolveTarget(head, issueMap);
+  const target = resolveTarget(head, issueMap, t);
   const actor = actorName(head, agentMap);
   const issue = head.entityType === "issue" ? issueMap.get(head.entityId) : null;
   const project = issue?.projectId ? projectMap.get(issue.projectId) : null;
@@ -413,7 +414,7 @@ function ActivityFeedRow({
               className="inline-flex items-center gap-0.5 rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-white/10 hover:text-foreground transition-colors"
             >
               {expanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
-              {row.events.length} eventi
+              {row.events.length} {t("activity.events", "eventi")}
             </button>
           )}
         </div>
@@ -633,8 +634,8 @@ export function Activity() {
 
   const days = useMemo(() => {
     const rows = buildFeedRows(filteredEvents);
-    return groupByDay(rows, now);
-  }, [filteredEvents, now]);
+    return groupByDay(rows, now, t);
+  }, [filteredEvents, now, t]);
 
   /* ── Render ───────────────────────────────────────────────────── */
 
@@ -724,7 +725,7 @@ export function Activity() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cerca nell'attivita'..."
+            placeholder={t("activity.searchPlaceholder", "Cerca nell'attivita'...")}
             className="w-full rounded-md border border-border bg-background pl-8 pr-8 py-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
           {searchQuery && (
@@ -746,7 +747,7 @@ export function Activity() {
             onChange={(e) => setAgentFilter(e.target.value)}
             className="rounded-md border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
-            <option value="">Tutti gli agenti</option>
+            <option value="">{t("activity.allAgents", "Tutti gli agenti")}</option>
             {(agents ?? []).map((a) => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
@@ -760,7 +761,7 @@ export function Activity() {
             onChange={(e) => setProjectFilter(e.target.value)}
             className="rounded-md border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
-            <option value="">Tutti i progetti</option>
+            <option value="">{t("activity.allProjects", "Tutti i progetti")}</option>
             {(projects ?? []).map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -785,13 +786,13 @@ export function Activity() {
           icon={History}
           message={
             hasActiveFilters
-              ? "Nessun evento corrisponde ai filtri."
+              ? t("activity.noMatchingEvents", "Nessun evento corrisponde ai filtri.")
               : tab === "today"
-              ? "Nessuna attivita' oggi."
+              ? t("activity.noEventsToday", "Nessuna attivita' oggi.")
               : tab === "yesterday"
-              ? "Nessuna attivita' ieri."
+              ? t("activity.noEventsYesterday", "Nessuna attivita' ieri.")
               : tab === "week"
-              ? "Nessuna attivita' questa settimana."
+              ? t("activity.noEventsWeek", "Nessuna attivita' questa settimana.")
               : t("activity.none")
           }
         />
