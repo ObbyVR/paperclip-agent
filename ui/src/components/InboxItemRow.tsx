@@ -148,12 +148,21 @@ function IssueContent({ issue, issueLinkState }: { issue: Issue; issueLinkState?
   );
 }
 
+const APPROVAL_STATUS_LABELS: Record<string, string> = {
+  pending_approval: "In attesa",
+  revision_requested: "Revisione richiesta",
+  approved: "Approvato",
+  rejected: "Rifiutato",
+  pending: "In attesa",
+};
+
 function ApprovalContent({ approval }: { approval: Approval }) {
   const { t } = useTranslation();
   const Icon = typeIcon[approval.type] ?? defaultTypeIcon;
   const label = approvalLabel(approval.type, approval.payload as Record<string, unknown> | null);
   const isHire = approval.type === "hire_agent";
   const isApproved = approval.status === "approved";
+  const statusLabel = APPROVAL_STATUS_LABELS[approval.status] ?? approval.status.replaceAll("_", " ");
   return (
     <Link
       to={`/approvals/${approval.id}`}
@@ -170,9 +179,9 @@ function ApprovalContent({ approval }: { approval: Approval }) {
           {isHire && isApproved ? (
             <span className="text-green-600 dark:text-green-400">{t("approval.agentActivated")}</span>
           ) : isHire ? (
-            <span>{t("approval.newAiAgent")} · <span className="capitalize">{approval.status.replaceAll("_", " ")}</span></span>
+            <span>{t("approval.newAiAgent")} · {statusLabel}</span>
           ) : (
-            <span className="capitalize">{approval.status.replaceAll("_", " ")}</span>
+            <span>{statusLabel}</span>
           )}
         </span>
       </span>

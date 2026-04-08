@@ -900,9 +900,13 @@ export function Inbox() {
                 {
                   value: "projects",
                   label: (() => {
-                    const unreadCount = allWorkItems.filter(
-                      (it) => computeProjectsUnreadState(it) !== "read",
-                    ).length;
+                    const unreadProjects = new Set(
+                      allWorkItems
+                        .filter((it) => computeProjectsUnreadState(it) !== "read")
+                        .map((it) => ("projectId" in it ? it.projectId : null))
+                        .filter(Boolean),
+                    );
+                    const unreadCount = unreadProjects.size;
                     return (
                       <span className="inline-flex items-center gap-1.5">
                         {t("inbox.projects")}
