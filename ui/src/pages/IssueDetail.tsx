@@ -167,11 +167,11 @@ function IssueDetailAccordion({
     <div className="border border-border/50 rounded-lg overflow-hidden">
       {/* Tab bar */}
       <div className="flex bg-card/30">
-        <AccordionBtn label="Output" count={(issue.documents?.length ?? 0) + runResults.length} isOpen={openTab === "output"} onClick={() => toggle("output")} alert={(issue.isUnreadForMe || issue.status === "in_review") && openTab !== "output"} />
-        {hasBriefing && <AccordionBtn label="Briefing" isOpen={openTab === "briefing"} onClick={() => toggle("briefing")} />}
-        <AccordionBtn label="Commenti" count={commentsWithRunMeta.length} isOpen={openTab === "commenti"} onClick={() => toggle("commenti")} alert={issue.isUnreadForMe && openTab !== "commenti"} />
-        <AccordionBtn label="Attivita'" isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} alert={issue.isUnreadForMe && openTab !== "attivita"} />
-        {hasSubIssues && <AccordionBtn label="Sub-issue" count={childIssues.length} isOpen={openTab === "sub-issues"} onClick={() => toggle("sub-issues")} />}
+        <AccordionBtn label={t("issue.tab.output", "Output")} count={(issue.documents?.length ?? 0) + runResults.length} isOpen={openTab === "output"} onClick={() => toggle("output")} alert={(issue.isUnreadForMe || issue.status === "in_review") && openTab !== "output"} />
+        {hasBriefing && <AccordionBtn label={t("issue.tab.briefing", "Briefing")} isOpen={openTab === "briefing"} onClick={() => toggle("briefing")} />}
+        <AccordionBtn label={t("issue.tab.comments", "Commenti")} count={commentsWithRunMeta.length} isOpen={openTab === "commenti"} onClick={() => toggle("commenti")} alert={issue.isUnreadForMe && openTab !== "commenti"} />
+        <AccordionBtn label={t("issue.tab.activity", "Attivita'")} isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} alert={issue.isUnreadForMe && openTab !== "attivita"} />
+        {hasSubIssues && <AccordionBtn label={t("issue.tab.subIssues", "Sotto-attivita'")} count={childIssues.length} isOpen={openTab === "sub-issues"} onClick={() => toggle("sub-issues")} />}
       </div>
 
       {/* Content */}
@@ -202,7 +202,7 @@ function IssueDetailAccordion({
               onSave={(description: string) => updateIssue.mutateAsync({ description })}
               as="p"
               className="text-[15px] leading-7 text-foreground"
-              placeholder="Add a description..."
+              placeholder={t("issue.addDescription", "Aggiungi una descrizione...")}
               multiline
               mentions={mentionOptions}
               imageUploadHandler={async (file: File) => {
@@ -366,7 +366,7 @@ export function IssueDetail() {
 
   const hasLiveRuns = (liveRuns ?? []).length > 0 || !!activeRun;
   const sourceBreadcrumb = useMemo(
-    () => readIssueDetailBreadcrumb(location.state) ?? { label: "Issues", href: "/issues" },
+    () => readIssueDetailBreadcrumb(location.state) ?? { label: t("nav.issues", "Attivita'"), href: "/issues" },
     [location.state],
   );
 
@@ -471,7 +471,7 @@ export function IssueDetail() {
       options.push({ id: `agent:${agent.id}`, label: agent.name });
     }
     if (currentUserId) {
-      options.push({ id: `user:${currentUserId}`, label: "Me" });
+      options.push({ id: `user:${currentUserId}`, label: t("common.me", "Io") });
     }
     return options;
   }, [agents, currentUserId]);
@@ -685,7 +685,7 @@ export function IssueDetail() {
       invalidateIssue();
     },
     onError: (err) => {
-      setAttachmentError(err instanceof Error ? err.message : "Upload failed");
+      setAttachmentError(err instanceof Error ? err.message : t("issue.uploadFailed", "Caricamento fallito"));
     },
   });
 
@@ -709,7 +709,7 @@ export function IssueDetail() {
       invalidateIssue();
     },
     onError: (err) => {
-      setAttachmentError(err instanceof Error ? err.message : "Document import failed");
+      setAttachmentError(err instanceof Error ? err.message : t("issue.importFailed", "Importazione documento fallita"));
     },
   });
 
@@ -721,12 +721,12 @@ export function IssueDetail() {
       invalidateIssue();
     },
     onError: (err) => {
-      setAttachmentError(err instanceof Error ? err.message : "Delete failed");
+      setAttachmentError(err instanceof Error ? err.message : t("issue.deleteFailed", "Eliminazione fallita"));
     },
   });
 
   useEffect(() => {
-    const titleLabel = issue?.title ?? issueId ?? "Issue";
+    const titleLabel = issue?.title ?? issueId ?? t("issue.defaultTitle", "Attivita'");
     setBreadcrumbs([
       sourceBreadcrumb,
       { label: hasLiveRuns ? `🔵 ${titleLabel}` : titleLabel },
@@ -768,7 +768,7 @@ export function IssueDetail() {
     const md = `# ${issue.identifier}: ${title}\n\n${body}`.trimEnd();
     await navigator.clipboard.writeText(md);
     setCopied(true);
-    pushToast({ title: "Copied to clipboard", tone: "success" });
+    pushToast({ title: t("common.copiedToClipboard", "Copiato negli appunti"), tone: "success" });
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -958,7 +958,7 @@ export function IssueDetail() {
               variant="ghost"
               size="icon-xs"
               onClick={copyIssueToClipboard}
-              title="Copy issue as markdown"
+              title={t("issue.copyAsMarkdown", "Copia come markdown")}
             >
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
             </Button>
@@ -976,7 +976,7 @@ export function IssueDetail() {
                   setPanelVisible(true);
                 }
               }}
-              title="Properties"
+              title={t("issue.properties", "Proprieta'")}
             >
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
@@ -1210,7 +1210,7 @@ export function IssueDetail() {
                   className="text-muted-foreground hover:text-destructive"
                   onClick={() => deleteAttachment.mutate(attachment.id)}
                   disabled={deleteAttachment.isPending}
-                  title="Delete attachment"
+                  title={t("issue.deleteAttachment", "Elimina allegato")}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate, Link, Navigate, useBeforeUnload } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -516,6 +517,7 @@ function WorkspaceOperationsSection({
 }
 
 export function AgentDetail() {
+  const { t } = useTranslation();
   const { companyPrefix, agentId, tab: urlTab, runId: urlRunId } = useParams<{
     companyPrefix?: string;
     agentId: string;
@@ -754,7 +756,7 @@ export function AgentDetail() {
 
   useEffect(() => {
     const crumbs: { label: string; href?: string }[] = [
-      { label: "Agents", href: "/agents" },
+      { label: t("agent.title", "Agenti"), href: "/agents" },
     ];
     const agentName = agent?.name ?? routeAgentRef ?? "Agent";
     if (activeView === "dashboard" && !urlRunId) {
@@ -762,20 +764,20 @@ export function AgentDetail() {
     } else {
       crumbs.push({ label: agentName, href: `/agents/${canonicalAgentRef}/dashboard` });
       if (urlRunId) {
-        crumbs.push({ label: "Runs", href: `/agents/${canonicalAgentRef}/runs` });
+        crumbs.push({ label: t("agent.tab.runs", "Esecuzioni"), href: `/agents/${canonicalAgentRef}/runs` });
         crumbs.push({ label: `Run ${urlRunId.slice(0, 8)}` });
       } else if (activeView === "instructions") {
-        crumbs.push({ label: "Instructions" });
+        crumbs.push({ label: t("agent.tab.instructions", "Istruzioni") });
       } else if (activeView === "configuration") {
-        crumbs.push({ label: "Configuration" });
+        crumbs.push({ label: t("agent.tab.configuration", "Configurazione") });
       } else if (activeView === "skills") {
-        crumbs.push({ label: "Skills" });
+        crumbs.push({ label: t("agent.tab.skills", "Competenze") });
       } else if (activeView === "runs") {
-        crumbs.push({ label: "Runs" });
+        crumbs.push({ label: t("agent.tab.runs", "Esecuzioni") });
       } else if (activeView === "budget") {
-        crumbs.push({ label: "Budget" });
+        crumbs.push({ label: t("agent.tab.budget", "Budget") });
       } else {
-        crumbs.push({ label: "Dashboard" });
+        crumbs.push({ label: t("agent.tab.dashboard", "Dashboard") });
       }
     }
     setBreadcrumbs(crumbs);
@@ -836,7 +838,7 @@ export function AgentDetail() {
           <RunButton
             onClick={() => agentAction.mutate("invoke")}
             disabled={agentAction.isPending || isPendingApproval}
-            label="Run Heartbeat"
+            label={t("agent.runHeartbeat", "Esegui Heartbeat")}
           />
           <PauseResumeButton
             isPaused={agent.status === "paused"}
@@ -908,12 +910,12 @@ export function AgentDetail() {
         >
           <PageTabBar
             items={[
-              { value: "dashboard", label: "Dashboard" },
-              { value: "instructions", label: "Instructions" },
-              { value: "skills", label: "Skills" },
-              { value: "configuration", label: "Configuration" },
-              { value: "runs", label: "Runs" },
-              { value: "budget", label: "Budget" },
+              { value: "dashboard", label: t("agent.tab.dashboard", "Dashboard") },
+              { value: "instructions", label: t("agent.tab.instructions", "Istruzioni") },
+              { value: "skills", label: t("agent.tab.skills", "Competenze") },
+              { value: "configuration", label: t("agent.tab.configuration", "Configurazione") },
+              { value: "runs", label: t("agent.tab.runs", "Esecuzioni") },
+              { value: "budget", label: t("agent.tab.budget", "Budget") },
             ]}
             value={activeView}
             onValueChange={(value) => navigate(`/agents/${canonicalAgentRef}/${value}`)}
@@ -945,14 +947,14 @@ export function AgentDetail() {
               onClick={() => cancelConfigActionRef.current?.()}
               disabled={configSaving}
             >
-              Cancel
+              {t("common.cancel", "Annulla")}
             </Button>
             <Button
               size="sm"
               onClick={() => saveConfigActionRef.current?.()}
               disabled={configSaving}
             >
-              {configSaving ? "Saving…" : "Save"}
+              {configSaving ? t("common.saving", "Salvataggio...") : t("common.save", "Salva")}
             </Button>
           </div>
         </div>
@@ -971,14 +973,14 @@ export function AgentDetail() {
               onClick={() => cancelConfigActionRef.current?.()}
               disabled={configSaving}
             >
-              Cancel
+              {t("common.cancel", "Annulla")}
             </Button>
             <Button
               size="sm"
               onClick={() => saveConfigActionRef.current?.()}
               disabled={configSaving}
             >
-              {configSaving ? "Saving…" : "Save"}
+              {configSaving ? t("common.saving", "Salvataggio...") : t("common.save", "Salva")}
             </Button>
           </div>
         </div>
@@ -1064,6 +1066,7 @@ function SummaryRow({ label, children }: { label: string; children: React.ReactN
 }
 
 function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: string }) {
+  const { t } = useTranslation();
   if (runs.length === 0) return null;
 
   const sorted = [...runs].sort(
@@ -1089,7 +1092,7 @@ function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: strin
               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
             </span>
           )}
-          {isLive ? "Live Run" : "Latest Run"}
+          {isLive ? t("agent.liveRun", "Esecuzione live") : t("agent.latestRun", "Ultima esecuzione")}
         </h3>
         <Link
           to={`/agents/${agentId}/runs/${run.id}`}
@@ -1149,6 +1152,7 @@ function AgentOverview({
   agentId: string;
   agentRouteId: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-8">
       {/* Latest Run */}
@@ -1156,16 +1160,16 @@ function AgentOverview({
 
       {/* Charts */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <ChartCard title="Run Activity" subtitle="Last 14 days">
+        <ChartCard title={t("agent.runActivity", "Attivita' esecuzioni")} subtitle={t("agent.last14Days", "Ultimi 14 giorni")}>
           <RunActivityChart runs={runs} />
         </ChartCard>
-        <ChartCard title="Issues by Priority" subtitle="Last 14 days">
+        <ChartCard title={t("agent.issuesByPriority", "Attivita' per priorita'")} subtitle={t("agent.last14Days", "Ultimi 14 giorni")}>
           <PriorityChart issues={assignedIssues} />
         </ChartCard>
-        <ChartCard title="Issues by Status" subtitle="Last 14 days">
+        <ChartCard title={t("agent.issuesByStatus", "Attivita' per stato")} subtitle={t("agent.last14Days", "Ultimi 14 giorni")}>
           <IssueStatusChart issues={assignedIssues} />
         </ChartCard>
-        <ChartCard title="Success Rate" subtitle="Last 14 days">
+        <ChartCard title={t("agent.successRate", "Tasso di successo")} subtitle={t("agent.last14Days", "Ultimi 14 giorni")}>
           <SuccessRateChart runs={runs} />
         </ChartCard>
       </div>
@@ -1173,7 +1177,7 @@ function AgentOverview({
       {/* Recent Issues */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">Recent Issues</h3>
+          <h3 className="text-sm font-medium">{t("agent.recentIssues", "Attivita' recenti")}</h3>
           <Link
             to={`/issues?participantAgentId=${agentId}`}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -1182,7 +1186,7 @@ function AgentOverview({
           </Link>
         </div>
         {assignedIssues.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No recent issues.</p>
+          <p className="text-sm text-muted-foreground">{t("agent.noRecentIssues", "Nessuna attivita' recente.")}</p>
         ) : (
           <div className="border border-border rounded-lg">
             {assignedIssues.slice(0, 10).map((issue) => (
@@ -1205,7 +1209,7 @@ function AgentOverview({
 
       {/* Costs */}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium">Costs</h3>
+        <h3 className="text-sm font-medium">{t("agent.costs", "Costi")}</h3>
         <CostsSection runtimeState={runtimeState} runs={runs} />
       </div>
     </div>
@@ -1311,6 +1315,7 @@ function AgentConfigurePage({
   onSavingChange: (saving: boolean) => void;
   updatePermissions: { mutate: (permissions: AgentPermissionUpdate) => void; isPending: boolean };
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [revisionsOpen, setRevisionsOpen] = useState(false);
 
@@ -1342,7 +1347,7 @@ function AgentConfigurePage({
         hideInstructionsFile
       />
       <div>
-        <h3 className="text-sm font-medium mb-3">API Keys</h3>
+        <h3 className="text-sm font-medium mb-3">{t("agent.apiKeys", "Chiavi API")}</h3>
         <KeysTab agentId={agentId} companyId={companyId} />
       </div>
 
@@ -1362,7 +1367,7 @@ function AgentConfigurePage({
         {revisionsOpen && (
           <div className="mt-3">
             {(configRevisions ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">No configuration revisions yet.</p>
+              <p className="text-sm text-muted-foreground">{t("agent.noConfigRevisions", "Nessuna revisione configurazione.")}</p>
             ) : (
               <div className="space-y-2">
                 {(configRevisions ?? []).slice(0, 10).map((revision) => (
@@ -1423,6 +1428,7 @@ function ConfigurationTab({
   hidePromptTemplate?: boolean;
   hideInstructionsFile?: boolean;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
   const [awaitingRefreshAfterSave, setAwaitingRefreshAfterSave] = useState(false);
@@ -1478,12 +1484,12 @@ function ConfigurationTab({
   const taskAssignLocked = agent.role === "ceo" || canCreateAgents;
   const taskAssignHint =
     taskAssignSource === "ceo_role"
-      ? "Enabled automatically for CEO agents."
+      ? t("agent.perm.ceoAuto", "Abilitato automaticamente per agenti CEO.")
       : taskAssignSource === "agent_creator"
-        ? "Enabled automatically while this agent can create new agents."
+        ? t("agent.perm.agentCreatorAuto", "Abilitato automaticamente finche' questo agente puo' creare nuovi agenti.")
         : taskAssignSource === "explicit_grant"
-          ? "Enabled via explicit company permission grant."
-          : "Disabled unless explicitly granted.";
+          ? t("agent.perm.explicitGrant", "Abilitato tramite permesso aziendale esplicito.")
+          : t("agent.perm.disabled", "Disabilitato se non esplicitamente concesso.");
 
   return (
     <div className="space-y-6">
@@ -1503,11 +1509,11 @@ function ConfigurationTab({
       />
 
       <div>
-        <h3 className="text-sm font-medium mb-3">Permissions</h3>
+        <h3 className="text-sm font-medium mb-3">{t("agent.permissions", "Permessi")}</h3>
         <div className="border border-border rounded-lg p-4 space-y-4">
           <div className="flex items-center justify-between gap-4 text-sm">
             <div className="space-y-1">
-              <div>Can create new agents</div>
+              <div>{t("agent.perm.canCreateAgents", "Puo' creare nuovi agenti")}</div>
               <p className="text-xs text-muted-foreground">
                 Lets this agent create or hire agents and implicitly assign tasks.
               </p>
@@ -1539,7 +1545,7 @@ function ConfigurationTab({
           </div>
           <div className="flex items-center justify-between gap-4 text-sm">
             <div className="space-y-1">
-              <div>Can assign tasks</div>
+              <div>{t("agent.perm.canAssignTasks", "Puo' assegnare attivita'")}</div>
               <p className="text-xs text-muted-foreground">
                 {taskAssignHint}
               </p>
@@ -1592,6 +1598,7 @@ function PromptsTab({
   onCancelActionChange: (cancel: (() => void) | null) => void;
   onSavingChange: (saving: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { selectedCompanyId } = useCompany();
   const { isMobile } = useSidebar();
@@ -2070,7 +2077,7 @@ function PromptsTab({
           isMobile && !showFilePanel && "hidden",
         )} style={isMobile ? undefined : { width: filePanelWidth }}>
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium">Files</h4>
+            <h4 className="text-sm font-medium">{t("agent.files", "File")}</h4>
             <div className="flex items-center gap-1">
               {!showNewFileInput && (
                 <Button
@@ -2811,10 +2818,11 @@ function RunsTab({
   selectedRunId: string | null;
   adapterType: string;
 }) {
+  const { t } = useTranslation();
   const { isMobile } = useSidebar();
 
   if (runs.length === 0) {
-    return <p className="text-sm text-muted-foreground">No runs yet.</p>;
+    return <p className="text-sm text-muted-foreground">{t("agent.noRuns", "Nessuna esecuzione.")}</p>;
   }
 
   // Sort by created descending
@@ -2879,6 +2887,7 @@ function RunsTab({
 /* ---- Run Detail (expanded) ---- */
 
 function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: HeartbeatRun; agentRouteId: string; adapterType: string }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { data: hydratedRun } = useQuery({
@@ -3044,7 +3053,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
                   onClick={() => cancelRun.mutate()}
                   disabled={cancelRun.isPending}
                 >
-                  {cancelRun.isPending ? "Cancelling…" : "Cancel"}
+                  {cancelRun.isPending ? t("common.cancelling", "Annullamento...") : t("common.cancel", "Annulla")}
                 </Button>
               )}
               {canResumeLostRun && (
@@ -3056,7 +3065,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
                   disabled={resumeRun.isPending}
                 >
                   <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                  {resumeRun.isPending ? "Resuming…" : "Resume"}
+                  {resumeRun.isPending ? t("agent.resuming", "Ripresa...") : t("agent.resume", "Riprendi")}
                 </Button>
               )}
               {canRetryRun && !canResumeLostRun && (
@@ -3068,7 +3077,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
                   disabled={retryRun.isPending}
                 >
                   <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                  {retryRun.isPending ? "Retrying…" : "Retry"}
+                  {retryRun.isPending ? t("agent.retrying", "Nuovo tentativo...") : t("agent.retry", "Riprova")}
                 </Button>
               )}
             </div>
@@ -3322,6 +3331,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
 /* ---- Log Viewer ---- */
 
 function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: string }) {
+  const { t } = useTranslation();
   const [events, setEvents] = useState<HeartbeatRunEvent[]>([]);
   const [logLines, setLogLines] = useState<Array<{ ts: string; stream: "stdout" | "stderr" | "system"; chunk: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -3706,7 +3716,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
   }
 
   if (events.length === 0 && logLines.length === 0 && !logError) {
-    return <p className="text-xs text-muted-foreground">No log events.</p>;
+    return <p className="text-xs text-muted-foreground">{t("agent.noLogEvents", "Nessun evento nel log.")}</p>;
   }
 
   const levelColors: Record<string, string> = {
@@ -3929,6 +3939,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
 /* ---- Keys Tab ---- */
 
 function KeysTab({ agentId, companyId }: { agentId: string; companyId?: string }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [newKeyName, setNewKeyName] = useState("");
   const [newToken, setNewToken] = useState<string | null>(null);
@@ -4042,7 +4053,7 @@ function KeysTab({ agentId, companyId }: { agentId: string; companyId?: string }
       {isLoading && <p className="text-sm text-muted-foreground">Loading keys...</p>}
 
       {!isLoading && activeKeys.length === 0 && !newToken && (
-        <p className="text-sm text-muted-foreground">No active API keys.</p>
+        <p className="text-sm text-muted-foreground">{t("agent.noApiKeys", "Nessuna chiave API attiva.")}</p>
       )}
 
       {activeKeys.length > 0 && (
