@@ -408,29 +408,38 @@ function ActivityFeedRow({
 
   const actionLabel = formatAction(head.action);
 
+  /* Visual hierarchy: comments & decisions get more presence, system/read compact */
+  const isCompact = category === "system" || head.action === "issue.read_marked" || head.action === "issue_read_marked";
+  const isHighlight = category === "comment" || category === "decision";
+
   return (
-    <div className="group relative flex gap-3 px-4 py-2.5 hover:bg-accent/30 transition-colors">
+    <div className={cn(
+      "group relative flex gap-3 px-4 transition-colors",
+      isCompact ? "py-1.5 hover:bg-accent/20" : isHighlight ? "py-3 hover:bg-accent/40" : "py-2.5 hover:bg-accent/30",
+    )}>
       {/* Time column */}
       <div className="shrink-0 w-12 pt-0.5 text-right">
-        <span className="text-[10px] font-mono text-muted-foreground/70">{time}</span>
+        <span className={cn("font-mono text-muted-foreground/70", isCompact ? "text-[9px]" : "text-[10px]")}>{time}</span>
       </div>
 
       {/* Category icon */}
-      <div className={cn("shrink-0 flex h-6 w-6 items-center justify-center rounded-full mt-0.5", colors.bg)}>
-        <Icon className={cn("h-3 w-3", colors.text)} />
+      <div className={cn(
+        "shrink-0 flex items-center justify-center rounded-full mt-0.5",
+        isCompact ? "h-5 w-5" : isHighlight ? "h-7 w-7" : "h-6 w-6",
+        colors.bg,
+      )}>
+        <Icon className={cn(isCompact ? "h-2.5 w-2.5" : isHighlight ? "h-3.5 w-3.5" : "h-3 w-3", colors.text)} />
       </div>
 
       {/* Main content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={cn("text-[10px] font-medium uppercase tracking-wide shrink-0", colors.text)}>
+          <span className={cn("font-medium uppercase tracking-wide shrink-0", colors.text, isCompact ? "text-[9px]" : "text-[10px]")}>
             {actionLabel}
           </span>
           <span className="text-xs text-muted-foreground shrink-0">·</span>
           <div className="flex items-center gap-1 shrink-0">
             {head.actorType === "agent" ? (
-              // Identity already renders the name alongside its avatar chip;
-              // an extra <span> would duplicate it.
               <Identity name={actor} size="xs" />
             ) : (
               <>
@@ -459,7 +468,10 @@ function ActivityFeedRow({
         {target.href ? (
           <Link
             to={target.href}
-            className="mt-0.5 flex items-baseline gap-1.5 text-sm no-underline text-inherit hover:underline"
+            className={cn(
+              "mt-0.5 flex items-baseline gap-1.5 no-underline text-inherit hover:underline",
+              isCompact ? "text-xs" : "text-sm",
+            )}
           >
             {target.identifier && (
               <span className="font-mono text-[11px] text-muted-foreground shrink-0">
@@ -469,20 +481,20 @@ function ActivityFeedRow({
             <span className="truncate text-foreground">{target.label}</span>
           </Link>
         ) : (
-          <div className="mt-0.5 text-sm text-foreground/70 truncate">{target.label}</div>
+          <div className={cn("mt-0.5 text-foreground/70 truncate", isCompact ? "text-xs" : "text-sm")}>{target.label}</div>
         )}
 
         {/* Project context (when the target is an issue) */}
-        {project && (
+        {project && !isCompact && (
           <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
             <FolderOpen className="h-2.5 w-2.5" />
             <span>{project.name}</span>
           </div>
         )}
 
-        {/* Comment snippet preview */}
+        {/* Comment snippet preview — larger for comments */}
         {category === "comment" && snippet && (
-          <div className="mt-1 border-l-2 border-sky-500/30 pl-2 text-xs text-muted-foreground line-clamp-2">
+          <div className="mt-1.5 border-l-2 border-sky-500/30 pl-2.5 text-[13px] leading-relaxed text-muted-foreground line-clamp-3">
             "{snippet}"
           </div>
         )}
@@ -505,7 +517,7 @@ function ActivityFeedRow({
       </div>
 
       {/* Relative time on the right */}
-      <div className="shrink-0 self-center text-[10px] text-muted-foreground/60 tabular-nums">
+      <div className={cn("shrink-0 self-center text-muted-foreground/60 tabular-nums", isCompact ? "text-[9px]" : "text-[10px]")}>
         {timeAgo(latest.createdAt)}
       </div>
     </div>

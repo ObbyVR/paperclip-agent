@@ -13,6 +13,8 @@ import {
   XCircle,
   RotateCcw,
   UserPlus,
+  AlertTriangle,
+  ArrowUp,
 } from "lucide-react";
 import type { Approval, HeartbeatRun, Issue, JoinRequest } from "@paperclipai/shared";
 import type { InboxWorkItem, InboxItemContext } from "../lib/inbox";
@@ -126,9 +128,15 @@ function firstNonEmptyLine(value: string | null | undefined): string | null {
 
 // ── Render per kind ──────────────────────────────────────────────────
 
+const PRIORITY_ICON_CFG: Record<string, { icon: typeof AlertTriangle; color: string }> = {
+  critical: { icon: AlertTriangle, color: "text-red-500 dark:text-red-400" },
+  high: { icon: ArrowUp, color: "text-orange-500 dark:text-orange-400" },
+};
+
 function IssueContent({ issue, issueLinkState }: { issue: Issue; issueLinkState?: unknown }) {
   const issuePathId = issue.identifier ?? issue.id;
   const identifier = issue.identifier ?? issue.id.slice(0, 8);
+  const pri = PRIORITY_ICON_CFG[issue.priority];
   return (
     <Link
       to={`/issues/${issuePathId}`}
@@ -140,6 +148,7 @@ function IssueContent({ issue, issueLinkState }: { issue: Issue; issueLinkState?
       </span>
       <span className="min-w-0 flex-1">
         <span className="line-clamp-2 text-sm font-medium sm:truncate sm:line-clamp-none">
+          {pri && <pri.icon className={cn("inline h-3.5 w-3.5 mr-1 -mt-0.5", pri.color)} />}
           <span className="font-mono text-muted-foreground mr-1.5">{identifier}</span>
           {issue.title}
         </span>

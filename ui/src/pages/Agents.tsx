@@ -18,7 +18,7 @@ import { relativeTime, cn, agentRouteRef, agentUrl } from "../lib/utils";
 import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Bot, Plus, List, GitBranch, SlidersHorizontal } from "lucide-react";
+import { Bot, Plus, List, GitBranch, SlidersHorizontal, Clock } from "lucide-react";
 import { AGENT_ROLE_LABELS, type Agent } from "@paperclipai/shared";
 
 const adapterLabels: Record<string, string> = {
@@ -266,8 +266,12 @@ export function Agents() {
                       <span className="text-xs text-muted-foreground font-mono w-14 text-right">
                         {adapterLabels[agent.adapterType] ?? agent.adapterType}
                       </span>
-                      <span className="text-xs text-muted-foreground w-16 text-right">
-                        {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}
+                      <span className={cn(
+                        "inline-flex items-center gap-1 text-xs w-24 justify-end",
+                        agent.lastHeartbeatAt ? "text-foreground/70" : "text-muted-foreground",
+                      )}>
+                        <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className="tabular-nums">{agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}</span>
                       </span>
                       <span className="w-20 flex justify-end">
                         <StatusBadge status={agent.status} />
@@ -367,8 +371,12 @@ function OrgTreeNode({
                 <span className="text-xs text-muted-foreground font-mono w-14 text-right">
                   {adapterLabels[agent.adapterType] ?? agent.adapterType}
                 </span>
-                <span className="text-xs text-muted-foreground w-16 text-right">
-                  {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}
+                <span className={cn(
+                  "inline-flex items-center gap-1 text-xs w-24 justify-end",
+                  agent.lastHeartbeatAt ? "text-foreground/70" : "text-muted-foreground",
+                )}>
+                  <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <span className="tabular-nums">{agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}</span>
                 </span>
               </>
             )}
