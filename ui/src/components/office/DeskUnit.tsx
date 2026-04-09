@@ -105,7 +105,7 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
       type="button"
       onClick={onClick}
       title={tooltipText}
-      className="relative flex flex-col items-center cursor-pointer group focus:outline-none transition-transform duration-200 hover:scale-[1.03] active:scale-[0.98]"
+      className="relative flex flex-col items-center cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded-lg transition-transform duration-200 hover:scale-[1.03] hover:-translate-y-0.5 active:scale-[0.98]"
       style={{ width: deskW + 20 }}
     >
       {/* Urgent badge — only for pending approvals (small, non-intrusive) */}
@@ -200,7 +200,7 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
       </div>
 
       {/* Name tag */}
-      <div className="flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700/50 group-hover:border-violet-500/50 transition-colors">
+      <div className="flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700/50 group-hover:border-violet-500/50 group-hover:bg-slate-800/90 group-focus-visible:border-violet-500/50 transition-colors">
         {isLeader && <span className="text-[8px] shrink-0">👑</span>}
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
         <span className="text-[10px] font-semibold text-slate-200 truncate max-w-[80px]">{firstName}</span>

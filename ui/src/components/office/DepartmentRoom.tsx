@@ -4,6 +4,7 @@
  * Shows department name, agent count, status indicators, pulsing border,
  * department-specific decorations, and leader badge.
  */
+import { useState } from "react";
 import type { Agent, Approval, ActivityEvent } from "@paperclipai/shared";
 import { flattenDepartment, getDeptTheme, type DepartmentGroup } from "../../lib/departmentGroups";
 import { DeskUnit } from "./DeskUnit";
@@ -92,6 +93,8 @@ interface DepartmentRoomProps {
 }
 
 export function DepartmentRoom({ department, pendingApprovals, lastComments, onAgentClick }: DepartmentRoomProps) {
+  // Start collapsed on mobile (<640px)
+  const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const allAgents = flattenDepartment(department);
   const theme = getDeptTheme(department.leader.role);
   const hasError = allAgents.some((a) => a.status === "error");
@@ -114,8 +117,13 @@ export function DepartmentRoom({ department, pendingApprovals, lastComments, onA
         ...borderStyle,
       }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2" style={{ backgroundColor: theme.accent + "15" }}>
+      {/* Header — clickable to collapse/expand */}
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center justify-between px-3 py-2 cursor-pointer hover:brightness-110 transition-all"
+        style={{ backgroundColor: theme.accent + "15" }}
+      >
         <div className="flex items-center gap-1.5">
           <span className="text-[11px]">{decor.icon}</span>
           <span className="text-[11px] font-bold tracking-wide" style={{ color: theme.accent }}>
@@ -128,9 +136,12 @@ export function DepartmentRoom({ department, pendingApprovals, lastComments, onA
           <span className="text-[10px]" style={{ color: theme.accent + "80" }}>
             {allAgents.length}
           </span>
+          <span className="text-[9px] transition-transform duration-200" style={{ color: theme.accent + "60", transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▼</span>
         </div>
-      </div>
+      </button>
 
+      {/* Collapsible body */}
+      {!collapsed && <>
       {/* Agent grid + decorations */}
       <div className="relative p-4 pt-3">
         {/* Department-specific decorative items */}
@@ -192,23 +203,27 @@ export function DepartmentRoom({ department, pendingApprovals, lastComments, onA
         })()}
       </div>
 
-      {/* Ambient particles for active rooms */}
+      {/* Ambient particles for active rooms — larger, more visible */}
       {hasActive && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-          {[0, 1, 2, 3, 4].map((i) => (
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <div
               key={i}
-              className="absolute w-1 h-1 rounded-full opacity-0"
+              className="absolute rounded-full opacity-0"
               style={{
+                width: 2 + (i % 2),
+                height: 2 + (i % 2),
                 backgroundColor: theme.accent,
-                left: `${15 + i * 18}%`,
+                left: `${10 + i * 16}%`,
                 bottom: 0,
-                animation: `float-particle ${3 + i * 0.7}s ease-in-out ${i * 0.6}s infinite`,
+                animation: `float-particle ${3.5 + i * 0.6}s ease-in-out ${i * 0.5}s infinite`,
               }}
             />
           ))}
         </div>
       )}
+
+      </>}
 
       {/* CSS keyframes */}
       <style>{`
@@ -222,9 +237,9 @@ export function DepartmentRoom({ department, pendingApprovals, lastComments, onA
         }
         @keyframes float-particle {
           0% { transform: translateY(0); opacity: 0; }
-          20% { opacity: 0.3; }
-          80% { opacity: 0.15; }
-          100% { transform: translateY(-80px); opacity: 0; }
+          20% { opacity: 0.5; }
+          60% { opacity: 0.3; }
+          100% { transform: translateY(-100px); opacity: 0; }
         }
         @keyframes agent-enter {
           from { opacity: 0; transform: translateY(12px) scale(0.95); }
