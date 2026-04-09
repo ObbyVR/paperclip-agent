@@ -156,12 +156,15 @@ function IssueDetailAccordion({
 }: any) {
   const { t } = useTranslation();
   const location = useLocation();
-  const [openTab, setOpenTab] = useState<IssueAccordionTab>("output");
-  const toggle = (tab: IssueAccordionTab) => setOpenTab((prev: IssueAccordionTab) => prev === tab ? null : tab);
 
   const hasOutput = (issue.documents?.length ?? 0) > 0 || runResults.length > 0 || hasAttachments;
   const hasBriefing = !!issue.description;
   const hasSubIssues = childIssues.length > 0;
+
+  // Smart default tab: show Output if available, otherwise Commenti (avoid empty tab)
+  const defaultTab: IssueAccordionTab = hasOutput ? "output" : commentsWithRunMeta.length > 0 ? "commenti" : hasBriefing ? "briefing" : "output";
+  const [openTab, setOpenTab] = useState<IssueAccordionTab>(defaultTab);
+  const toggle = (tab: IssueAccordionTab) => setOpenTab((prev: IssueAccordionTab) => prev === tab ? null : tab);
 
   return (
     <div className="border border-border/50 rounded-lg overflow-hidden">
@@ -936,6 +939,7 @@ export function IssueDetail() {
             onChange={(status) => updateIssue.mutate({ status })}
           />
           <span className="text-sm font-mono text-muted-foreground shrink-0">{issue.identifier ?? issue.id.slice(0, 8)}</span>
+          <StatusBadge status={issue.status} />
 
           {hasLiveRuns && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 text-[10px] font-medium text-cyan-600 dark:text-cyan-400 shrink-0">
