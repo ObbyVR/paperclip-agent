@@ -287,7 +287,11 @@ export interface InboxItemContext {
  *     • Any other fallback
  */
 export function categorizeWorkItem(item: InboxWorkItem): InboxItemCategory {
-  if (item.kind === "approval") return "richiesta";
+  if (item.kind === "approval") {
+    const s = item.approval.status;
+    if (s === "pending" || s === "revision_requested") return "richiesta";
+    return "aggiornamento"; // approved/rejected/cancelled = already resolved
+  }
   if (item.kind === "join_request") return "richiesta";
   if (item.kind === "failed_run") return "messaggio";
   if (item.kind === "issue") {
