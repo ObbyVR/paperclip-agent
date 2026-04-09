@@ -13,7 +13,7 @@ import { Identity } from "./Identity";
 import { MarkdownBody } from "./MarkdownBody";
 import { StatusIcon } from "./StatusIcon";
 import {
-  AlertCircle, CheckCircle2, ChevronRight, Maximize2,
+  AlertCircle, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Maximize2,
   MessageSquare, RotateCcw, X, XCircle,
 } from "lucide-react";
 import type { Agent, Issue, IssueComment } from "@paperclipai/shared";
@@ -33,7 +33,7 @@ type Props = {
   isPending: boolean;
 };
 
-type AccordionSection = "output" | "obiettivo" | "riepilogo" | "commenti" | "subissues" | null;
+type AccordionSection = "output" | "commenti" | "subissues" | null;
 
 /* ── Helpers ──────────────────────────────── */
 
@@ -44,23 +44,54 @@ function fixMarkdownBreaks(md: string): string {
     .replace(/([^\n])\n(\* )/g, "$1\n\n$2");
 }
 
-function parseObiettivo(description: string): string {
-  if (!description) return "";
-  // Extract up to the first ## heading (just the intro/objective part)
-  const firstHeading = description.indexOf("\n## ");
-  if (firstHeading > 0) return description.slice(0, firstHeading).trim();
-  // If short, return as-is
-  if (description.length < 500) return description;
-  // Otherwise truncate
-  return description.slice(0, 500) + "...";
-}
-
 function extractRunContent(run: { resultJson?: unknown; status: string }): string | null {
   if (run.status !== "succeeded" && run.status !== "completed") return null;
   const result = run.resultJson as Record<string, unknown> | null;
   if (!result) return null;
   if (typeof result.content === "string" && result.content.length > 0) return result.content;
   return null;
+}
+
+/** Extract first meaningful paragraph from markdown as a summary */
+function extractSummary(md: string, maxLen = 300): string {
+  const lines = md.split("\n");
+  const paragraphs: string[] = [];
+  let current = "";
+  let inCodeBlock = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Track code blocks
+    if (trimmed.startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+      if (current.trim()) paragraphs.push(current.trim());
+      current = "";
+      continue;
+    }
+    if (inCodeBlock) continue;
+    // Skip headings, horizontal rules, empty lines, table rows, table separators, list-style metadata
+    if (
+      trimmed.startsWith("#") ||
+      trimmed === "---" ||
+      trimmed === "" ||
+      trimmed.startsWith("|") ||
+      /^[-|:\s]+$/.test(trimmed) ||
+      /^\*?\*?(Progetto|Stato|Issue|Token|Hex|Uso|Shadow|Nome|Tagline|Palette|Emozione|Tono)\*?\*?\s*[:|-]/.test(trimmed) ||
+      /^[-*]\s+\*?\*?\w+\*?\*?\s*:/.test(trimmed)
+    ) {
+      if (current.trim()) paragraphs.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += (current ? " " : "") + trimmed;
+  }
+  if (current.trim()) paragraphs.push(current.trim());
+
+  // Find first paragraph that's actual prose (long enough, looks like a sentence)
+  const summary = paragraphs.find(
+    (p) => p.length > 40 && /[a-zA-ZàèéìòùÀÈÉÌÒÙ]{3,}/.test(p) && !/^[`{(\[]/.test(p),
+  );
+  if (!summary) return "";
+  return summary.length > maxLen ? summary.slice(0, maxLen - 1) + "\u2026" : summary;
 }
 
 /* ── Accordion Tab Button ─────────────────── */
@@ -140,12 +171,7 @@ function SectionOutput({ issue }: { issue: Issue }) {
       <>
         <div className="px-4 py-4">
           <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm font-medium">{doc.title ?? doc.key}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {Math.round(doc.body.length / 1000)}k caratteri
-              </p>
-            </div>
+            <p className="text-sm font-medium">{doc.title ?? doc.key}</p>
             <button
               type="button"
               onClick={() => setFullscreen(true)}
@@ -192,7 +218,7 @@ function SectionOutput({ issue }: { issue: Issue }) {
                   {issue.title}
                 </h2>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {doc.title ?? doc.key} — {Math.round(doc.body.length / 1000)}k caratteri
+                  {doc.title ?? doc.key}
                 </p>
               </div>
               <button
@@ -229,65 +255,13 @@ function SectionOutput({ issue }: { issue: Issue }) {
   if (issue.companyId) {
     return (
       <div className="px-4 py-4 space-y-4">
-        <p className="text-xs text-muted-foreground italic">Nessun documento o run output disponibile.</p>
+        <p className="text-xs text-muted-foreground italic">Nessun documento disponibile.</p>
         <WorkspaceFileBrowser companyId={issue.companyId} issueId={issue.id} />
       </div>
     );
   }
 
   return <p className="px-4 py-4 text-xs text-muted-foreground italic">Nessun output disponibile.</p>;
-}
-
-/* ── Section: Obiettivo ───────────────────── */
-
-function SectionObiettivo({ description }: { description: string }) {
-  const obiettivo = parseObiettivo(description);
-  if (!obiettivo) {
-    return <p className="px-4 py-4 text-xs text-muted-foreground italic">Nessun obiettivo.</p>;
-  }
-  return (
-    <div className="px-4 py-4">
-      <MarkdownBody className="prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0.5">
-        {obiettivo}
-      </MarkdownBody>
-    </div>
-  );
-}
-
-/* ── Section: Riepilogo ───────────────────── */
-
-function SectionRiepilogo({ issueId }: { issueId: string }) {
-  const { data: comments, isLoading } = useQuery({
-    queryKey: queryKeys.issues.comments(issueId),
-    queryFn: () => issuesApi.listComments(issueId),
-    enabled: !!issueId,
-  });
-
-  const agentSummary = useMemo(() => {
-    if (!comments) return null;
-    const agentComments = comments.filter((c) => c.authorAgentId);
-    return agentComments.length > 0 ? agentComments[agentComments.length - 1] : null;
-  }, [comments]);
-
-  if (isLoading) {
-    return (
-      <div className="px-4 py-4">
-        <div className="animate-pulse bg-muted/30 rounded h-12" />
-      </div>
-    );
-  }
-
-  if (!agentSummary) {
-    return <p className="px-4 py-4 text-xs text-muted-foreground italic">Nessun riepilogo disponibile.</p>;
-  }
-
-  return (
-    <div className="px-4 py-4">
-      <MarkdownBody className="prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_strong]:text-foreground/90">
-        {agentSummary.body}
-      </MarkdownBody>
-    </div>
-  );
 }
 
 /* ── Section: Commenti ────────────────────── */
@@ -304,7 +278,6 @@ function SectionCommenti({ comments, agentMap }: { comments: IssueComment[] | un
     <div className="divide-y divide-red-500/10">
       {recentComments.map((comment) => {
         const agent = comment.authorAgentId ? agentMap.get(comment.authorAgentId) : null;
-        const isAgent = !!comment.authorAgentId;
         return (
           <div key={comment.id} className="px-4 py-3">
             <div className="flex items-center gap-2 mb-1">
@@ -347,12 +320,64 @@ export function IssueReviewLayout({
   const [openSection, setOpenSection] = useState<AccordionSection>("output");
   const [actionMode, setActionMode] = useState<"approve" | "revision" | "reject" | null>(null);
   const [feedback, setFeedback] = useState("");
+  const [showObjective, setShowObjective] = useState(false);
 
   const assignee = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId) : null;
   const toggleSection = (s: AccordionSection) => setOpenSection((prev) => (prev === s ? null : s));
 
   // Build parent chain
   const ancestors = issue.ancestors ?? [];
+
+  // Extract summary from agent's last comment or description
+  const { data: allComments } = useQuery({
+    queryKey: queryKeys.issues.comments(issue.id),
+    queryFn: () => issuesApi.listComments(issue.id),
+    enabled: !!issue.id,
+  });
+
+  const { data: documents } = useQuery({
+    queryKey: queryKeys.issues.documents(issue.id),
+    queryFn: () => issuesApi.listDocuments(issue.id),
+    enabled: !!issue.id,
+  });
+
+  const agentSummary = useMemo(() => {
+    if (!allComments) return null;
+    // Find the last agent comment that's substantive (not just "started" or "completed")
+    const agentComments = allComments
+      .filter((c) => c.authorAgentId && c.body.length > 50)
+      .reverse();
+    return agentComments[0]?.body ?? null;
+  }, [allComments]);
+
+  const outputSummary = useMemo(() => {
+    // Try sources in order, returning only clean prose summaries
+    const candidates = [
+      agentSummary,
+      documents?.[0] ? fixMarkdownBreaks(documents[0].body) : null,
+    ];
+    for (const src of candidates) {
+      if (!src) continue;
+      const s = extractSummary(src);
+      if (!s || s.length < 30) continue;
+      // Reject if it contains code artifacts
+      const looksLikeCode = /[`{}()<>]|rgba|px\b|bg-|text-|border-|backdrop|className|import |function |const |=>/.test(s);
+      // Reject if it's mostly bold/italic markers
+      const tooMuchMarkdown = (s.match(/\*\*/g)?.length ?? 0) > 2;
+      if (!looksLikeCode && !tooMuchMarkdown) return s;
+    }
+    return null;
+  }, [agentSummary, documents]);
+
+  // Objective — short version from description
+  const objectiveShort = useMemo(() => {
+    if (!issue.description) return null;
+    const firstHeading = issue.description.indexOf("\n## ");
+    const raw = firstHeading > 0 ? issue.description.slice(0, firstHeading).trim() : issue.description;
+    // Take first 200 chars
+    if (raw.length <= 200) return raw;
+    return raw.slice(0, 200) + "\u2026";
+  }, [issue.description]);
 
   const handleConfirmAction = () => {
     if (actionMode === "approve") onApprove(feedback || undefined);
@@ -364,7 +389,6 @@ export function IssueReviewLayout({
 
   const openAction = (action: "approve" | "revision" | "reject") => {
     if (actionMode === action) {
-      // Already open — confirm
       handleConfirmAction();
     } else {
       setActionMode(action);
@@ -394,71 +418,97 @@ export function IssueReviewLayout({
 
       {/* ── Review Card ── */}
       <div className="border border-red-500/25 bg-red-500/[0.02] rounded-xl overflow-hidden">
-        {/* Header */}
+        {/* ── Header: who did what + what to decide ── */}
         <div className="px-5 py-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-            <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-            <span className="text-red-400 font-medium">Approvazione richiesta</span>
-            <span className="text-muted-foreground/50">·</span>
-            <span>{timeAgo(issue.updatedAt)}</span>
-          </div>
-
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
+              {/* Issue identifier + title */}
               <h1 className="text-lg font-bold leading-tight mb-2">
                 {issue.identifier && (
                   <span className="text-muted-foreground font-mono text-sm mr-2">{issue.identifier}</span>
                 )}
                 {issue.title}
               </h1>
+
+              {/* Who completed it */}
               {assignee && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
                   <Identity name={assignee.name} size="sm" />
-                  <span>Completata da <span className="text-foreground font-medium">{assignee.name}</span></span>
+                  <span>
+                    Completata da <span className="text-foreground font-medium">{assignee.name}</span>
+                    <span className="text-muted-foreground/50 mx-1.5">·</span>
+                    {timeAgo(issue.updatedAt)}
+                  </span>
+                </div>
+              )}
+
+              {/* ── Summary: what was produced ── */}
+              {outputSummary && (
+                <p className="text-sm text-foreground/70 leading-relaxed mb-3">
+                  {outputSummary}
+                </p>
+              )}
+
+              {/* ── Objective toggle (collapsible context) ── */}
+              {objectiveShort && (
+                <button
+                  type="button"
+                  onClick={() => setShowObjective((v) => !v)}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors mb-2"
+                >
+                  {showObjective ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  Obiettivo originale
+                </button>
+              )}
+              {showObjective && objectiveShort && (
+                <div className="text-xs text-muted-foreground bg-white/[0.02] rounded-md px-3 py-2 mb-2 border border-border/20">
+                  <MarkdownBody className="prose-xs dark:prose-invert max-w-none [&_p]:my-0.5">
+                    {objectiveShort}
+                  </MarkdownBody>
                 </div>
               )}
             </div>
 
-            {/* Action buttons */}
-            <div className="flex items-center gap-2 shrink-0 pt-1">
+            {/* Action buttons — always visible */}
+            <div className="flex flex-col gap-2 shrink-0 pt-1">
+              <Button
+                size="sm"
+                className={cn("h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white min-w-[110px]",
+                  actionMode === "approve" && "ring-2 ring-emerald-400/50")}
+                onClick={() => openAction("approve")}
+                disabled={isPending}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                Approva
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className={cn("h-8 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10",
+                className={cn("h-8 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 min-w-[110px]",
                   actionMode === "revision" && "bg-amber-500/10 ring-1 ring-amber-500/30")}
                 onClick={() => openAction("revision")}
                 disabled={isPending}
               >
-                <RotateCcw className="h-3 w-3 mr-1" />
+                <RotateCcw className="h-3 w-3 mr-1.5" />
                 Revisione
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className={cn("h-8 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10",
+                className={cn("h-8 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10 min-w-[110px]",
                   actionMode === "reject" && "bg-red-500/10 ring-1 ring-red-500/30")}
                 onClick={() => openAction("reject")}
                 disabled={isPending}
               >
-                <XCircle className="h-3 w-3 mr-1" />
+                <XCircle className="h-3 w-3 mr-1.5" />
                 Rifiuta
-              </Button>
-              <Button
-                size="sm"
-                className={cn("h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white",
-                  actionMode === "approve" && "ring-2 ring-emerald-400/50")}
-                onClick={() => openAction("approve")}
-                disabled={isPending}
-              >
-                <CheckCircle2 className="h-3 w-3 mr-1" />
-                Approva
               </Button>
             </div>
           </div>
 
           {/* Feedback + confirm — shown for any action */}
           {actionMode && (
-            <div className="px-5 pb-4 space-y-2">
+            <div className="mt-3 space-y-2">
               <textarea
                 className={cn(
                   "w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 resize-none",
@@ -468,7 +518,7 @@ export function IssueReviewLayout({
                 )}
                 rows={2}
                 placeholder={
-                  actionMode === "approve" ? "Indicazioni per la fase successiva... (es. quale direzione scegli?)" :
+                  actionMode === "approve" ? "Indicazioni per la fase successiva... (opzionale)" :
                   actionMode === "revision" ? "Cosa deve migliorare o rifare?" :
                   "Motivo del rifiuto... (opzionale)"
                 }
@@ -504,11 +554,9 @@ export function IssueReviewLayout({
           )}
         </div>
 
-        {/* ── Accordion section buttons ── */}
+        {/* ── Tab bar: Output + Commenti + Sub-issue ── */}
         <div className="flex border-t border-red-500/10">
           <SectionButton label="Output" isOpen={openSection === "output"} onClick={() => toggleSection("output")} />
-          <SectionButton label="Obiettivo" isOpen={openSection === "obiettivo"} onClick={() => toggleSection("obiettivo")} />
-          <SectionButton label="Riepilogo" isOpen={openSection === "riepilogo"} onClick={() => toggleSection("riepilogo")} />
           <SectionButton
             label="Commenti"
             isOpen={openSection === "commenti"}
@@ -517,7 +565,7 @@ export function IssueReviewLayout({
           />
           {childIssues.length > 0 && (
             <SectionButton
-              label="Sub-issue"
+              label="Sotto-attivita'"
               isOpen={openSection === "subissues"}
               onClick={() => toggleSection("subissues")}
               badge={childIssues.length}
@@ -525,12 +573,10 @@ export function IssueReviewLayout({
           )}
         </div>
 
-        {/* ── Accordion content ── */}
+        {/* ── Tab content ── */}
         {openSection && (
           <div className="border-t border-red-500/10">
             {openSection === "output" && <SectionOutput issue={issue} />}
-            {openSection === "obiettivo" && <SectionObiettivo description={issue.description ?? ""} />}
-            {openSection === "riepilogo" && <SectionRiepilogo issueId={issue.id} />}
             {openSection === "commenti" && <SectionCommenti comments={comments} agentMap={agentMap} />}
             {openSection === "subissues" && (
               <div className="divide-y divide-red-500/10">
