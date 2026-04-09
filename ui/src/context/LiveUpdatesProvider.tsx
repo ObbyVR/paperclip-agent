@@ -473,6 +473,8 @@ function invalidateActivityQueries(
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(companyId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(companyId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(companyId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.notifications.list(companyId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.notifications.count(companyId) });
 
   const entityType = readString(payload.entityType);
   const entityId = readString(payload.entityId);

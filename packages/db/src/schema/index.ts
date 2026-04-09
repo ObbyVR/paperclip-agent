@@ -57,3 +57,4 @@ export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
 export { blueprints, blueprintRuns } from "./blueprints.js";
+export { notifications } from "./notifications.js";
