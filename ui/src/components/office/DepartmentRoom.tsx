@@ -136,9 +136,9 @@ export function DepartmentRoom({ department, pendingApprovals, lastComments, onA
         className="w-full flex items-center justify-between px-3 py-2 cursor-pointer hover:brightness-110 transition-all"
         style={{ backgroundColor: theme.accent + "15" }}
       >
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px]">{decor.icon}</span>
-          <span className="text-[11px] font-bold tracking-wide" style={{ color: theme.accent }}>
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span className="text-[11px] shrink-0">{decor.icon}</span>
+          <span className="text-[11px] font-bold tracking-wide truncate" style={{ color: theme.accent }}>
             {leaderName.toUpperCase()}
           </span>
         </div>

@@ -126,10 +126,16 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
         <img src="/sprites/office/chair.png" alt="" className="absolute pointer-events-none"
           style={{ left: deskW / 2 - 24, top: 4, width: 48, height: 72, imageRendering: "pixelated" }} draggable={false} />
 
-        {/* Pixel agent (sitting — z-10 so upper body is above desk, scale 1.5x = 72x96) */}
-        <div className="absolute z-10" style={{ left: deskW / 2 - 36, top: -10 }}>
-          <PixelAgent agentId={agent.id} status={agent.status} />
-        </div>
+        {/* Pixel agent — hidden when paused (agent is in break area) */}
+        {agent.status !== "paused" ? (
+          <div className="absolute z-10" style={{ left: deskW / 2 - 36, top: -10 }}>
+            <PixelAgent agentId={agent.id} status={agent.status} />
+          </div>
+        ) : (
+          <div className="absolute z-10 flex items-center justify-center" style={{ left: deskW / 2 - 20, top: 8, width: 40, height: 40 }}>
+            <span className="text-[18px] opacity-40" style={{ animation: "away-bob 3s ease-in-out infinite" }}>☕</span>
+          </div>
+        )}
 
         {/* Desk surface (covers agent legs, z-20 in front of agent torso bottom) */}
         <img src="/sprites/office/desk.png" alt="" className="absolute z-20 pointer-events-none"
@@ -230,6 +236,10 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
         @keyframes monitor-pulse {
           0%, 100% { opacity: 0.8; }
           50% { opacity: 1; }
+        }
+        @keyframes away-bob {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-3px); }
         }
       `}</style>
     </button>

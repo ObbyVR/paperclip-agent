@@ -50,7 +50,7 @@ export function BreakArea({ agents, onAgentClick }: BreakAreaProps) {
                 onClick={() => onAgentClick(agent)}
                 className="flex flex-col items-center gap-1 cursor-pointer group focus:outline-none transition-transform duration-200 hover:scale-105"
                 title={`${agent.name} — ${agent.status === "paused" ? "In pausa" : "Disponibile"}`}
-                style={{ animation: `agent-enter 400ms ease-out ${idx * 100}ms both` }}
+                style={{ animation: `walk-in 600ms ease-out ${idx * 150}ms both` }}
               >
                 <div className="group-hover:brightness-110 transition-all">
                   <PixelAgent agentId={agent.id} status={agent.status} scale={1.2} />
@@ -66,9 +66,11 @@ export function BreakArea({ agents, onAgentClick }: BreakAreaProps) {
       </div>
 
       <style>{`
-        @keyframes agent-enter {
-          from { opacity: 0; transform: translateY(12px) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
+        @keyframes walk-in {
+          0% { opacity: 0; transform: translateX(40px) scale(0.9); }
+          60% { opacity: 1; transform: translateX(-4px) scale(1.02); }
+          80% { transform: translateX(2px) scale(1); }
+          100% { opacity: 1; transform: translateX(0) scale(1); }
         }
       `}</style>
     </div>
