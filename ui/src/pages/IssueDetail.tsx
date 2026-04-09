@@ -843,11 +843,12 @@ export function IssueDetail() {
 
   const assigneeAgent = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId) : null;
   const isBlocked = issue.status === "blocked";
+  const needsReview = isBlocked || issue.status === "in_review";
   const hasDocuments = (issue.documentSummaries ?? []).length > 0;
   const hasDocumentsOrResults = hasDocuments || runResults.length > 0;
 
-  // ── Review mode: dedicated layout for blocked issues ──
-  if (isBlocked) {
+  // ── Review mode: dedicated layout for blocked/in_review issues ──
+  if (needsReview) {
     return (
       <>
         <IssueReviewLayout
@@ -1038,58 +1039,6 @@ export function IssueDetail() {
           </div>
         )}
       </div>
-
-      {/* ── Action bar: prominent when blocked ── */}
-      {isBlocked && (
-        <div className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/[0.04] px-4 py-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-red-400">Approvazione richiesta</p>
-            {assigneeAgent && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Completata da {assigneeAgent.name}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              size="sm"
-              className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => updateIssue.mutate({ status: "done" }, {
-                onSuccess: () => {
-                  issuesApi.addComment(issueId!, "Approvato dal founder.");
-                },
-              })}
-            >
-              <Check className="h-3.5 w-3.5 mr-1" />
-              Approva
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
-              onClick={() => {
-                issuesApi.addComment(issueId!, "Revisione richiesta dal founder.");
-                updateIssue.mutate({ status: "in_progress" });
-              }}
-            >
-              <Repeat className="h-3.5 w-3.5 mr-1" />
-              Revisione
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 border-red-500/30 text-red-400 hover:bg-red-500/10"
-              onClick={() => {
-                issuesApi.addComment(issueId!, "Rifiutato dal founder.");
-                updateIssue.mutate({ status: "cancelled" });
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1" />
-              Rifiuta
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* ── Unified accordion tab bar ── */}
       <IssueDetailAccordion

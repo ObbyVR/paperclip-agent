@@ -920,9 +920,18 @@ export function WorkflowGraph({
           const s = n.issue.status;
           statusCounts[s] = (statusCounts[s] ?? 0) + 1;
         }
-        const activeCount = (statusCounts.in_progress ?? 0) + (statusCounts.blocked ?? 0) + (statusCounts.in_review ?? 0);
+        const blockedCount = statusCounts.blocked ?? 0;
+        const reviewCount = statusCounts.in_review ?? 0;
+        const needsAttentionCount = blockedCount + reviewCount;
+        const failedInTree = nodes.filter((n) => failedIssueIds.has(n.issue.id));
+        const activeCount = (statusCounts.in_progress ?? 0) + blockedCount + reviewCount;
         const doneCount = (statusCounts.done ?? 0) + (statusCounts.cancelled ?? 0);
         const todoCount = statusCounts.todo ?? 0;
+
+        // Find the specific issues that need attention for diagnostic
+        const attentionIssues = nodes
+          .filter((n) => n.issue.status === "blocked" || n.issue.status === "in_review" || failedIssueIds.has(n.issue.id))
+          .map((n) => n.issue);
 
         return (
           <div
@@ -951,7 +960,10 @@ export function WorkflowGraph({
                 {isCollapsed && (
                   <span className="flex items-center gap-2 text-[10px] text-muted-foreground/70 ml-2 shrink-0">
                     <span>{nodes.length} task</span>
-                    {activeCount > 0 && <span className="text-cyan-400">{activeCount} attivi</span>}
+                    {failedInTree.length > 0 && <span className="text-red-400">{failedInTree.length} errore</span>}
+                    {blockedCount > 0 && <span className="text-amber-400">{blockedCount} da approvare</span>}
+                    {reviewCount > 0 && <span className="text-violet-400">{reviewCount} in revisione</span>}
+                    {activeCount > 0 && needsAttentionCount === 0 && failedInTree.length === 0 && <span className="text-cyan-400">{activeCount} attivi</span>}
                     {todoCount > 0 && <span>{todoCount} da fare</span>}
                     {doneCount > 0 && <span className="text-emerald-400/70">{doneCount} completati</span>}
                   </span>
@@ -974,9 +986,71 @@ export function WorkflowGraph({
               </div>
             </div>
 
+            {/* Diagnostic banner: shows which issues need attention */}
+            {attentionIssues.length > 0 && isCollapsed && (
+              <div className="flex flex-wrap items-center gap-2 mt-1 mb-0 px-1">
+                {attentionIssues.slice(0, 3).map((issue) => {
+                  const isFailed = failedIssueIds.has(issue.id);
+                  const isReview = issue.status === "in_review";
+                  return (
+                    <Link
+                      key={issue.id}
+                      to={`/issues/${issue.identifier ?? issue.id}`}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium no-underline transition-colors",
+                        isFailed
+                          ? "border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                          : isReview
+                            ? "border border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20"
+                            : "border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20",
+                      )}
+                    >
+                      {isFailed ? <AlertTriangle className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                      <span className="font-mono">{issue.identifier}</span>
+                      <span className="text-inherit/70">
+                        {isFailed ? "errore" : isReview ? "in revisione" : "da approvare"}
+                      </span>
+                    </Link>
+                  );
+                })}
+                {attentionIssues.length > 3 && (
+                  <span className="text-[10px] text-muted-foreground">+{attentionIssues.length - 3} altre</span>
+                )}
+              </div>
+            )}
+
             {!isCollapsed && (
               <>
-                {/* Zoom / pan controls */}
+                {/* Diagnostic strip: what needs attention in this workflow */}
+                {attentionIssues.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 mb-2 px-1">
+                    {attentionIssues.slice(0, 4).map((issue) => {
+                      const isFailed = failedIssueIds.has(issue.id);
+                      const isReview = issue.status === "in_review";
+                      return (
+                        <Link
+                          key={issue.id}
+                          to={`/issues/${issue.identifier ?? issue.id}`}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium no-underline transition-colors",
+                            isFailed
+                              ? "border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                              : isReview
+                                ? "border border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20"
+                                : "border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20",
+                          )}
+                        >
+                          {isFailed ? <AlertTriangle className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                          <span className="font-mono">{issue.identifier}</span>
+                          <span className="text-inherit/70">
+                            {isFailed ? "errore" : isReview ? "in revisione" : "da approvare"}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Zoom controls — scale only, no drag/pan */}
                 <div className="sticky top-2 right-2 z-10 flex gap-1 justify-end mb-2">
                   <button
