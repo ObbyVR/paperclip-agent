@@ -12,6 +12,24 @@ const STATUS_COLORS: Record<string, string> = {
   paused: "#f59e0b", error: "#ef4444", terminated: "#374151",
 };
 
+/** Short synth pop sound — no audio file needed */
+function playClickPop() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(600, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.1);
+    setTimeout(() => ctx.close(), 200);
+  } catch { /* silent fail if audio blocked */ }
+}
+
 const DESK_ITEMS = ["lamp", "mug", "eightBall", "stapler", "penHolder", "thermos", "duck"];
 const ITEM_SPRITES: Record<string, string> = {
   lamp: "/sprites/office/desk-lamp.png",
@@ -103,7 +121,7 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => { playClickPop(); onClick(); }}
       title={tooltipText}
       className="relative flex flex-col items-center cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded-lg transition-transform duration-200 hover:scale-[1.03] hover:-translate-y-0.5 active:scale-[0.98]"
       style={{ width: deskW + 20 }}

@@ -54,9 +54,15 @@ export function CEOOffice({ ceo, approvalQueue, pendingApprovals, lastComments, 
               </div>
             ))}
           </div>
-          {/* Stars */}
-          {[{ x: 10, y: 4 }, { x: 80, y: 8 }, { x: 140, y: 3 }, { x: 50, y: 6 }, { x: 120, y: 10 }].map((s, i) => (
-            <div key={i} className="absolute w-[2px] h-[2px] rounded-full bg-white/40" style={{ left: s.x, top: s.y }} />
+          {/* Stars — twinkling */}
+          {[{ x: 10, y: 4 }, { x: 80, y: 8 }, { x: 140, y: 3 }, { x: 50, y: 6 }, { x: 120, y: 10 }, { x: 30, y: 2 }, { x: 100, y: 5 }, { x: 160, y: 7 }].map((s, i) => (
+            <div key={i} className="absolute rounded-full" style={{
+              left: s.x, top: s.y,
+              width: i % 3 === 0 ? 2 : 1.5,
+              height: i % 3 === 0 ? 2 : 1.5,
+              backgroundColor: `rgba(255,255,255,${0.3 + (i % 3) * 0.15})`,
+              animation: `twinkle ${2 + (i % 4) * 0.7}s ease-in-out ${i * 0.4}s infinite`,
+            }} />
           ))}
         </div>
 
@@ -106,7 +112,7 @@ export function CEOOffice({ ceo, approvalQueue, pendingApprovals, lastComments, 
 
           {/* Queue agents */}
           <div className="flex flex-wrap justify-center gap-4">
-            {approvalQueue.map((qa) => {
+            {approvalQueue.map((qa, idx) => {
               const label = qa.count > 1 ? `${qa.text} (+${qa.count - 1})` : qa.text;
               const firstName = qa.agent.name.split("—")[0]?.trim().split(" ")[0] ?? "";
               return (
@@ -115,6 +121,7 @@ export function CEOOffice({ ceo, approvalQueue, pendingApprovals, lastComments, 
                   type="button"
                   onClick={() => onAgentClick(qa.agent)}
                   className="flex flex-col items-center gap-1 cursor-pointer group focus:outline-none"
+                  style={{ animation: `queue-walk-in 500ms ease-out ${idx * 120}ms both` }}
                 >
                   {/* Bubble */}
                   <div className="px-2 py-0.5 rounded bg-red-950/90 border border-red-500/60 text-[9px] text-red-200 truncate max-w-[120px]">
@@ -132,6 +139,17 @@ export function CEOOffice({ ceo, approvalQueue, pendingApprovals, lastComments, 
           </div>
         </div>
       )}
+      <style>{`
+        @keyframes twinkle {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 0.8; }
+        }
+        @keyframes queue-walk-in {
+          0% { opacity: 0; transform: translateX(30px) scale(0.9); }
+          70% { opacity: 1; transform: translateX(-3px) scale(1.01); }
+          100% { transform: translateX(0) scale(1); }
+        }
+      `}</style>
     </div>
   );
 }
