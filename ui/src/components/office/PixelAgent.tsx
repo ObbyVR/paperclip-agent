@@ -247,6 +247,113 @@ function drawIdleShort(ctx: CanvasRenderingContext2D, t: number, h: number, skin
   ctx.beginPath(); ctx.arc(x + 12, headY - 4, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 }
 
+/* ── POSE: Idle reading (seated, one hand on chin, looking at screen) ── */
+function drawIdleReading(ctx: CanvasRenderingContext2D, t: number, h: number, skin: string, hair: string, shirt: string, pants: string) {
+  const x = CW / 2;
+  const breathY = Math.sin(t * 1.2 + h) * 0.6;
+
+  const seatY = CH - 18;
+  const torsoY = seatY - 18 + breathY;
+  const headY = torsoY - 16;
+
+  // Legs
+  ctx.fillStyle = pants;
+  rr(ctx, x - 9, seatY - 2, 7, 12, 2); ctx.fill();
+  rr(ctx, x + 2, seatY - 2, 7, 12, 2); ctx.fill();
+  ctx.fillStyle = "#1a1a26";
+  rr(ctx, x - 10, seatY + 9, 8, 4, 1); ctx.fill();
+  rr(ctx, x + 2, seatY + 9, 8, 4, 1); ctx.fill();
+
+  // Torso (upright, slight lean)
+  ctx.fillStyle = shirt;
+  rr(ctx, x - 12, torsoY, 24, 18, 3); ctx.fill();
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.moveTo(x - 4, torsoY); ctx.lineTo(x, torsoY + 4); ctx.lineTo(x + 4, torsoY); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.06)"; ctx.fillRect(x - 10, torsoY + 1, 8, 16);
+
+  // Left arm (resting on desk)
+  ctx.fillStyle = shirt;
+  rr(ctx, x - 17, torsoY + 6, 6, 12, 2); ctx.fill();
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(x - 14, torsoY + 19, 3, 0, Math.PI * 2); ctx.fill();
+
+  // Right arm (hand on chin — thinking)
+  ctx.fillStyle = shirt;
+  rr(ctx, x + 10, torsoY + 2, 5, 8, 2); ctx.fill();
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(x + 8, headY + 10, 3, 0, Math.PI * 2); ctx.fill();
+
+  // Head (looking at screen, slight tilt)
+  drawHead(ctx, x, headY, skin, hair, h, "open", "neutral", 2);
+
+  // Status dot (gray)
+  ctx.fillStyle = STATUS_COLORS.idle; ctx.strokeStyle = "rgba(10,10,16,0.8)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x + 12, headY - 4, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  // Soft monitor glow (reading)
+  ctx.fillStyle = `rgba(100,140,255,${0.03 + Math.sin(t * 0.8) * 0.015})`;
+  ctx.fillRect(0, torsoY - 8, CW, 24);
+}
+
+/* ── POSE: Idle coffee (seated, holding mug, relaxed) ── */
+function drawIdleCoffee(ctx: CanvasRenderingContext2D, t: number, h: number, skin: string, hair: string, shirt: string, pants: string) {
+  const x = CW / 2;
+  const breathY = Math.sin(t * 1.0 + h) * 0.7;
+  const sipCycle = Math.sin(t * 0.5 + h);
+
+  const seatY = CH - 18;
+  const torsoY = seatY - 17 + breathY;
+  const headY = torsoY - 16;
+
+  // Legs (crossed)
+  ctx.fillStyle = pants;
+  rr(ctx, x - 9, seatY - 2, 7, 12, 2); ctx.fill();
+  rr(ctx, x + 1, seatY - 4, 7, 14, 2); ctx.fill(); // crossed leg higher
+  ctx.fillStyle = "#1a1a26";
+  rr(ctx, x - 10, seatY + 9, 8, 4, 1); ctx.fill();
+  rr(ctx, x + 1, seatY + 9, 8, 4, 1); ctx.fill();
+
+  // Torso (leaned back slightly)
+  ctx.save(); ctx.translate(x, torsoY + 9); ctx.rotate(-2 * Math.PI / 180); ctx.translate(-x, -(torsoY + 9));
+  ctx.fillStyle = shirt;
+  rr(ctx, x - 12, torsoY, 24, 18, 3); ctx.fill();
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.moveTo(x - 4, torsoY); ctx.lineTo(x, torsoY + 4); ctx.lineTo(x + 4, torsoY); ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // Left arm (resting)
+  ctx.fillStyle = shirt;
+  rr(ctx, x - 16, torsoY + 6, 5, 12, 2); ctx.fill();
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(x - 14, torsoY + 19, 3, 0, Math.PI * 2); ctx.fill();
+
+  // Right arm (holding mug up)
+  const mugY = torsoY + 2 + (sipCycle > 0.7 ? -3 : 0); // sip animation
+  ctx.fillStyle = shirt;
+  rr(ctx, x + 9, torsoY + 2, 5, 10, 2); ctx.fill();
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(x + 14, mugY + 8, 3, 0, Math.PI * 2); ctx.fill();
+
+  // Coffee mug
+  ctx.fillStyle = "#d4d4d8";
+  rr(ctx, x + 11, mugY + 4, 7, 6, 1); ctx.fill();
+  ctx.strokeStyle = "#a1a1aa"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(x + 19, mugY + 7, 2, -Math.PI * 0.5, Math.PI * 0.5); ctx.stroke(); // handle
+  // Steam
+  if (sipCycle < 0.7) {
+    ctx.fillStyle = `rgba(200,200,200,${0.2 + Math.sin(t * 2 + h) * 0.1})`;
+    ctx.beginPath(); ctx.arc(x + 14, mugY + 1 + Math.sin(t * 1.5) * 1, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 15, mugY - 2 + Math.sin(t * 1.5 + 1) * 1, 1, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Head (relaxed, slight smile)
+  drawHead(ctx, x, headY, skin, hair, h, "open", "smile", -1);
+
+  // Status dot (gray)
+  ctx.fillStyle = STATUS_COLORS.idle; ctx.strokeStyle = "rgba(10,10,16,0.8)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x + 12, headY - 4, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+}
+
 /* ── POSE: Idle long / paused (head on desk, sleeping) ── */
 function drawIdleLong(ctx: CanvasRenderingContext2D, t: number, h: number, skin: string, hair: string, shirt: string, pants: string) {
   const x = CW / 2;
@@ -367,9 +474,14 @@ function drawCharacter(ctx: CanvasRenderingContext2D, status: string, time: numb
       drawIdleLong(ctx, time, agentHash, skin, hair, shirt, pants);
       break;
     case "idle":
-    default:
-      drawIdleShort(ctx, time, agentHash, skin, hair, shirt, pants);
+    default: {
+      // Vary idle pose by agent hash so office looks alive
+      const idleVariant = agentHash % 3;
+      if (idleVariant === 0) drawIdleShort(ctx, time, agentHash, skin, hair, shirt, pants);
+      else if (idleVariant === 1) drawIdleReading(ctx, time, agentHash, skin, hair, shirt, pants);
+      else drawIdleCoffee(ctx, time, agentHash, skin, hair, shirt, pants);
       break;
+    }
   }
 }
 

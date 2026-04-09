@@ -66,17 +66,22 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
   const roleName = agent.name.split("—")[1]?.trim() ?? agent.role ?? "";
   const tooltipText = `${agent.name}\n${roleName} · ${agent.status}`;
 
-  // Monitor glow color based on status
+  // Monitor glow color based on status — visible distinction at a glance
   const monitorGlow: Record<string, string> = {
-    active: "rgba(34,197,94,0.25)", running: "rgba(6,182,212,0.25)",
-    idle: "rgba(0,0,0,0.3)", paused: "rgba(0,0,0,0.4)",
-    error: "rgba(239,68,68,0.3)", terminated: "rgba(0,0,0,0.5)",
+    active: "rgba(34,197,94,0.35)", running: "rgba(6,182,212,0.35)",
+    idle: "rgba(80,120,220,0.15)", paused: "rgba(245,158,11,0.12)",
+    error: "rgba(239,68,68,0.35)", terminated: "rgba(30,30,40,0.5)",
   };
   const glowColor = monitorGlow[agent.status] ?? monitorGlow.idle;
+  const isActive = agent.status === "active" || agent.status === "running";
 
-  // Dynamic sub-label
+  // Dynamic sub-label — show last activity when available
   let subLabel = "";
   let subLabelColor = "text-slate-500";
+  const lastSnippet = lastComment
+    ? ((lastComment.details as Record<string, unknown> | null)?.bodySnippet as string) ?? null
+    : null;
+
   if (agent.status === "active" || agent.status === "running") {
     subLabel = hasPending ? "In attesa review" : "Al lavoro...";
     subLabelColor = "text-green-500/70";
@@ -86,6 +91,10 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
   } else if (agent.status === "paused") {
     subLabel = "In pausa";
     subLabelColor = "text-amber-400/60";
+  } else if (lastSnippet) {
+    // Show truncated last activity instead of generic "Disponibile"
+    subLabel = lastSnippet.length > 28 ? lastSnippet.slice(0, 25) + "..." : lastSnippet;
+    subLabelColor = "text-slate-400/60";
   } else {
     subLabel = "Disponibile";
     subLabelColor = "text-slate-500/60";
@@ -142,12 +151,28 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
         )}
 
         {/* Monitor screen glow — z-40 overlay on monitor */}
-        {!isCeo && (
+        {isCeo ? (
+          /* CEO: glow on all 3 monitors */
+          <>
+            {[{ l: deskW / 2 - 48, t: 44, w: 26, h: 16 }, { l: deskW / 2 - 10, t: 41, w: 20, h: 18 }, { l: deskW / 2 + 22, t: 44, w: 26, h: 16 }].map((m, i) => (
+              <div key={i} className="absolute z-40 pointer-events-none rounded-sm"
+                style={{
+                  left: m.l, top: m.t, width: m.w, height: m.h,
+                  backgroundColor: glowColor,
+                  boxShadow: isActive ? `0 0 6px ${glowColor}` : undefined,
+                  animation: isActive ? "monitor-pulse 2s ease-in-out infinite" : agent.status === "error" ? "monitor-blink 1s ease-in-out infinite" : undefined,
+                  transition: "background-color 0.5s",
+                }}
+              />
+            ))}
+          </>
+        ) : (
           <div className="absolute z-40 pointer-events-none rounded-sm"
             style={{
               left: deskW / 2 - 16, top: 42, width: 32, height: 20,
               backgroundColor: glowColor,
-              animation: agent.status === "error" ? "monitor-blink 1s ease-in-out infinite" : undefined,
+              boxShadow: isActive ? `0 0 8px ${glowColor}, 0 -4px 12px ${glowColor}` : agent.status === "error" ? `0 0 6px rgba(239,68,68,0.3)` : undefined,
+              animation: agent.status === "error" ? "monitor-blink 1s ease-in-out infinite" : isActive ? "monitor-pulse 2s ease-in-out infinite" : undefined,
               transition: "background-color 0.5s",
             }}
           />
@@ -193,11 +218,15 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
         </div>
       )}
 
-      {/* Monitor blink animation for error */}
+      {/* Monitor animations */}
       <style>{`
         @keyframes monitor-blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
+        }
+        @keyframes monitor-pulse {
+          0%, 100% { opacity: 0.8; }
+          50% { opacity: 1; }
         }
       `}</style>
     </button>
