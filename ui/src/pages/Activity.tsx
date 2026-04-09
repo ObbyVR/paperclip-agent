@@ -130,6 +130,9 @@ function categorizeAction(action: string): ActivityCategory {
   ) return "comment";
   if (
     action.startsWith("heartbeat.") ||
+    action.startsWith("blueprint_run.") ||
+    action.startsWith("blueprint_step.") ||
+    action.startsWith("blueprint.") ||
     action === "issue.checked_out" ||
     action === "issue.released" ||
     action === "issue.suspend_expired" ||
@@ -141,7 +144,8 @@ function categorizeAction(action: string): ActivityCategory {
     action === "issue.created" ||
     action === "issue.document_created" ||
     action === "issue.document_updated" ||
-    action === "issue.attachment_added"
+    action === "issue.attachment_added" ||
+    action === "issue.approval_linked"
   ) return "decision";
   return "system";
 }
@@ -205,6 +209,25 @@ const ACTION_LABELS: Record<string, string> = {
   "company.join_requested": "Richiesta accesso",
   "company.join_approved": "Accesso approvato",
   "company.join_rejected": "Accesso rifiutato",
+  // Actions discovered from live server data
+  "agent.hire_created": "Assunzione proposta",
+  "agent.paused": "Agente in pausa",
+  "agent.resumed": "Agente ripreso",
+  "agent.terminated": "Agente terminato",
+  "agent.runtime_session_reset": "Sessione agente resettata",
+  "agent.skills_synced": "Competenze agente sincronizzate",
+  "agent.budget_updated": "Budget agente aggiornato",
+  "approval.requester_wakeup_queued": "Risveglio richiedente in coda",
+  "approval.commented": "Commento approvazione",
+  "blueprint_run.started": "Blueprint avviato",
+  "blueprint_step.completed": "Step completato",
+  "blueprint_run.completed": "Blueprint completato",
+  "blueprint_run.failed": "Blueprint fallito",
+  "company.created": "Azienda creata",
+  "company.skills_imported": "Competenze importate",
+  "instance.settings.global_ai_tier_updated": "Livello AI aggiornato",
+  "issue.approval_linked": "Approvazione collegata",
+  "project.workspace_created": "Workspace progetto creato",
 };
 
 function formatAction(action: string): string {

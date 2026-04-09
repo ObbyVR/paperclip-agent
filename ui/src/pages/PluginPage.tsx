@@ -92,7 +92,7 @@ export function PluginPage() {
   useEffect(() => {
     if (pageSlot) {
       setBreadcrumbs([
-        { label: "Plugins", href: "/instance/settings/plugins" },
+        { label: "Plugin", href: "/instance/settings/plugins" },
         { label: pageSlot.pluginDisplayName },
       ]);
     }
@@ -104,13 +104,13 @@ export function PluginPage() {
     }
     return (
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">Select a company to view this page.</p>
+        <p className="text-sm text-muted-foreground">Seleziona un'azienda per visualizzare questa pagina.</p>
       </div>
     );
   }
 
   if (!contributions) {
-    return <div className="text-sm text-muted-foreground">Loading…</div>;
+    return <div className="text-sm text-muted-foreground">Caricamento…</div>;
   }
 
   if (!pluginId && pluginRoutePath) {
@@ -120,7 +120,7 @@ export function PluginPage() {
     if (duplicateMatches.length > 1) {
       return (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          Multiple plugins declare the route <code>{pluginRoutePath}</code>. Use the plugin-id route until the conflict is resolved.
+          Piu' plugin dichiarano la route <code>{pluginRoutePath}</code>. Usa la route con plugin-id fino alla risoluzione del conflitto.
         </div>
       );
     }
@@ -141,7 +141,7 @@ export function PluginPage() {
         <Button variant="ghost" size="sm" asChild>
           <Link to={companyPrefix ? `/${companyPrefix}/dashboard` : "/dashboard"}>
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Back
+            Indietro
           </Link>
         </Button>
       </div>
