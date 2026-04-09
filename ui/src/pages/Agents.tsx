@@ -18,8 +18,9 @@ import { relativeTime, cn, agentRouteRef, agentUrl } from "../lib/utils";
 import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Bot, Plus, List, GitBranch, SlidersHorizontal, Clock } from "lucide-react";
+import { Bot, Plus, List, GitBranch, SlidersHorizontal, Clock, MessageSquare } from "lucide-react";
 import { AGENT_ROLE_LABELS, type Agent } from "@paperclipai/shared";
+import { AgentChatSheet } from "../components/AgentChatSheet";
 
 const adapterLabels: Record<string, string> = {
   claude_local: "Claude",
@@ -77,6 +78,7 @@ export function Agents() {
   const forceListView = isMobile;
   const effectiveView: "list" | "org" = forceListView ? "list" : view;
   const [showTerminated, setShowTerminated] = useState(false);
+  const [chatAgent, setChatAgent] = useState<Agent | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const { data: agents, isLoading, error } = useQuery({
@@ -276,6 +278,14 @@ export function Agents() {
                       <span className="w-20 flex justify-end">
                         <StatusBadge status={agent.status} />
                       </span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setChatAgent(agent); }}
+                        className="rounded-md p-1.5 text-muted-foreground opacity-0 transition-all hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                        title="Apri chat agente"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 }
@@ -311,6 +321,11 @@ export function Agents() {
           {t("agent.noHierarchy")}
         </p>
       )}
+      <AgentChatSheet
+        agent={chatAgent}
+        open={chatAgent !== null}
+        onOpenChange={(open) => { if (!open) setChatAgent(null); }}
+      />
     </div>
   );
 }
