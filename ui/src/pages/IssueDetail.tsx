@@ -173,7 +173,7 @@ function IssueDetailAccordion({
         <AccordionBtn label={t("issue.tab.output", "Output")} count={(issue.documents?.length ?? 0) + runResults.length} isOpen={openTab === "output"} onClick={() => toggle("output")} alert={(issue.isUnreadForMe || issue.status === "in_review") && openTab !== "output"} />
         {hasBriefing && <AccordionBtn label={t("issue.tab.briefing", "Briefing")} isOpen={openTab === "briefing"} onClick={() => toggle("briefing")} />}
         <AccordionBtn label={t("issue.tab.comments", "Commenti")} count={commentsWithRunMeta.length} isOpen={openTab === "commenti"} onClick={() => toggle("commenti")} alert={issue.isUnreadForMe && openTab !== "commenti"} />
-        <AccordionBtn label={t("issue.tab.activity", "Attivita'")} isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} alert={issue.isUnreadForMe && openTab !== "attivita"} />
+        {activity && activity.length > 0 && <AccordionBtn label={t("issue.tab.activity", "Attivita'")} isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} />}
         {hasSubIssues && <AccordionBtn label={t("issue.tab.subIssues", "Sotto-attivita'")} count={childIssues.length} isOpen={openTab === "sub-issues"} onClick={() => toggle("sub-issues")} />}
       </div>
 
@@ -263,6 +263,21 @@ function IssueDetailAccordion({
 
           {openTab === "sub-issues" && (
             <div className="border border-border rounded-lg divide-y divide-border">
+              {/* Summary counter */}
+              {(() => {
+                const done = childIssues.filter((c: any) => c.status === "done" || c.status === "cancelled").length;
+                const total = childIssues.length;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                return (
+                  <div className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground">
+                    <span>{done} di {total} completate</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[120px]">
+                      <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[10px]">{pct}%</span>
+                  </div>
+                );
+              })()}
               {childIssues.map((child: any) => (
                 <Link
                   key={child.id}
@@ -1018,26 +1033,17 @@ export function IssueDetail() {
           className="text-xl font-bold"
         />
 
-        {/* ── Model & token usage badge ── */}
+        {/* ── Model & cost — compact ── */}
         {issueCostSummary.hasTokens && (
-          <div className="flex items-center gap-2 flex-wrap mt-1">
+          <div className="flex items-center gap-1.5 flex-wrap mt-1">
             {issueCostSummary.models.map((m) => (
-              <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 text-[11px] font-medium">
+              <span key={m} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium">
                 {modelLabel(m)}
               </span>
             ))}
-            <span className="text-[11px] text-muted-foreground">
-              {formatTokens(issueCostSummary.totalTokens)} tokens
-              {issueCostSummary.cached > 0 && ` (${formatTokens(issueCostSummary.cached)} cached)`}
-            </span>
             {issueCostSummary.estimatedEur !== null && (
-              <span className="text-[11px] text-muted-foreground">
-                · ~{formatEur(issueCostSummary.estimatedEur)}
-              </span>
-            )}
-            {issueCostSummary.hasCost && issueCostSummary.cost > 0 && (
-              <span className="text-[11px] text-muted-foreground">
-                · ${issueCostSummary.cost.toFixed(4)}
+              <span className="text-[10px] text-muted-foreground/60">
+                ~{formatEur(issueCostSummary.estimatedEur)}
               </span>
             )}
           </div>
