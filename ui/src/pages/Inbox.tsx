@@ -420,7 +420,7 @@ export function Inbox() {
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
       pushToast({
         title: action === "approve" ? "Approvata" : "Rifiutata",
-        tone: action === "approve" ? "success" : "warning",
+        tone: action === "approve" ? "success" : "warn",
       });
     },
     onError: (err) => {

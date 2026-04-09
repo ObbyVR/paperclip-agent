@@ -276,7 +276,7 @@ export function Dashboard() {
       queryClient.invalidateQueries({ queryKey: queryKeys.liveRuns(selectedCompanyId!) });
       pushToast({
         title: action === "approve" ? "Approvata" : action === "reject" ? "Rifiutata" : "Revisione richiesta",
-        tone: action === "approve" ? "success" : action === "reject" ? "warning" : "info",
+        tone: action === "approve" ? "success" : action === "reject" ? "warn" : "info",
       });
     },
   });
