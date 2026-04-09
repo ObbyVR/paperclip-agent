@@ -814,3 +814,9 @@ a.paperclip-project-mention-chip {
   90% { opacity: 1; }
   100% { left: 100%; opacity: 0; }
 }
+
+/* ── Pixel Office: speech bubble gentle bounce ────── */
+@keyframes bounce-subtle {
+  0%, 100% { transform: translate(-50%, -100%) translateY(0); }
+  50% { transform: translate(-50%, -100%) translateY(-3px); }
+}

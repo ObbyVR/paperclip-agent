@@ -575,13 +575,22 @@ function recordToastHit(gate: ToastGate, category: string) {
   gate.cooldownHits.set(category, hits);
 }
 
+/** Categories that bypass rate-limiting (agent comments, join requests, failed runs). */
+const PRIORITY_TOAST_CATEGORIES = new Set([
+  "activity:issue.comment_added",
+  "activity:issue.commented",
+  "activity:join.requested",
+  "activity:join.request_replayed",
+  "run-status",
+]);
+
 function gatedPushToast(
   gate: ToastGate,
   pushToast: (toast: ToastInput) => string | null,
   category: string,
   toast: ToastInput,
 ) {
-  if (shouldSuppressToast(gate, category)) return;
+  if (!PRIORITY_TOAST_CATEGORIES.has(category) && shouldSuppressToast(gate, category)) return;
   const id = pushToast(toast);
   if (id !== null) recordToastHit(gate, category);
 }

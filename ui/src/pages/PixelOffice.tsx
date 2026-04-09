@@ -1,343 +1,602 @@
 /**
- * PixelOffice — full-screen isometric pixel art office view.
- * Shows agents as pixel characters at desks, with speech bubbles
- * for pending requests, and workflow boards on the wall.
+ * PixelOffice v4 — Bitmap sprite rendering with Canvas 2D.
  *
- * Style: Habbo Hotel inspired, CSS-only (no external sprite assets).
+ * Uses real sprite assets (MIT, from claude-office) for furniture,
+ * procedural characters with improved quality, and proper layering
+ * with y-sorting for depth.
  */
-import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { agentsApi } from "../api/agents";
 import { approvalsApi } from "../api/approvals";
 import { activityApi } from "../api/activity";
-import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
-import { timeAgo } from "../lib/timeAgo";
 import { cn } from "../lib/utils";
 import { AgentChatSheet } from "../components/AgentChatSheet";
 import type { Agent, Approval, ActivityEvent } from "@paperclipai/shared";
 
 /* ═══════════════════════════════════════════════════════════════
-   Isometric helpers
+   Constants
    ═══════════════════════════════════════════════════════════════ */
 
-const TILE = 48; // base tile size in px
-const ISO_ANGLE = 26.565; // atan(0.5) degrees — standard iso
-
-/** Convert grid (col, row) to pixel position for isometric projection */
-function isoToScreen(col: number, row: number): { x: number; y: number } {
-  return {
-    x: (col - row) * (TILE / 2),
-    y: (col + row) * (TILE / 4),
-  };
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Agent status → visual mapping
-   ═══════════════════════════════════════════════════════════════ */
+const CANVAS_W = 940;
+const BASE_CANVAS_H = 680;
+const BG_COLOR = "#1a1a1a";
 
 const STATUS_COLORS: Record<string, string> = {
-  active: "#22c55e",
-  running: "#06b6d4",
-  idle: "#6b7280",
-  paused: "#f59e0b",
-  error: "#ef4444",
-  terminated: "#374151",
+  active: "#22c55e", running: "#06b6d4", idle: "#6b7280",
+  paused: "#f59e0b", error: "#ef4444", terminated: "#374151",
 };
 
-const DESK_GLOW: Record<string, string> = {
-  active: "shadow-[0_0_12px_rgba(34,197,94,0.3)]",
-  running: "shadow-[0_0_12px_rgba(6,182,212,0.4)]",
-  idle: "",
-  paused: "shadow-[0_0_8px_rgba(245,158,11,0.2)]",
-  error: "shadow-[0_0_12px_rgba(239,68,68,0.3)]",
-};
+const SKIN_TONES = ["#f0c8a0", "#e0b090", "#d09868", "#b07848", "#905830"];
+const HAIR_COLORS = ["#1a1a2e", "#3d2b1f", "#8b4513", "#c5a880", "#b83a14", "#daa520", "#2d1b0e", "#4a2c2a"];
+const SHIRT_COLORS = [
+  "#4a6fa5", "#6b5b95", "#88b04b", "#ff6f61", "#45b8ac",
+  "#d4507a", "#5a7d9a", "#b5838d", "#e6a157", "#7c6f9a",
+  "#3a8a6e", "#c06040",
+];
+const PANT_COLORS = ["#2a2a3e", "#1a2a4a", "#3a2a2a", "#2a3a2a", "#333340"];
 
-/* ═══════════════════════════════════════════════════════════════
-   Pixel character component (CSS-only, no sprites)
-   ═══════════════════════════════════════════════════════════════ */
+const ACCESSORY_TINTS = [
+  null, "#87ceeb", "#98fb98", "#ffb6c1", "#dda0dd",
+  "#f0e68c", "#87cefa", "#ffa07a",
+];
 
-function PixelCharacter({
-  agent,
-  position,
-  hasBubble,
-  bubbleText,
-  bubbleUrgent,
-  onClick,
-  isSelected,
-}: {
-  agent: Agent;
-  position: { x: number; y: number };
-  hasBubble?: boolean;
-  bubbleText?: string;
-  bubbleUrgent?: boolean;
-  onClick: () => void;
-  isSelected?: boolean;
-}) {
-  const color = STATUS_COLORS[agent.status] ?? STATUS_COLORS.idle;
-  const skinTone = "#e8b89d";
-  const hairColors = ["#3d2b1f", "#1a1a2e", "#8b4513", "#c5a880", "#2d1b0e", "#4a2c2a"];
-  const hairColor = hairColors[Math.abs(hashStr(agent.id)) % hairColors.length];
-  const shirtColors = ["#4a6fa5", "#6b5b95", "#88b04b", "#ff6f61", "#45b8ac", "#92a8d1", "#f7cac9", "#b5838d"];
-  const shirtColor = shirtColors[Math.abs(hashStr(agent.name)) % shirtColors.length];
-
-  return (
-    <div
-      className={cn(
-        "absolute flex flex-col items-center cursor-pointer transition-all duration-500 z-10",
-        isSelected && "z-20 scale-110",
-      )}
-      style={{ left: position.x, top: position.y, transform: "translate(-50%, -100%)" }}
-      onClick={onClick}
-    >
-      {/* Speech bubble */}
-      {hasBubble && bubbleText && (
-        <div
-          className={cn(
-            "absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full",
-            "rounded-lg px-3 py-2 text-[10px] leading-tight max-w-[160px] min-w-[100px]",
-            "border shadow-lg animate-bounce-subtle",
-            bubbleUrgent
-              ? "bg-red-950 border-red-500/60 text-red-200"
-              : "bg-violet-950 border-violet-500/50 text-violet-200",
-          )}
-        >
-          <div className="line-clamp-2">{bubbleText}</div>
-          {/* Triangle pointer */}
-          <div
-            className={cn(
-              "absolute left-1/2 -translate-x-1/2 -bottom-[6px] w-0 h-0",
-              "border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent",
-              bubbleUrgent
-                ? "border-t-[6px] border-t-red-500/60"
-                : "border-t-[6px] border-t-violet-500/50",
-            )}
-          />
-        </div>
-      )}
-
-      {/* Character body — pixel art style using CSS boxes */}
-      <div className="relative" style={{ width: 24, height: 36, imageRendering: "pixelated" }}>
-        {/* Shadow */}
-        <div
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full opacity-30"
-          style={{ width: 20, height: 6, background: "#000" }}
-        />
-        {/* Legs */}
-        <div className="absolute bottom-[2px] left-[6px]" style={{ width: 4, height: 8, background: "#2a2a3a" }} />
-        <div className="absolute bottom-[2px] left-[14px]" style={{ width: 4, height: 8, background: "#2a2a3a" }} />
-        {/* Body / shirt */}
-        <div
-          className="absolute bottom-[10px] left-[4px] rounded-t-sm"
-          style={{ width: 16, height: 12, background: shirtColor }}
-        />
-        {/* Arms */}
-        <div
-          className="absolute bottom-[14px] left-[0px] rounded-sm"
-          style={{ width: 4, height: 8, background: shirtColor }}
-        />
-        <div
-          className="absolute bottom-[14px] right-[0px] rounded-sm"
-          style={{ width: 4, height: 8, background: shirtColor }}
-        />
-        {/* Head */}
-        <div
-          className="absolute bottom-[22px] left-[5px] rounded-t-md"
-          style={{ width: 14, height: 14, background: skinTone }}
-        />
-        {/* Hair */}
-        <div
-          className="absolute bottom-[30px] left-[4px] rounded-t-md"
-          style={{ width: 16, height: 6, background: hairColor }}
-        />
-        {/* Eyes */}
-        <div
-          className="absolute bottom-[26px] left-[8px]"
-          style={{ width: 2, height: 2, background: "#1a1a2e" }}
-        />
-        <div
-          className="absolute bottom-[26px] left-[14px]"
-          style={{ width: 2, height: 2, background: "#1a1a2e" }}
-        />
-        {/* Status dot */}
-        <div
-          className="absolute -bottom-1 -right-1 rounded-full border-2 border-[#0a0a10]"
-          style={{ width: 8, height: 8, background: color }}
-        />
-      </div>
-
-      {/* Name label */}
-      <div
-        className="mt-1 px-1.5 py-0.5 rounded text-center whitespace-nowrap"
-        style={{
-          fontFamily: "'Press Start 2P', monospace",
-          fontSize: 5,
-          color: "#888",
-          background: "#0a0a1080",
-          letterSpacing: "0.5px",
-        }}
-      >
-        {agent.name.split("—")[0]?.trim().split(" ")[0]?.toUpperCase()}
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Desk component (isometric CSS)
-   ═══════════════════════════════════════════════════════════════ */
-
-function IsometricDesk({
-  position,
-  status,
-  hasMonitor,
-}: {
-  position: { x: number; y: number };
-  status: string;
-  hasMonitor?: boolean;
-}) {
-  const glow = DESK_GLOW[status] ?? "";
-  return (
-    <div
-      className={cn("absolute", glow)}
-      style={{ left: position.x, top: position.y, transform: "translate(-50%, -50%)" }}
-    >
-      {/* Desk surface */}
-      <div
-        className="border border-amber-900/40"
-        style={{
-          width: 44,
-          height: 22,
-          background: "linear-gradient(135deg, #5c3d1e, #7a5230)",
-          borderRadius: 2,
-          transform: "rotateX(45deg) rotateZ(-45deg) scale(0.9)",
-        }}
-      />
-      {/* Monitor */}
-      {hasMonitor && (
-        <div
-          className="absolute -top-[14px] left-1/2 -translate-x-1/2"
-          style={{
-            width: 16,
-            height: 12,
-            background: status === "active" || status === "running" ? "#1a3a5c" : "#1a1a26",
-            border: "2px solid #333",
-            borderRadius: 1,
-          }}
-        >
-          {(status === "active" || status === "running") && (
-            <div className="w-2 h-1 mx-auto mt-1 rounded-sm bg-cyan-400/60 animate-pulse" />
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Floor tile
-   ═══════════════════════════════════════════════════════════════ */
-
-function FloorTile({ col, row, variant }: { col: number; row: number; variant?: "carpet" | "wood" }) {
-  const { x, y } = isoToScreen(col, row);
-  const baseColor = variant === "carpet" ? "#1e1b30" : (col + row) % 2 === 0 ? "#16161e" : "#1a1a24";
-  const borderColor = variant === "carpet" ? "#2a2640" : "#1e1e28";
-  return (
-    <div
-      className="absolute"
-      style={{
-        left: x,
-        top: y,
-        width: TILE,
-        height: TILE / 2,
-        background: baseColor,
-        borderRight: `1px solid ${borderColor}`,
-        borderBottom: `1px solid ${borderColor}`,
-        transform: "rotateX(60deg) rotateZ(-45deg)",
-        transformOrigin: "center",
-      }}
-    />
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Wall decoration (workflow board)
-   ═══════════════════════════════════════════════════════════════ */
-
-function WorkflowBoard({
-  title,
-  steps,
-  worker,
-  position,
-}: {
-  title: string;
-  steps: { status: "done" | "active" | "todo" | "blocked" }[];
-  worker?: string;
-  position: { x: number; y: number };
-}) {
-  const doneCount = steps.filter((s) => s.status === "done").length;
-  const pct = steps.length > 0 ? Math.round((doneCount / steps.length) * 100) : 0;
-  return (
-    <div
-      className="absolute rounded border border-border/50 bg-[#12121a] px-2 py-1.5"
-      style={{ left: position.x, top: position.y, minWidth: 90 }}
-    >
-      <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 5, color: "#666" }}>
-        {title.toUpperCase()}
-      </div>
-      <div className="flex gap-[3px] mt-1.5">
-        {steps.map((step, i) => (
-          <div
-            key={i}
-            className={cn(
-              "w-[8px] h-[8px] rounded-[1px] border",
-              step.status === "done" && "bg-green-500/40 border-green-500/60",
-              step.status === "active" && "bg-amber-500/40 border-amber-500/60 animate-pulse",
-              step.status === "todo" && "bg-[#1a1a26] border-[#2a2a3a]",
-              step.status === "blocked" && "bg-red-500/40 border-red-500/60",
-            )}
-          />
-        ))}
-      </div>
-      {/* Progress bar */}
-      <div className="h-[3px] bg-[#1a1a26] rounded-sm mt-1.5 overflow-hidden">
-        <div
-          className="h-full rounded-sm transition-all bg-green-500/70"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      {worker && (
-        <div className="mt-1 flex items-center gap-1" style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 4, color: "#a78bfa" }}>
-          <div className="w-[4px] h-[4px] rounded-full bg-green-500 animate-pulse" />
-          {worker}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Helper
-   ═══════════════════════════════════════════════════════════════ */
-
-function hashStr(s: string): number {
+function hash(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return h;
+  return Math.abs(h);
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Main Page
+   Sprite loader
+   ═══════════════════════════════════════════════════════════════ */
+
+const SPRITE_URLS: Record<string, string> = {
+  desk: "/sprites/office/desk.png",
+  chair: "/sprites/office/chair.png",
+  monitor: "/sprites/office/monitor_back.png",
+  keyboard: "/sprites/office/keyboard_back.png",
+  mug: "/sprites/office/coffee-mug.png",
+  plant: "/sprites/office/plant.png",
+  watercooler: "/sprites/office/watercooler.png",
+  coffeeMachine: "/sprites/office/coffee-machine.png",
+  floorTile: "/sprites/office/floor-tile.png",
+  lamp: "/sprites/office/desk-lamp.png",
+  penHolder: "/sprites/office/pen-holder.png",
+  eightBall: "/sprites/office/magic-8-ball.png",
+  duck: "/sprites/office/rubber-duck.png",
+  stapler: "/sprites/office/stapler.png",
+  thermos: "/sprites/office/thermos.png",
+  printer: "/sprites/office/old-printer.png",
+};
+
+type Textures = Record<string, HTMLImageElement>;
+
+function useTextures(): Textures | null {
+  const [textures, setTextures] = useState<Textures | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const entries = Object.entries(SPRITE_URLS);
+    Promise.all(
+      entries.map(
+        ([, url]) =>
+          new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = url;
+          }),
+      ),
+    ).then((images) => {
+      if (cancelled) return;
+      const map: Textures = {};
+      entries.forEach(([key], i) => { map[key] = images[i]; });
+      setTextures(map);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  return textures;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Drawing helpers
+   ═══════════════════════════════════════════════════════════════ */
+
+function drawSprite(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number, y: number,
+  w: number, h: number,
+  _opts?: { tint?: string | null; alpha?: number },
+) {
+  ctx.save();
+  if (_opts?.alpha !== undefined) ctx.globalAlpha = _opts.alpha;
+  ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Character drawing (procedural — capsule style like claude-office)
+   ═══════════════════════════════════════════════════════════════ */
+
+function drawAgent(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  _color: string,
+  status: string,
+  time: number,
+  agentHash: number,
+  isSelected: boolean,
+) {
+  const isWorking = status === "active" || status === "running";
+  const isError = status === "error";
+  const isPaused = status === "paused";
+  const skin = SKIN_TONES[agentHash % SKIN_TONES.length];
+  const hair = HAIR_COLORS[(agentHash >> 4) % HAIR_COLORS.length];
+  const shirt = SHIRT_COLORS[(agentHash >> 8) % SHIRT_COLORS.length];
+  const pants = PANT_COLORS[(agentHash >> 12) % PANT_COLORS.length];
+  const dotColor = STATUS_COLORS[status] ?? STATUS_COLORS.idle;
+
+  // Animation
+  const breathY = Math.sin(time * 2.5 + agentHash) * 1;
+  const armBob = isWorking ? Math.sin(time * 8 + agentHash) * 2.5 : 0;
+  const headTilt = isPaused ? Math.sin(time * 0.8 + agentHash) * 2 : 0;
+
+  // Character origin: x = center, y = feet/seat level
+  // Seated character is roughly 50px tall from seat to top of hair
+  const seatY = y; // where they sit
+  const torsoY = seatY - 18 + breathY;
+  const headY = torsoY - 16;
+
+  ctx.save();
+
+  // Selection ring
+  if (isSelected) {
+    ctx.strokeStyle = "#a78bfa";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.ellipse(x, seatY + 4, 24, 8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ── Legs (under desk, partially visible) ──
+  ctx.fillStyle = pants;
+  // Upper legs (seated, going forward)
+  roundRect(ctx, x - 9, seatY - 2, 7, 12, 2); ctx.fill();
+  roundRect(ctx, x + 2, seatY - 2, 7, 12, 2); ctx.fill();
+  // Shoes
+  ctx.fillStyle = "#1a1a26";
+  roundRect(ctx, x - 10, seatY + 9, 8, 4, 1); ctx.fill();
+  roundRect(ctx, x + 2, seatY + 9, 8, 4, 1); ctx.fill();
+
+  // ── Torso / shirt ──
+  ctx.fillStyle = shirt;
+  roundRect(ctx, x - 12, torsoY, 24, 18, 3);
+  ctx.fill();
+  // Shirt collar
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  ctx.moveTo(x - 4, torsoY);
+  ctx.lineTo(x, torsoY + 4);
+  ctx.lineTo(x + 4, torsoY);
+  ctx.closePath();
+  ctx.fill();
+  // Shirt highlight
+  ctx.fillStyle = "rgba(255,255,255,0.1)";
+  ctx.fillRect(x - 10, torsoY + 1, 8, 16);
+
+  // ── Arms ──
+  ctx.fillStyle = shirt;
+  // Left arm (shoulder to elbow)
+  roundRect(ctx, x - 17, torsoY + 2 + armBob, 6, 14, 2); ctx.fill();
+  // Right arm
+  roundRect(ctx, x + 11, torsoY + 2 - armBob, 6, 14, 2); ctx.fill();
+  // Hands (skin)
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(x - 14, torsoY + 17 + armBob, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 14, torsoY + 17 - armBob, 3, 0, Math.PI * 2); ctx.fill();
+
+  // ── Head ──
+  ctx.save();
+  if (headTilt) ctx.translate(x, headY + 8);
+  if (headTilt) ctx.rotate(headTilt * Math.PI / 180);
+  if (headTilt) ctx.translate(-x, -(headY + 8));
+
+  // Neck
+  ctx.fillStyle = skin;
+  ctx.fillRect(x - 3, torsoY - 2, 6, 4);
+
+  // Head shape
+  ctx.fillStyle = skin;
+  roundRect(ctx, x - 10, headY - 4, 20, 18, 6);
+  ctx.fill();
+
+  // Hair — varies by hash
+  const hairStyle = agentHash % 4;
+  ctx.fillStyle = hair;
+  if (hairStyle === 0) {
+    // Short crop
+    roundRect(ctx, x - 11, headY - 7, 22, 10, 5); ctx.fill();
+    ctx.fillRect(x - 11, headY - 2, 3, 8); // sideburn L
+    ctx.fillRect(x + 8, headY - 2, 3, 8); // sideburn R
+  } else if (hairStyle === 1) {
+    // Swept back
+    roundRect(ctx, x - 11, headY - 8, 22, 12, 6); ctx.fill();
+    roundRect(ctx, x - 12, headY - 4, 4, 10, 2); ctx.fill();
+    roundRect(ctx, x + 8, headY - 4, 4, 10, 2); ctx.fill();
+  } else if (hairStyle === 2) {
+    // Longer / bob
+    roundRect(ctx, x - 12, headY - 8, 24, 11, 6); ctx.fill();
+    roundRect(ctx, x - 13, headY - 2, 5, 14, 2); ctx.fill();
+    roundRect(ctx, x + 8, headY - 2, 5, 14, 2); ctx.fill();
+  } else {
+    // Spiky / messy
+    roundRect(ctx, x - 11, headY - 9, 22, 11, 4); ctx.fill();
+    ctx.fillRect(x - 8, headY - 11, 3, 5);
+    ctx.fillRect(x - 2, headY - 12, 3, 5);
+    ctx.fillRect(x + 4, headY - 11, 3, 5);
+  }
+
+  // Eyes
+  const eyeY = headY + 5;
+  ctx.fillStyle = "#fff";
+  roundRect(ctx, x - 7, eyeY, 5, 4, 2); ctx.fill();
+  roundRect(ctx, x + 2, eyeY, 5, 4, 2); ctx.fill();
+  // Pupils
+  ctx.fillStyle = "#1a1a2e";
+  const px = isWorking ? 1 : 0;
+  const py = isWorking ? 1 : 0;
+  ctx.fillRect(x - 5 + px, eyeY + 1 + py, 2, 2);
+  ctx.fillRect(x + 4 + px, eyeY + 1 + py, 2, 2);
+
+  // Eyebrows
+  ctx.fillStyle = hair;
+  ctx.fillRect(x - 7, eyeY - 2, 5, 1);
+  ctx.fillRect(x + 2, eyeY - 2, 5, 1);
+  if (isError) {
+    // Angry eyebrows for error
+    ctx.fillRect(x - 8, eyeY - 3, 3, 1);
+    ctx.fillRect(x + 5, eyeY - 3, 3, 1);
+  }
+
+  // Mouth
+  if (isWorking) {
+    // Slight open mouth (concentrating)
+    ctx.fillStyle = "#c07060";
+    roundRect(ctx, x - 2, headY + 11, 4, 2, 1); ctx.fill();
+  } else if (isError) {
+    // Frown
+    ctx.strokeStyle = "#a06050";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, headY + 14, 3, Math.PI * 0.2, Math.PI * 0.8);
+    ctx.stroke();
+  } else if (isPaused) {
+    // Sleepy line
+    ctx.fillStyle = "#a06050";
+    ctx.fillRect(x - 2, headY + 11, 4, 1);
+  } else {
+    // Slight smile
+    ctx.strokeStyle = "#a06050";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, headY + 10, 3, Math.PI * 0.2, Math.PI * 0.8);
+    ctx.stroke();
+  }
+
+  ctx.restore(); // head tilt
+
+  // ── Status dot ──
+  ctx.fillStyle = dotColor;
+  ctx.strokeStyle = "#0a0a10";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x + 12, headY - 4, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // ── Typing indicator dots ──
+  if (isWorking) {
+    const dotPhase = time * 5 + agentHash;
+    for (let d = 0; d < 3; d++) {
+      const a = 0.3 + 0.7 * Math.max(0, Math.sin(dotPhase + d * 1.2));
+      ctx.fillStyle = `rgba(34,197,94,${a})`;
+      ctx.beginPath();
+      ctx.arc(x - 6 + d * 6, seatY + 18, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ── ZZZ for paused ──
+  if (isPaused) {
+    ctx.font = "bold 8px sans-serif";
+    ctx.fillStyle = "rgba(245,158,11,0.6)";
+    const zPhase = time * 0.5;
+    ctx.fillText("z", x + 14, headY - 6 + Math.sin(zPhase) * 2);
+    ctx.fillText("Z", x + 18, headY - 14 + Math.sin(zPhase + 1) * 2);
+    ctx.fillText("Z", x + 22, headY - 22 + Math.sin(zPhase + 2) * 2);
+  }
+
+  ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Name tag + bubble
+   ═══════════════════════════════════════════════════════════════ */
+
+function drawNameTag(ctx: CanvasRenderingContext2D, x: number, y: number, name: string, status: string) {
+  const label = name.split("—")[0]?.trim().split(" ")[0] ?? "";
+  const dotColor = STATUS_COLORS[status] ?? STATUS_COLORS.idle;
+
+  ctx.font = "bold 11px -apple-system, sans-serif";
+  const nameW = ctx.measureText(label).width;
+  const padX = 8;
+  const h = 20;
+  const w = nameW + padX * 2 + 14; // +14 for dot
+
+  // Background
+  ctx.fillStyle = "rgba(15,23,42,0.90)";
+  roundRect(ctx, x - w / 2, y, w, h, 4);
+  ctx.fill();
+  ctx.strokeStyle = dotColor;
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x - w / 2, y, w, h, 4);
+  ctx.stroke();
+
+  // Status dot
+  ctx.fillStyle = dotColor;
+  ctx.beginPath();
+  ctx.arc(x - w / 2 + 10, y + h / 2, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Name
+  ctx.fillStyle = "#e2e8f0";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, x - w / 2 + 20, y + h / 2);
+}
+
+function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, urgent: boolean) {
+  ctx.font = "9px -apple-system, sans-serif";
+  const maxW = 130;
+  // Single line, truncated
+  const clean = text.replace(/^#+\s*/gm, "").replace(/\n/g, " ").trim();
+  const display = ctx.measureText(clean).width > maxW
+    ? clean.slice(0, 30) + "…"
+    : clean;
+  const textW = ctx.measureText(display).width;
+  const padX = 6;
+  const padY = 4;
+  const w = textW + padX * 2;
+  const h = 16;
+  const bx = x - w / 2;
+  const by = y - h - 6;
+
+  // Body
+  ctx.fillStyle = urgent ? "rgba(127,29,29,0.92)" : "rgba(30,27,50,0.92)";
+  ctx.strokeStyle = urgent ? "rgba(239,68,68,0.6)" : "rgba(139,92,246,0.5)";
+  ctx.lineWidth = 1;
+  roundRect(ctx, bx, by, w, h, 5);
+  ctx.fill();
+  ctx.stroke();
+
+  // Arrow
+  ctx.beginPath();
+  ctx.moveTo(x - 4, by + h);
+  ctx.lineTo(x, by + h + 4);
+  ctx.lineTo(x + 4, by + h);
+  ctx.closePath();
+  ctx.fillStyle = urgent ? "rgba(127,29,29,0.92)" : "rgba(30,27,50,0.92)";
+  ctx.fill();
+
+  // Text
+  ctx.fillStyle = urgent ? "#fca5a5" : "#c4b5fd";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(display, x, by + h / 2);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Main render loop
+   ═══════════════════════════════════════════════════════════════ */
+
+interface DeskSlot {
+  agent: Agent;
+  deskX: number;
+  deskY: number;
+  color: string;
+  accessoryTint: string | null;
+  accessoryKey: string;
+  bubble?: { text: string; urgent: boolean };
+}
+
+const DESK_ITEMS = ["lamp", "mug", "eightBall", "stapler", "penHolder", "thermos", "duck"];
+
+function renderFrame(
+  ctx: CanvasRenderingContext2D,
+  tex: Textures,
+  slots: DeskSlot[],
+  time: number,
+  selectedId: string | null,
+  hoverId: string | null,
+  canvasH: number,
+) {
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, CANVAS_W, canvasH);
+
+  // ── Background ──
+  ctx.fillStyle = BG_COLOR;
+  ctx.fillRect(0, 0, CANVAS_W, canvasH);
+
+  // ── Floor tiles ──
+  const floorTile = tex.floorTile;
+  if (floorTile) {
+    const tileS = 50;
+    for (let ty = 0; ty < canvasH; ty += tileS) {
+      for (let tx = 0; tx < CANVAS_W; tx += tileS) {
+        ctx.drawImage(floorTile, tx, ty, tileS, tileS);
+      }
+    }
+  }
+
+  // ── Wall (top bar) ──
+  const wallGrad = ctx.createLinearGradient(0, 0, 0, 100);
+  wallGrad.addColorStop(0, "#2a2a3a");
+  wallGrad.addColorStop(1, "#1f1f2e");
+  ctx.fillStyle = wallGrad;
+  ctx.fillRect(0, 0, CANVAS_W, 100);
+  // Baseboard
+  ctx.fillStyle = "#3a3a4a";
+  ctx.fillRect(0, 97, CANVAS_W, 4);
+
+  // ── Decorations ──
+  if (tex.plant) {
+    drawSprite(ctx, tex.plant, 10, 50, 60, 80);
+    drawSprite(ctx, tex.plant, CANVAS_W - 80, 55, 60, 80);
+  }
+  if (tex.watercooler) {
+    drawSprite(ctx, tex.watercooler, CANVAS_W - 150, 40, 40, 120);
+  }
+  if (tex.coffeeMachine) {
+    drawSprite(ctx, tex.coffeeMachine, 90, 14, 70, 76);
+  }
+  if (tex.printer) {
+    drawSprite(ctx, tex.printer, 190, 18, 80, 74);
+  }
+
+  // ── Y-sorted rendering ──
+  const sorted = [...slots].sort((a, b) => a.deskY - b.deskY);
+
+  for (const slot of sorted) {
+    const { deskX, deskY, agent, color, accessoryKey } = slot;
+    const isSelected = selectedId === agent.id;
+    const isHovered = hoverId === agent.id;
+    const agentHash = hash(agent.id);
+
+    // Hover glow under the whole desk area
+    if (isHovered && !isSelected) {
+      ctx.save();
+      ctx.fillStyle = "rgba(167,139,250,0.06)";
+      roundRect(ctx, deskX - 80, deskY - 20, 160, 140, 8);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 1. Chair (furthest back)
+    if (tex.chair) {
+      drawSprite(ctx, tex.chair, deskX - 20, deskY - 8, 40, 64);
+    }
+
+    // 2. Monitor (behind agent, on desk surface)
+    if (tex.monitor) {
+      drawSprite(ctx, tex.monitor, deskX - 24, deskY - 4, 48, 40);
+    }
+
+    // 3. Agent character (sitting in front of monitor)
+    const agentFeetY = deskY + 16;
+    drawAgent(ctx, deskX, agentFeetY, color, agent.status, time, agentHash, isSelected || isHovered);
+
+    // 4. Desk surface (in front of agent's lower body)
+    if (tex.desk) {
+      drawSprite(ctx, tex.desk, deskX - 75, deskY + 28, 150, 80);
+    }
+
+    // 5. Keyboard (on desk surface)
+    if (tex.keyboard) {
+      drawSprite(ctx, tex.keyboard, deskX - 24, deskY + 40, 48, 13);
+    }
+
+    // 6. Desk accessory (on desk, right side)
+    const accTex = tex[accessoryKey];
+    if (accTex) {
+      drawSprite(ctx, accTex, deskX + 38, deskY + 34, 22, 22);
+    }
+
+    // 7. Name tag (below desk)
+    drawNameTag(ctx, deskX, deskY + 110, agent.name, agent.status);
+  }
+
+  // ── Bubbles drawn LAST (top layer, above everything) ──
+  for (const slot of sorted) {
+    if (slot.bubble) {
+      drawBubble(ctx, slot.deskX, slot.deskY - 60, slot.bubble.text, slot.bubble.urgent);
+    }
+  }
+
+  // ── Wall clock ──
+  drawWallClock(ctx, CANVAS_W / 2, 45, time);
+
+  // ── Company name on wall ──
+  ctx.font = "bold 16px -apple-system, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.15)";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("PAPERCLIP AI", CANVAS_W / 2, 20);
+}
+
+function drawWallClock(ctx: CanvasRenderingContext2D, x: number, y: number, time: number) {
+  ctx.save();
+  // Frame
+  ctx.fillStyle = "#111";
+  ctx.strokeStyle = "#555";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, 18, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // Face
+  ctx.fillStyle = "#1a1a2a";
+  ctx.beginPath(); ctx.arc(x, y, 15, 0, Math.PI * 2); ctx.fill();
+  // Hour marks
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+    ctx.fillStyle = "#555";
+    ctx.fillRect(x + Math.cos(angle) * 12 - 1, y + Math.sin(angle) * 12 - 1, 2, 2);
+  }
+  // Hands (based on real time offset for variety)
+  const hourAngle = (time / 120) * Math.PI * 2 - Math.PI / 2;
+  const minAngle = (time / 10) * Math.PI * 2 - Math.PI / 2;
+  ctx.strokeStyle = "#999";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(hourAngle) * 8, y + Math.sin(hourAngle) * 8); ctx.stroke();
+  ctx.strokeStyle = "#ccc";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(minAngle) * 11, y + Math.sin(minAngle) * 11); ctx.stroke();
+  // Center
+  ctx.fillStyle = "#ef4444";
+  ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   React component
    ═══════════════════════════════════════════════════════════════ */
 
 export function PixelOffice() {
-  const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const [chatAgent, setChatAgent] = useState<Agent | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+  const hoverIdRef = useRef<string | null>(null);
+  const textures = useTextures();
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Ufficio" }]);
@@ -363,9 +622,9 @@ export function PixelOffice() {
     enabled: !!selectedCompanyId,
   });
 
-  /* ── Derived data ── */
+  /* ── Derived ── */
   const activeAgents = useMemo(
-    () => (agents ?? []).filter((a) => a.status !== "terminated").slice(0, 12),
+    () => (agents ?? []).filter((a) => a.status !== "terminated"),
     [agents],
   );
 
@@ -392,185 +651,176 @@ export function PixelOffice() {
     return map;
   }, [activity]);
 
-  /* ── Layout: assign desk positions in a grid ── */
-  const agentPositions = useMemo(() => {
-    const positions: { agent: Agent; deskX: number; deskY: number; charX: number; charY: number }[] = [];
+  /* ── Desk slots ── */
+  const { slots, canvasH } = useMemo<{ slots: DeskSlot[]; canvasH: number }>(() => {
     const cols = 4;
-    const startX = 200;
-    const startY = 160;
-    const spacingX = 130;
-    const spacingY = 90;
+    const startX = 130;
+    const startY = 140;
+    const spacingX = 200;
+    const spacingY = 200;
+    const rows = Math.ceil(activeAgents.length / cols);
+    const canvasH = Math.max(BASE_CANVAS_H, startY + rows * spacingY + 50);
 
-    activeAgents.forEach((agent, i) => {
+    const slots = activeAgents.map((agent, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const deskX = startX + col * spacingX;
       const deskY = startY + row * spacingY;
-      positions.push({
+
+      const pending = pendingApprovalsByAgent.get(agent.id);
+      const comment = lastCommentByAgent.get(agent.id);
+      const hasPending = pending && pending.length > 0;
+
+      let bubble: DeskSlot["bubble"] = undefined;
+      if (hasPending) {
+        const text = (pending[0].payload as Record<string, unknown> | null)?.stepTitle as string ??
+          pending[0].type.replaceAll("_", " ");
+        bubble = { text, urgent: true };
+      } else if (comment) {
+        const text = (comment.details as Record<string, unknown> | null)?.bodySnippet as string;
+        if (text) bubble = { text: text.length > 60 ? text.slice(0, 57) + "…" : text, urgent: false };
+      }
+
+      const accessoryIdx = i % DESK_ITEMS.length;
+
+      return {
         agent,
         deskX,
         deskY,
-        charX: deskX,
-        charY: deskY - 8,
-      });
+        color: SHIRT_COLORS[hash(agent.id) % SHIRT_COLORS.length],
+        accessoryTint: ACCESSORY_TINTS[i % ACCESSORY_TINTS.length],
+        accessoryKey: DESK_ITEMS[accessoryIdx],
+        bubble,
+      };
     });
-    return positions;
+    return { slots, canvasH };
+  }, [activeAgents, pendingApprovalsByAgent, lastCommentByAgent]);
+
+  /* ── Status counts ── */
+  const statusCounts = useMemo(() => {
+    const c = { active: 0, idle: 0, paused: 0, error: 0 };
+    for (const a of activeAgents) {
+      if (a.status === "active" || a.status === "running") c.active++;
+      else if (a.status === "paused") c.paused++;
+      else if (a.status === "error") c.error++;
+      else c.idle++;
+    }
+    return c;
   }, [activeAgents]);
 
-  /* ── Status counts for footer ── */
-  const statusCounts = useMemo(() => {
-    const counts = { active: 0, idle: 0, paused: 0, error: 0 };
-    for (const a of activeAgents) {
-      if (a.status === "active" || a.status === "running") counts.active++;
-      else if (a.status === "paused") counts.paused++;
-      else if (a.status === "error") counts.error++;
-      else counts.idle++;
+  /* ── Animation loop ── */
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !textures) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let running = true;
+    const loop = (timestamp: number) => {
+      if (!running) return;
+      renderFrame(ctx, textures, slots, timestamp / 1000, chatAgent?.id ?? null, hoverIdRef.current, canvasH);
+      animRef.current = requestAnimationFrame(loop);
+    };
+    animRef.current = requestAnimationFrame(loop);
+    return () => { running = false; cancelAnimationFrame(animRef.current); };
+  }, [slots, chatAgent, textures, canvasH]);
+
+  /* ── Click detection ── */
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = CANVAS_W / rect.width;
+    const scaleY = canvasH / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+
+    for (const slot of slots) {
+      const dx = mx - slot.deskX;
+      const dy = my - (slot.deskY + 10); // agent feet Y
+      if (Math.abs(dx) < 25 && dy > -70 && dy < 10) {
+        setChatAgent(slot.agent);
+        return;
+      }
     }
-    return counts;
-  }, [activeAgents]);
+    setChatAgent(null);
+  }, [slots]);
+
+  /* ── Cursor + hover tracking ── */
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = CANVAS_W / rect.width;
+    const scaleY = canvasH / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+
+    let foundId: string | null = null;
+    for (const slot of slots) {
+      const dx = mx - slot.deskX;
+      const dy = my - (slot.deskY + 16);
+      if (Math.abs(dx) < 30 && dy > -70 && dy < 20) { foundId = slot.agent.id; break; }
+    }
+    hoverIdRef.current = foundId;
+    canvas.style.cursor = foundId ? "pointer" : "default";
+  }, [slots]);
+
+  const handleMouseLeave = useCallback(() => { hoverIdRef.current = null; }, []);
+
+  // Loading state
+  if (!textures) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-48px)]">
+        <div className="flex-1 flex items-center justify-center bg-[#1a1a1a]">
+          <div className="text-muted-foreground text-sm animate-pulse">Caricamento ufficio…</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-48px)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-[#0a0a10]">
-        <div className="flex items-center gap-2">
-          <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 11, color: "#a78bfa" }}>
-            🏢 UFFICIO
-          </span>
-          <div className="flex items-center gap-1.5 ml-3">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-[#0c0c14]">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-violet-400 tracking-wide">UFFICIO</span>
+          <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-[10px] text-muted-foreground">LIVE</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Live</span>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500" /> {statusCounts.active} attivi</span>
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-500" /> {statusCounts.idle} idle</span>
-          {statusCounts.paused > 0 && <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> {statusCounts.paused} in pausa</span>}
-          {statusCounts.error > 0 && <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /> {statusCounts.error} errore</span>}
+        <div className="flex items-center gap-5 text-[11px]">
+          <span className="flex items-center gap-1.5 text-green-400">
+            <span className="w-2 h-2 rounded-full bg-green-500" /> {statusCounts.active} attivi
+          </span>
+          <span className="flex items-center gap-1.5 text-gray-400">
+            <span className="w-2 h-2 rounded-full bg-gray-500" /> {statusCounts.idle} idle
+          </span>
+          {statusCounts.paused > 0 && (
+            <span className="flex items-center gap-1.5 text-amber-400">
+              <span className="w-2 h-2 rounded-full bg-amber-500" /> {statusCounts.paused} in pausa
+            </span>
+          )}
+          {statusCounts.error > 0 && (
+            <span className="flex items-center gap-1.5 text-red-400">
+              <span className="w-2 h-2 rounded-full bg-red-500" /> {statusCounts.error} errore
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Office scene */}
-      <div className="flex-1 relative overflow-auto bg-[#0a0a10]">
-        {/* Grid floor pattern */}
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `
-              linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)
-            `,
-            backgroundSize: "32px 32px",
-          }}
+      {/* Canvas */}
+      <div className="flex-1 overflow-auto bg-[#1a1a1a]">
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_W}
+          height={canvasH}
+          style={{ imageRendering: "pixelated", width: CANVAS_W, height: canvasH }}
+          onClick={handleCanvasClick}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
         />
-
-        {/* Wall / back area */}
-        <div
-          className="absolute top-0 left-0 right-0 border-b border-border/30"
-          style={{ height: 80, background: "linear-gradient(180deg, #0f0f18, #0a0a10)" }}
-        />
-
-        {/* Workflow boards on the wall */}
-        <WorkflowBoard
-          title="Mokita Copy"
-          steps={[
-            { status: "done" },
-            { status: "done" },
-            { status: "active" },
-            { status: "todo" },
-            { status: "todo" },
-          ]}
-          worker="Chiara"
-          position={{ x: 30, y: 10 }}
-        />
-        <WorkflowBoard
-          title="FRIDA UI"
-          steps={[
-            { status: "done" },
-            { status: "done" },
-            { status: "done" },
-            { status: "done" },
-            { status: "blocked" },
-          ]}
-          worker="Giulia ⏸"
-          position={{ x: 160, y: 10 }}
-        />
-        <WorkflowBoard
-          title="B&B Copy"
-          steps={[{ status: "todo" }, { status: "todo" }, { status: "todo" }]}
-          position={{ x: 290, y: 10 }}
-        />
-        <WorkflowBoard
-          title="Trendloot"
-          steps={[
-            { status: "done" },
-            { status: "done" },
-            { status: "done" },
-            { status: "done" },
-            { status: "done" },
-            { status: "blocked" },
-          ]}
-          position={{ x: 420, y: 10 }}
-        />
-
-        {/* Decorative elements */}
-        {/* Plant */}
-        <div className="absolute" style={{ left: 560, top: 70 }}>
-          <div style={{ width: 8, height: 14, background: "#2d5a3a", borderRadius: "4px 4px 0 0", marginLeft: 4 }} />
-          <div style={{ width: 16, height: 10, background: "#1a3a25", borderRadius: "8px 8px 0 0" }} />
-          <div style={{ width: 10, height: 6, background: "#5c3d1e", borderRadius: 1, marginLeft: 3 }} />
-        </div>
-        {/* Water cooler */}
-        <div className="absolute" style={{ left: 600, top: 110 }}>
-          <div style={{ width: 12, height: 8, background: "#3a7ca5", borderRadius: 2 }} />
-          <div style={{ width: 8, height: 16, background: "#88c8e8", borderRadius: 1, marginLeft: 2 }} />
-          <div style={{ width: 14, height: 4, background: "#2a2a3a", borderRadius: 1 }} />
-        </div>
-
-        {/* Founder desk (special, bottom right) */}
-        <div
-          className="absolute flex flex-col items-center"
-          style={{ right: 60, bottom: 40 }}
-        >
-          <div className="relative">
-            <div
-              className="border-2 border-violet-500/50 rounded bg-[#1a1a26] shadow-[0_0_20px_rgba(124,58,237,0.15)]"
-              style={{ width: 56, height: 28 }}
-            />
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-xl">🧑‍💼</div>
-          </div>
-          <div className="mt-1" style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 5, color: "#a78bfa" }}>
-            FOUNDER
-          </div>
-        </div>
-
-        {/* Agent desks + characters */}
-        {agentPositions.map(({ agent, deskX, deskY, charX, charY }) => {
-          const pendingApprovals = pendingApprovalsByAgent.get(agent.id);
-          const lastComment = lastCommentByAgent.get(agent.id);
-          const hasPending = pendingApprovals && pendingApprovals.length > 0;
-          const snippet = hasPending
-            ? (pendingApprovals[0].payload as Record<string, unknown> | null)?.stepTitle as string ??
-              pendingApprovals[0].type.replaceAll("_", " ")
-            : lastComment
-              ? (lastComment.details as Record<string, unknown> | null)?.bodySnippet as string ?? undefined
-              : undefined;
-
-          return (
-            <div key={agent.id}>
-              <IsometricDesk position={{ x: deskX, y: deskY }} status={agent.status} hasMonitor />
-              <PixelCharacter
-                agent={agent}
-                position={{ x: charX, y: charY }}
-                hasBubble={!!hasPending || (!!snippet && snippet.length > 0)}
-                bubbleText={snippet ? (snippet.length > 50 ? snippet.slice(0, 47) + "..." : snippet) : undefined}
-                bubbleUrgent={!!hasPending}
-                onClick={() => setChatAgent(agent)}
-                isSelected={chatAgent?.id === agent.id}
-              />
-            </div>
-          );
-        })}
       </div>
 
       {/* Chat sheet */}
