@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
+import { Link } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "../lib/utils";
 import { Button } from "@/components/ui/button";
@@ -852,6 +853,7 @@ export function AlertDrawer({
   const [wakeAgentOnSend, setWakeAgentOnSend] = useState(true);
   const [suspendUntil, setSuspendUntil] = useState<string | null>(null);
   const [suspendCustomDate, setSuspendCustomDate] = useState<string>("");
+  // Default to "richiesta" tab when item has a pending request (review/blocked issues)
   const [activeTab, setActiveTab] = useState<DrawerTab>("briefing");
   const panelRef = useRef<HTMLElement | null>(null);
 
@@ -1593,26 +1595,37 @@ export function AlertDrawer({
                       <MarkdownBody className="text-sm text-foreground">
                         {req.snippet}
                       </MarkdownBody>
-                      <div className="mt-3 flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-7 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-                          onClick={() => openActionBar("approve")}
-                          disabled={addCommentMutation.isPending}
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          Approva e procedi
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setActiveTab("messaggi")}
-                        >
-                          Vai al messaggio completo
-                        </Button>
+                      <div className="mt-3 flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+                            onClick={() => openActionBar("approve")}
+                            disabled={addCommentMutation.isPending}
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            Approva e procedi
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1.5 border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
+                            onClick={() => openActionBar("review")}
+                            disabled={addCommentMutation.isPending}
+                          >
+                            Revisione
+                          </Button>
+                        </div>
+                        {chatTargetIssue && (
+                          <Link
+                            to={`/issues/${chatTargetIssue.identifier ?? chatTargetIssue.id}`}
+                            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors no-underline"
+                          >
+                            Apri dettaglio completo →
+                          </Link>
+                        )}
                       </div>
                     </div>
                   ))

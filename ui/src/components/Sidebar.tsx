@@ -88,7 +88,7 @@ export function Sidebar() {
             <SquarePen className="h-4 w-4 shrink-0" />
             <span className="truncate">{t("nav.newIssue")}</span>
           </button>
-          <SidebarNavItem to="/dashboard" label={t("nav.dashboard")} icon={LayoutDashboard} liveCount={liveRunCount} />
+          <SidebarNavItem to="/dashboard" label={t("nav.dashboard")} icon={LayoutDashboard} alert={liveRunCount > 0} />
           <SidebarNavItem to="/office" label="Ufficio" icon={Building2} />
           <SidebarNavItem
             to="/inbox"

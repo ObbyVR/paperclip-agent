@@ -1,6 +1,16 @@
 import { cn } from "../lib/utils";
 import { statusBadge, statusBadgeDefault } from "../lib/status-colors";
 
+const STATUS_LABELS: Record<string, string> = {
+  backlog: "Backlog",
+  todo: "Da fare",
+  in_progress: "In corso",
+  in_review: "In revisione",
+  blocked: "Bloccata",
+  done: "Completata",
+  cancelled: "Annullata",
+};
+
 export function StatusBadge({ status }: { status: string }) {
   return (
     <span
@@ -9,7 +19,7 @@ export function StatusBadge({ status }: { status: string }) {
         statusBadge[status] ?? statusBadgeDefault
       )}
     >
-      {status.replace("_", " ")}
+      {STATUS_LABELS[status] ?? status.replace("_", " ")}
     </span>
   );
 }

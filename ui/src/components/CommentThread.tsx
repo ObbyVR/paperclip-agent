@@ -147,33 +147,20 @@ const TimelineList = memo(function TimelineList({
       {timeline.map((item) => {
         if (item.kind === "run") {
           const run = item.run;
+          const agentName = agentMap?.get(run.agentId)?.name ?? run.agentId.slice(0, 8);
           return (
-            <div key={`run:${run.runId}`} className="flex gap-3 items-start">
-              <div className="shrink-0 pt-0.5">
-                <div className="h-8 w-8 rounded-full bg-accent/60 flex items-center justify-center">
-                  <span className="text-xs font-medium text-muted-foreground">⚡</span>
-                </div>
-              </div>
-              <div className="flex-1 min-w-0 border border-border bg-accent/10 rounded-xl px-4 py-3 shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <Link to={`/agents/${run.agentId}`} className="hover:underline font-medium text-sm">
-                    {agentMap?.get(run.agentId)?.name ?? run.agentId.slice(0, 8)}
-                  </Link>
-                  <span className="text-[11px] text-muted-foreground">
-                    {formatDateTime(run.startedAt ?? run.createdAt)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Run</span>
-                  <Link
-                    to={`/agents/${run.agentId}/runs/${run.runId}`}
-                    className="inline-flex items-center rounded-md border border-border bg-accent/40 px-2 py-1 font-mono text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-                  >
-                    {run.runId.slice(0, 8)}
-                  </Link>
-                  <StatusBadge status={run.status} />
-                </div>
-              </div>
+            <div key={`run:${run.runId}`} className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground/60">
+              <span>⚡</span>
+              <span>{agentName}</span>
+              <span>·</span>
+              <Link
+                to={`/agents/${run.agentId}/runs/${run.runId}`}
+                className="font-mono hover:text-foreground transition-colors"
+              >
+                {run.runId.slice(0, 8)}
+              </Link>
+              <StatusBadge status={run.status} />
+              <span className="ml-auto">{formatDateTime(run.startedAt ?? run.createdAt)}</span>
             </div>
           );
         }

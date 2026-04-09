@@ -30,6 +30,7 @@ import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import { heartbeatService, reconcilePersistedRuntimeServicesOnStartup, routineService } from "./services/index.js";
 import { tickSuspendWakeup } from "./services/issue-suspend-wakeup.js";
+import { notificationService } from "./services/notifications.js";
 import { tickIssueLockWatchdog } from "./services/issue-lock-watchdog.js";
 // S43 — Telegram CEO bot (opt-in via PAPERCLIP_TELEGRAM_ENABLED).
 import { startTelegramBot, defaultSessionsFilePath } from "./services/telegram-bot/index.js";
@@ -572,6 +573,7 @@ export async function startServer(): Promise<StartedServer> {
   if (config.heartbeatSchedulerEnabled) {
     const heartbeat = heartbeatService(db as any);
     const routines = routineService(db as any);
+    const notificationSvc = notificationService(db as any);
   
     // Reap orphaned running runs at startup while in-memory execution state is empty,
     // then resume any persisted queued runs that were waiting on the previous process.
@@ -627,6 +629,12 @@ export async function startServer(): Promise<StartedServer> {
       // `status`. Bounded at 50 releases/tick.
       void tickIssueLockWatchdog(db as any).catch((err) => {
         logger.error({ err }, "issue-lock watchdog tick failed");
+      });
+
+      // S61 — Notification escalation: re-notify for critical unread
+      // notifications older than 2 hours (max 3 escalations per notification).
+      void notificationSvc.escalateStale(3, 2).catch((err) => {
+        logger.error({ err }, "notification escalation tick failed");
       });
     }, config.heartbeatSchedulerIntervalMs);
   }

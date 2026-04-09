@@ -156,12 +156,15 @@ function IssueDetailAccordion({
 }: any) {
   const { t } = useTranslation();
   const location = useLocation();
-  const [openTab, setOpenTab] = useState<IssueAccordionTab>("output");
-  const toggle = (tab: IssueAccordionTab) => setOpenTab((prev: IssueAccordionTab) => prev === tab ? null : tab);
 
   const hasOutput = (issue.documents?.length ?? 0) > 0 || runResults.length > 0 || hasAttachments;
   const hasBriefing = !!issue.description;
   const hasSubIssues = childIssues.length > 0;
+
+  // Smart default tab: show Output if available, otherwise Commenti (avoid empty tab)
+  const defaultTab: IssueAccordionTab = hasOutput ? "output" : commentsWithRunMeta.length > 0 ? "commenti" : hasBriefing ? "briefing" : "output";
+  const [openTab, setOpenTab] = useState<IssueAccordionTab>(defaultTab);
+  const toggle = (tab: IssueAccordionTab) => setOpenTab((prev: IssueAccordionTab) => prev === tab ? null : tab);
 
   return (
     <div className="border border-border/50 rounded-lg overflow-hidden">
@@ -170,7 +173,7 @@ function IssueDetailAccordion({
         <AccordionBtn label={t("issue.tab.output", "Output")} count={(issue.documents?.length ?? 0) + runResults.length} isOpen={openTab === "output"} onClick={() => toggle("output")} alert={(issue.isUnreadForMe || issue.status === "in_review") && openTab !== "output"} />
         {hasBriefing && <AccordionBtn label={t("issue.tab.briefing", "Briefing")} isOpen={openTab === "briefing"} onClick={() => toggle("briefing")} />}
         <AccordionBtn label={t("issue.tab.comments", "Commenti")} count={commentsWithRunMeta.length} isOpen={openTab === "commenti"} onClick={() => toggle("commenti")} alert={issue.isUnreadForMe && openTab !== "commenti"} />
-        <AccordionBtn label={t("issue.tab.activity", "Attivita'")} isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} alert={issue.isUnreadForMe && openTab !== "attivita"} />
+        {activity && activity.length > 0 && <AccordionBtn label={t("issue.tab.activity", "Attivita'")} isOpen={openTab === "attivita"} onClick={() => toggle("attivita")} />}
         {hasSubIssues && <AccordionBtn label={t("issue.tab.subIssues", "Sotto-attivita'")} count={childIssues.length} isOpen={openTab === "sub-issues"} onClick={() => toggle("sub-issues")} />}
       </div>
 
@@ -260,6 +263,21 @@ function IssueDetailAccordion({
 
           {openTab === "sub-issues" && (
             <div className="border border-border rounded-lg divide-y divide-border">
+              {/* Summary counter */}
+              {(() => {
+                const done = childIssues.filter((c: any) => c.status === "done" || c.status === "cancelled").length;
+                const total = childIssues.length;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                return (
+                  <div className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground">
+                    <span>{done} di {total} completate</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[120px]">
+                      <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[10px]">{pct}%</span>
+                  </div>
+                );
+              })()}
               {childIssues.map((child: any) => (
                 <Link
                   key={child.id}
@@ -843,11 +861,12 @@ export function IssueDetail() {
 
   const assigneeAgent = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId) : null;
   const isBlocked = issue.status === "blocked";
+  const needsReview = isBlocked || issue.status === "in_review";
   const hasDocuments = (issue.documentSummaries ?? []).length > 0;
   const hasDocumentsOrResults = hasDocuments || runResults.length > 0;
 
-  // ── Review mode: dedicated layout for blocked issues ──
-  if (isBlocked) {
+  // ── Review mode: dedicated layout for blocked/in_review issues ──
+  if (needsReview) {
     return (
       <>
         <IssueReviewLayout
@@ -935,6 +954,7 @@ export function IssueDetail() {
             onChange={(status) => updateIssue.mutate({ status })}
           />
           <span className="text-sm font-mono text-muted-foreground shrink-0">{issue.identifier ?? issue.id.slice(0, 8)}</span>
+          <StatusBadge status={issue.status} />
 
           {hasLiveRuns && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 text-[10px] font-medium text-cyan-600 dark:text-cyan-400 shrink-0">
@@ -1013,83 +1033,22 @@ export function IssueDetail() {
           className="text-xl font-bold"
         />
 
-        {/* ── Model & token usage badge ── */}
+        {/* ── Model & cost — compact ── */}
         {issueCostSummary.hasTokens && (
-          <div className="flex items-center gap-2 flex-wrap mt-1">
+          <div className="flex items-center gap-1.5 flex-wrap mt-1">
             {issueCostSummary.models.map((m) => (
-              <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 text-[11px] font-medium">
+              <span key={m} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium">
                 {modelLabel(m)}
               </span>
             ))}
-            <span className="text-[11px] text-muted-foreground">
-              {formatTokens(issueCostSummary.totalTokens)} tokens
-              {issueCostSummary.cached > 0 && ` (${formatTokens(issueCostSummary.cached)} cached)`}
-            </span>
             {issueCostSummary.estimatedEur !== null && (
-              <span className="text-[11px] text-muted-foreground">
-                · ~{formatEur(issueCostSummary.estimatedEur)}
-              </span>
-            )}
-            {issueCostSummary.hasCost && issueCostSummary.cost > 0 && (
-              <span className="text-[11px] text-muted-foreground">
-                · ${issueCostSummary.cost.toFixed(4)}
+              <span className="text-[10px] text-muted-foreground/60">
+                ~{formatEur(issueCostSummary.estimatedEur)}
               </span>
             )}
           </div>
         )}
       </div>
-
-      {/* ── Action bar: prominent when blocked ── */}
-      {isBlocked && (
-        <div className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/[0.04] px-4 py-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-red-400">Approvazione richiesta</p>
-            {assigneeAgent && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Completata da {assigneeAgent.name}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              size="sm"
-              className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => updateIssue.mutate({ status: "done" }, {
-                onSuccess: () => {
-                  issuesApi.addComment(issueId!, "Approvato dal founder.");
-                },
-              })}
-            >
-              <Check className="h-3.5 w-3.5 mr-1" />
-              Approva
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
-              onClick={() => {
-                issuesApi.addComment(issueId!, "Revisione richiesta dal founder.");
-                updateIssue.mutate({ status: "in_progress" });
-              }}
-            >
-              <Repeat className="h-3.5 w-3.5 mr-1" />
-              Revisione
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 border-red-500/30 text-red-400 hover:bg-red-500/10"
-              onClick={() => {
-                issuesApi.addComment(issueId!, "Rifiutato dal founder.");
-                updateIssue.mutate({ status: "cancelled" });
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1" />
-              Rifiuta
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* ── Unified accordion tab bar ── */}
       <IssueDetailAccordion

@@ -12,6 +12,7 @@ import { heartbeatsApi } from "../api/heartbeats";
 import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
+import { useToast } from "../context/ToastContext";
 import { queryKeys } from "../lib/queryKeys";
 import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
@@ -71,6 +72,7 @@ export function Inbox() {
   const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
+  const { pushToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -384,6 +386,49 @@ export function Inbox() {
     },
   });
 
+  // ── Issue approve/reject (for blocked/in_review issues shown in inbox) ──
+  const issueActionMutation = useMutation({
+    mutationFn: async ({ issueId, action }: { issueId: string; action: "approve" | "reject" }) => {
+      const newStatus = action === "approve" ? "done" : "cancelled";
+      const comment = action === "approve" ? "✅ Approvato dal founder." : "❌ Rifiutato dal founder.";
+      await issuesApi.addComment(issueId, comment);
+      const result = await issuesApi.update(issueId, { status: newStatus });
+
+      // After approval, wake the parent issue's agent (typically the CEO)
+      // so the workflow continues with next steps
+      if (action === "approve") {
+        const issue = issueById.get(issueId);
+        if (issue?.parentId) {
+          const parent = issueById.get(issue.parentId);
+          if (parent?.assigneeAgentId) {
+            try {
+              await agentsApi.wakeup(parent.assigneeAgentId, {
+                source: "assignment",
+                triggerDetail: "system",
+                reason: "Subtask approved by founder — continue workflow",
+                payload: { issueId: parent.id, approvedSubtaskId: issueId },
+                idempotencyKey: `post-approve:${issueId}`,
+              });
+            } catch { /* best-effort — don't block the approval */ }
+          }
+        }
+      }
+      return result;
+    },
+    onSuccess: (_data, { action }) => {
+      setActionError(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      pushToast({
+        title: action === "approve" ? "Approvata" : "Rifiutata",
+        tone: action === "approve" ? "success" : "warn",
+      });
+    },
+    onError: (err) => {
+      setActionError(err instanceof Error ? err.message : "Failed to update issue");
+      pushToast({ title: "Errore nell'aggiornamento", tone: "error" });
+    },
+  });
+
   const [retryingRunIds, setRetryingRunIds] = useState<Set<string>>(new Set());
 
   const retryRunMutation = useMutation({
@@ -686,6 +731,7 @@ export function Inbox() {
       const isUnread = issue.isUnreadForMe && !fadingOutIssues.has(issue.id);
       const isFading = fadingOutIssues.has(issue.id);
       const isArchiving = archivingIssueIds.has(issue.id);
+      const isActionable = issue.status === "blocked" || issue.status === "in_review";
       const row = (
         <InboxItemRow
           key={`issue:${issue.id}`}
@@ -697,6 +743,9 @@ export function Inbox() {
           onMarkRead={() => markReadMutation.mutate(issue.id)}
           onArchive={isMineTab ? () => archiveIssueMutation.mutate(issue.id) : undefined}
           archiveDisabled={isArchiving || archiveIssueMutation.isPending}
+          onApprove={isActionable ? () => issueActionMutation.mutate({ issueId: issue.id, action: "approve" }) : undefined}
+          onReject={isActionable ? () => issueActionMutation.mutate({ issueId: issue.id, action: "reject" }) : undefined}
+          isPending={issueActionMutation.isPending}
           className={
             isArchiving
               ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"

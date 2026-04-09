@@ -9,6 +9,7 @@ import { sanitizeRecord } from "../redaction.js";
 import { logger } from "../middleware/logger.js";
 import type { PluginEventBus } from "./plugin-event-bus.js";
 import { instanceSettingsService } from "./instance-settings.js";
+import { notificationService } from "./notifications.js";
 
 const PLUGIN_EVENT_SET: ReadonlySet<string> = new Set(PLUGIN_EVENT_TYPES);
 
@@ -68,6 +69,18 @@ export async function logActivity(db: Db, input: LogActivityInput) {
       details: redactedDetails,
     },
   });
+
+  // Auto-create persistent notification if the action is relevant
+  void notificationService(db)
+    .maybeCreateFromActivity(
+      input.companyId,
+      input.action,
+      input.entityType,
+      input.entityId,
+      input.agentId,
+      redactedDetails,
+    )
+    .catch((err) => logger.warn({ err, action: input.action }, "notification creation failed"));
 
   if (_pluginEventBus && PLUGIN_EVENT_SET.has(input.action)) {
     const event: PluginEvent = {

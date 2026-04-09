@@ -377,6 +377,7 @@ export function App() {
           <Route path="goals" element={<UnprefixedBoardRedirect />} />
           <Route path="goals/*" element={<UnprefixedBoardRedirect />} />
           <Route path="org" element={<UnprefixedBoardRedirect />} />
+          <Route path="office" element={<UnprefixedBoardRedirect />} />
           <Route path=":companyPrefix" element={<Layout />}>
             {boardRoutes()}
           </Route>

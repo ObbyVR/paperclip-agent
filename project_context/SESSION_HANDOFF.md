@@ -1,80 +1,94 @@
-# Session Handoff — S49 → S50
+# Session Handoff — S61 → S62
 
-## Cosa è stato fatto in questa sessione
+## Cosa e' stato fatto in questa sessione
 
-### Wren IDE — fix strutturali e layout refactor completo
+### Dashboard — 8 bug fix + UX redesign completo
 
-**Repo**: `ObbyVR/wren` clonato in `/Users/valeriorullo/Downloads/GitHub/wren/`
-**Checkpoint commit**: `5a1ff3c` (layout v1 baseline)
-**Ultimo commit**: `945917d` (toolbar fix) — pushato su `main`
+**Branch**: `fix/dashboard-bugs-and-ux` (5 commit, pushato)
+**Repo**: `ObbyVR/paperclip-agent`
 
-#### Modifiche implementate:
+#### Bug critici risolti:
 
-1. **Layout completamente riscritto** (`packages/renderer/src/App.tsx`):
-   - Top: browser-style project tabs (TabBar)
-   - Left: toolbar verticale (40px) + AI Chat panel (30% default)
-   - Right top: Editor/Preview (75%)
-   - Right bottom: Terminal (25%)
-   - Tutti i pannelli con `collapsible` e `minSize={1}` per resize libero
+1. **BlockedPopover senza bottoni** — Il componente riceveva `onApprove`/`onReject`/`onRevision` come props ma non li renderizzava. L'utente non poteva approvare/rifiutare nulla dalla dashboard. Ripristinati tutti i bottoni con loading state.
 
-2. **Toolbar** (`App.tsx` + `App.module.css`):
-   - Alto: 📁 Files, ◉ Preview, ⎇ Git (toggle pannelli)
-   - Basso: $ Billing, ⚙ Settings
-   - File tree come overlay sidebar (position:absolute, z-index:50)
+2. **Polling 60s → 10-15s** — `liveRuns` e `allRuns` pollavano ogni 60 secondi. Ridotto a 10s (liveRuns) e 15s (allRuns + issues). La dashboard ora si aggiorna in near-realtime.
 
-3. **Onboarding wizard migliorato** (`OnboardingWizard.tsx`):
-   - Step "Subscriptions" che verifica credenziali esistenti
-   - Se ci sono: "Usa queste keys" o "Aggiungi nuova"
-   - Se non ci sono: form API key per provider (Anthropic/OpenAI/Gemini)
+3. **Cache stale dopo approvazione** — `unblockMutation.onSuccess` non invalidava `liveRuns`/`allRuns`. Aggiunto `invalidateQueries(liveRuns)`.
 
-4. **NEXUS_IDE_SPEC.md** aggiornato con sezione "Decisioni UX":
-   - File tree = sidebar overlay, non pannello principale
-   - Paradigma AI-first
-   - Badge provider (ANT = Anthropic)
-   - Flusso onboarding credenziali
+4. **issueId extraction inconsistente** — `failedIssueIds` usava solo `contextSnapshot.issueId`, `liveRuns` usava `run.issueId`. Unificato con fallback.
 
-5. **electron-builder.yml** fix: aggiunto `packages/ai`, `packages/shared`, `packages/license` ai files
+5. **allRuns senza limit** — Caricava TUTTI i run (500+) ogni 15s. Aggiunto `limit: 200`.
 
-6. **Deploy**: asar ricostruito con script Python (backup base + nuovo renderer). Procedura:
-   ```bash
-   # Build renderer
-   pnpm --filter @wren/renderer build
-   # Repack asar (Python script che prende backup come base, sostituisce renderer)
-   python3 rebuild_asar.py  
-   # Install
-   cp /tmp/wren-vN.asar /Applications/Wren.app/Contents/Resources/app.asar
-   ```
+6. **buildTree perde issue orfane** — Quando il filtro progetto spezzava relazioni parent-child, le issue figlie sparivano. Ora trattate come standalone roots.
 
-## Problemi noti / da risolvere
+7. **Zoom condiviso tra workflow** — Un singolo stato `zoom` per tutti i workflow. Ora `zoomByWorkflow` record per root id.
 
-1. **Multi-chat accordion**: il ChatPanel è singolo. La spec Nexus prevede N chat simultanee con header collassabili. Serve refactor in ChatStack.
-2. **"+ New Chat" con scelta provider**: cliccando deve far scegliere AI + credenziali. Il meccanismo di base esiste nel ChatPanel (Key settings) ma serve UI dedicata.
-3. **Resize chatbox**: `collapsible` e `minSize={1}` sono nel codice ma il localStorage potrebbe salvare layout vecchi che sovrascrivono.
-4. **Pulsanti chiudi pannelli**: mancano bottoni ✕ su chat e terminal per collassarli rapidamente.
-5. **Tab bar sovrapposta ai pallini macOS**: il `titleBarStyle: "hiddenInset"` richiede padding-left sulla tab bar. Era stato fatto via CSS injection nell'asar precedente ma nel nuovo build dal sorgente non c'è.
-6. **electron-builder con pnpm**: le symlink pnpm non vengono risolte da electron-builder. Workaround attuale: ricostruire l'asar manualmente partendo dal backup funzionante e sostituendo solo il renderer.
+8. **Keyframe CSS mancanti** — `pulse-blocked` e `dash-flow` non erano definiti nel CSS globale. `dash-flow` era duplicato inline per ogni workflow SVG. Spostati in `index.css`.
 
-## Prossimo step migliore
+#### Miglioramenti UX:
 
-**Implementare multi-chat accordion** con il flusso "+ New Chat → scegli provider → crea chat session". Questo è il cuore della UX di Wren e il differenziatore chiave della spec Nexus.
+9. **Action banner** in cima alla dashboard — "X attivita' richiedono la tua attenzione — N da approvare · N da revisionare — clicca per gestirle". Include pendingApprovals + issue blocked/in_review.
 
-## File critici
+10. **Bottoni Approva/Rifiuta nell'inbox** per issue `blocked`/`in_review` — prima apparivano nella sezione "RICHIEDONO LA TUA ATTENZIONE" ma senza nessun bottone azione.
 
-| File | Ruolo |
-|------|-------|
-| `wren/packages/renderer/src/App.tsx` | Layout principale, toolbar, workspace |
-| `wren/packages/renderer/src/App.module.css` | Stili layout |
-| `wren/packages/renderer/src/components/ChatPanel.tsx` | Chat AI singola (da refactorare in multi) |
-| `wren/packages/renderer/src/components/Onboarding/OnboardingWizard.tsx` | Wizard setup con credenziali |
-| `wren/packages/renderer/src/store/providerStore.tsx` | Provider/credenziali state |
-| `wren/packages/renderer/src/store/projectStore.tsx` | Progetti state |
-| `wren/electron-builder.yml` | Config packaging |
-| `paperclip/ui/src/specs/NEXUS_IDE_SPEC.md` | Spec completa Nexus IDE |
+11. **CEO wakeup post-approvazione** — Dopo che l'utente approva un subtask, il sistema sveglia l'agente del parent issue (CEO) con `agentsApi.wakeup()` perche' il workflow prosegua. Implementato sia in Dashboard che in Inbox.
 
-## Ambiente
+12. **Toast feedback** — Notifica visiva dopo Approva/Rifiuta da dashboard e inbox.
 
-- Node: v24.13.0 (via playwright driver: `/opt/homebrew/lib/python3.11/site-packages/playwright/driver/node`)
-- pnpm: 10.33.0 (`/Users/valeriorullo/Library/pnpm/pnpm`)
-- PATH necessario: `export PNPM_HOME="/Users/valeriorullo/Library/pnpm" && export PATH="$PNPM_HOME:/opt/homebrew/lib/python3.11/site-packages/playwright/driver:$PATH"`
-- Build: `cd wren && pnpm --filter @wren/renderer build`
-- Deploy: script Python per repack asar (vedi sopra)
+13. **Double live indicator** — Rimosso il "X live" dal nav item Dashboard (gia' presente per-agent nella sidebar agenti). Ora mostra solo un dot di alert.
+
+14. **Graph polish** — Edge visibility migliorata, glow cyan su nodi attivi, indicatore viola su edge per `in_review`, dot grid background, nodi completati piu' sfumati.
+
+15. **Link /approvals → /inbox** — La stats grid linkava a `/approvals` che faceva redirect. Ora linka direttamente a `/inbox`.
+
+#### File modificati:
+- `ui/src/components/WorkflowGraph.tsx` — popover, zoom, edges, keyframes, layout
+- `ui/src/pages/Dashboard.tsx` — polling, mutation, banner, toast, link
+- `ui/src/pages/Inbox.tsx` — issueActionMutation, CEO wakeup, toast
+- `ui/src/components/InboxItemRow.tsx` — bottoni per issue actionable
+- `ui/src/components/Sidebar.tsx` — live indicator
+- `ui/src/components/SidebarAgents.tsx` — tooltip
+- `ui/src/index.css` — keyframes pulse-blocked, dash-flow
+
+---
+
+## Prossima sessione — S62: UX deep dive
+
+### TASK 1: Issue Detail Page — UX analysis + fix
+
+**Problema**: Quando l'utente clicca su un messaggio/task dall'inbox, la pagina di dettaglio issue non e' immediata. L'utente non si orienta e non capisce cosa blocca il task.
+
+**Come affrontare (stessa metodologia di questa sessione)**:
+
+1. **Apri una issue reale** (WEB-101, WEB-140, o una blocked) e fai screenshot della pagina di dettaglio
+2. **Analizza come un UX senior designer**: quali informazioni vede l'utente? In che ordine? Cosa manca?
+3. **Analizza come un esperto di neurolinguistica**: il cervello processa prima le informazioni pre-attentive (colore, posizione, dimensione). La pagina guida l'occhio verso l'azione necessaria?
+4. **Identifica i friction points**: 
+   - L'utente capisce immediatamente lo status del task?
+   - Sa cosa deve fare (approvare? leggere l'output? commentare?)?
+   - L'output dell'agente e' facile da trovare e leggere?
+   - I tab (Output/Briefing/Commenti/Attivita'/Sotto-attivita') sono nell'ordine giusto?
+   - Il call-to-action e' visibile above-the-fold?
+5. **Implementa fix concreti**: banner di stato, riordino tab, CTA in evidenza, semplificazione layout
+
+### TASK 2: Workflow Graph — analisi blocchi agenti
+
+**Problema**: L'utente guarda il grafo e non capisce PERCHE' un workflow e' bloccato. Vede nodi amber/rossi ma non sa la causa.
+
+**Come affrontare**:
+
+1. **Analizza i dati reali**: per ogni workflow visibile, qual e' lo stato dei subtask? Quali sono bloccati e perche'?
+2. **Identifica il pattern**: i workflow si bloccano perche' il CEO non viene triggerato? Perche' un agente ha fallito? Perche' manca un'approvazione?
+3. **Implementa "diagnosi visiva"**: 
+   - Nel grafo, aggiungere tooltip/hover che spieghi PERCHE' un nodo e' in quel stato
+   - Nel header del workflow collassato, mostrare "Bloccato: in attesa di approvazione su WEB-XXX"
+   - Aggiungere un bottone "Rilancia" nel popover errore che riprova l'esecuzione dell'agente
+4. **Testare il flusso end-to-end**: crea un task, assegnalo al CEO, aspetta che crei subtask, approva, verifica che il CEO riparta
+
+### Principi da seguire (non negoziabili):
+
+- **Mai analizzare senza screenshot reali** — ogni fix deve partire da cosa vede l'utente
+- **Ragiona come neurolinguista**: il cervello legge prima colore/posizione/dimensione, poi testo. I CTA devono essere pre-attentivi
+- **Single point of action**: l'utente non deve cercare dove agire. L'azione deve essere visibile sopra la piega
+- **Feedback immediato**: ogni azione deve produrre una conferma visiva entro 200ms
+- **Verifica nel preview**: ogni modifica va testata nel browser prima del commit

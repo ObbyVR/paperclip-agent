@@ -348,6 +348,10 @@ export function InboxItemRow({
   if (item.kind === "issue") {
     content = <IssueContent issue={item.issue} issueLinkState={issueLinkState} />;
     timestamp = item.issue.updatedAt;
+    // Show approve/reject for blocked or in_review issues
+    if ((item.issue.status === "blocked" || item.issue.status === "in_review") && onApprove && onReject) {
+      actions = <ApproveRejectButtons onApprove={onApprove} onReject={onReject} isPending={isPending} />;
+    }
   } else if (item.kind === "approval") {
     content = <ApprovalContent approval={item.approval} />;
     timestamp = item.approval.updatedAt;

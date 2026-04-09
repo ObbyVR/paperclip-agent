@@ -2,6 +2,49 @@ import { useEffect, useRef } from "react";
 import type { InboxBadgeData } from "../lib/inbox";
 
 const PERMISSION_KEY = "paperclip:notifications:asked";
+const SOUND_PREF_KEY = "paperclip:notifications:sound";
+
+/**
+ * Play a subtle notification beep using AudioContext.
+ * No audio file needed — synthesized on the fly.
+ * `urgency` controls pitch: "critical" = higher pitch double beep,
+ * "high" = single mid beep.
+ */
+function playNotificationSound(urgency: "critical" | "high" = "high") {
+  if (localStorage.getItem(SOUND_PREF_KEY) === "off") return;
+  try {
+    const ctx = new AudioContext();
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+
+    if (urgency === "critical") {
+      // Double beep (higher pitch)
+      for (let i = 0; i < 2; i++) {
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, ctx.currentTime + i * 0.18);
+        osc.connect(gain);
+        osc.start(ctx.currentTime + i * 0.18);
+        osc.stop(ctx.currentTime + i * 0.18 + 0.1);
+      }
+      gain.gain.setValueAtTime(0, ctx.currentTime + 0.4);
+      setTimeout(() => ctx.close(), 500);
+    } else {
+      // Single soft beep
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(660, ctx.currentTime);
+      osc.connect(gain);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0, ctx.currentTime + 0.15);
+      setTimeout(() => ctx.close(), 300);
+    }
+  } catch {
+    // AudioContext not available
+  }
+}
 
 function canNotify(): boolean {
   return typeof Notification !== "undefined" && Notification.permission === "granted";
@@ -54,6 +97,7 @@ export function useBrowserNotifications(badge: InboxBadgeData | null) {
           ? "Hai 1 nuova approvazione da gestire"
           : `Hai ${diff} nuove approvazioni da gestire`,
       );
+      playNotificationSound("critical");
     }
 
     // New unread issues (comments)
@@ -65,6 +109,7 @@ export function useBrowserNotifications(badge: InboxBadgeData | null) {
           ? "Hai 1 issue con nuovi commenti"
           : `Hai ${diff} issue con nuovi commenti`,
       );
+      playNotificationSound("high");
     }
 
     // New failed runs
@@ -73,6 +118,7 @@ export function useBrowserNotifications(badge: InboxBadgeData | null) {
         "Run fallito",
         "Un agente ha avuto un errore durante l'esecuzione",
       );
+      playNotificationSound("critical");
     }
   }, [badge]);
 }

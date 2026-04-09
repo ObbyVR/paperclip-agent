@@ -9,6 +9,7 @@ import { projectsApi } from "../api/projects";
 import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
+import { useToast } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
@@ -16,7 +17,7 @@ import { StatusIcon } from "../components/StatusIcon";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { formatCents } from "../lib/utils";
-import { Bot, ChevronDown, ChevronRight, CircleDot, DollarSign, EyeOff, FolderOpen, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
+import { AlertCircle, Bot, ChevronDown, ChevronRight, CircleDot, DollarSign, EyeOff, FolderOpen, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { dashboardPrefs, useDashboardPrefs } from "../lib/dashboardPrefs";
 import { Component, type ErrorInfo, type ReactNode } from "react";
@@ -131,6 +132,7 @@ export function Dashboard() {
   const { t } = useTranslation();
   const { selectedCompanyId, companies } = useCompany();
   const { openOnboarding } = useDialog();
+  const { pushToast } = useToast();
   const { setBreadcrumbs } = useBreadcrumbs();
   // Activity animation state removed — feed no longer on dashboard
 
@@ -154,6 +156,7 @@ export function Dashboard() {
     queryKey: queryKeys.issues.list(selectedCompanyId!),
     queryFn: () => issuesApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
+    refetchInterval: 15_000,
   });
 
   const { data: projectsList } = useQuery({
@@ -198,16 +201,16 @@ export function Dashboard() {
     queryKey: [...queryKeys.liveRuns(selectedCompanyId ?? ""), "dashboard-wf"],
     queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!, 4),
     enabled: !!selectedCompanyId,
-    refetchInterval: 60000,
+    refetchInterval: 10_000,
   });
   const activeRuns = (liveRuns ?? []).filter((r) => r.status === "running" || r.status === "queued");
 
   // Fetch all runs to identify failed issues for WorkflowGraph coloring
   const { data: allRuns } = useQuery({
     queryKey: [...queryKeys.liveRuns(selectedCompanyId ?? ""), "all-runs"],
-    queryFn: () => heartbeatsApi.list(selectedCompanyId!),
+    queryFn: () => heartbeatsApi.list(selectedCompanyId!, undefined, 200),
     enabled: !!selectedCompanyId,
-    refetchInterval: 60000,
+    refetchInterval: 15_000,
   });
 
   // Build sets of failed issue IDs + error messages (only for issues that haven't succeeded since)
@@ -219,7 +222,8 @@ export function Dashboard() {
     // Group runs by issueId, check if latest run for each issue is a failure
     const latestByIssue = new Map<string, { status: string; error: string }>();
     for (const run of allRuns) {
-      const issueId = (run as any).contextSnapshot?.issueId;
+      // Use direct issueId first, fall back to contextSnapshot for older runs
+      const issueId = (run as any).issueId ?? (run as any).contextSnapshot?.issueId;
       if (!issueId) continue;
       // Runs are ordered newest first — only keep the first (latest) per issue
       if (!latestByIssue.has(issueId)) {
@@ -245,10 +249,35 @@ export function Dashboard() {
       const newStatus = action === "approve" ? "done" : "cancelled";
       const comment = action === "approve" ? "✅ Approvato dal founder." : "❌ Rifiutato dal founder.";
       await issuesApi.addComment(issueId, comment);
-      return issuesApi.update(issueId, { status: newStatus });
+      const result = await issuesApi.update(issueId, { status: newStatus });
+
+      // After approval, wake the parent issue's agent (CEO) to continue workflow
+      if (action === "approve" && issues) {
+        const issue = issues.find((i) => i.id === issueId);
+        if (issue?.parentId) {
+          const parent = issues.find((i) => i.id === issue.parentId);
+          if (parent?.assigneeAgentId) {
+            try {
+              await agentsApi.wakeup(parent.assigneeAgentId, {
+                source: "assignment",
+                triggerDetail: "system",
+                reason: "Subtask approved by founder — continue workflow",
+                payload: { issueId: parent.id, approvedSubtaskId: issueId },
+                idempotencyKey: `post-approve:${issueId}`,
+              });
+            } catch { /* best-effort */ }
+          }
+        }
+      }
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (_data, { action }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.liveRuns(selectedCompanyId!) });
+      pushToast({
+        title: action === "approve" ? "Approvata" : action === "reject" ? "Rifiutata" : "Revisione richiesta",
+        tone: action === "approve" ? "success" : action === "reject" ? "warn" : "info",
+      });
     },
   });
 
@@ -300,6 +329,41 @@ export function Dashboard() {
           </button>
         </div>
       )}
+
+      {/* ── Action required banner — clear CTA when user needs to act ── */}
+      {(() => {
+        const blockedCount = issues?.filter((i) => i.status === "blocked").length ?? 0;
+        const reviewCount = issues?.filter((i) => i.status === "in_review").length ?? 0;
+        const approvalCount = (data?.pendingApprovals ?? 0) + (data?.budgets?.pendingApprovals ?? 0);
+        const actionCount = blockedCount + reviewCount + approvalCount;
+        if (actionCount === 0) return null;
+        const parts: string[] = [];
+        if (approvalCount > 0) parts.push(`${approvalCount} da approvare`);
+        if (blockedCount > 0) parts.push(`${blockedCount} bloccate`);
+        if (reviewCount > 0) parts.push(`${reviewCount} da revisionare`);
+        return (
+          <Link
+            to="/inbox"
+            className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 hover:bg-amber-500/[0.12] transition-colors no-underline text-inherit group"
+          >
+            <div className="flex items-center justify-center h-9 w-9 rounded-full bg-amber-500/20 shrink-0">
+              <AlertCircle className="h-5 w-5 text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                {actionCount === 1
+                  ? "1 attivita' richiede la tua attenzione"
+                  : `${actionCount} attivita' richiedono la tua attenzione`
+                }
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {parts.join(" · ")} — clicca per gestirle
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-amber-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        );
+      })()}
 
       {/* ── Project filter + Stats card grid ─────────────── */}
       {data && (
@@ -357,7 +421,7 @@ export function Dashboard() {
                 <div className="text-[10px] text-muted-foreground">{t("dashboard.month", "mese")}</div>
               </div>
             </Link>
-            <Link to="/approvals" className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/50 px-3 py-2 hover:bg-accent/50 transition-colors no-underline text-inherit">
+            <Link to="/inbox" className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/50 px-3 py-2 hover:bg-accent/50 transition-colors no-underline text-inherit">
               <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
               <div>
                 <div className="font-semibold text-foreground">{data.pendingApprovals + data.budgets.pendingApprovals + (issues?.filter((i) => i.status === "in_review").length ?? 0)}</div>

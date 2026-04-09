@@ -6,7 +6,7 @@
  * Renders the agent "a mezzo busto" in the header with role/status,
  * then a scrollable feed of their recent issue comments + approvals.
  */
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -141,10 +141,8 @@ export function AgentChatSheet({ agent, open, onOpenChange }: AgentChatSheetProp
       <SheetContent side="right" className="w-[420px] sm:w-[460px] p-0 flex flex-col">
         {/* ── Header: agent "a mezzo busto" ── */}
         <SheetHeader className="border-b border-border bg-card px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
-              <AgentIcon icon={agent.icon} className="h-6 w-6 text-foreground/70" />
-            </div>
+          <div className="flex items-center gap-4">
+            <AgentPortrait agent={agent} />
             <div className="flex-1 min-w-0">
               <SheetTitle className="text-base font-semibold truncate">
                 {agent.name}
@@ -226,6 +224,179 @@ export function AgentChatSheet({ agent, open, onOpenChange }: AgentChatSheetProp
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/* ── Portrait (procedural bust) ─────────────────────────────────────── */
+
+const SKIN_TONES = ["#f0c8a0", "#e0b090", "#d09868", "#b07848", "#905830"];
+const HAIR_COLORS = ["#1a1a2e", "#3d2b1f", "#8b4513", "#c5a880", "#b83a14", "#daa520", "#2d1b0e", "#4a2c2a"];
+const SHIRT_COLORS = [
+  "#4a6fa5", "#6b5b95", "#88b04b", "#ff6f61", "#45b8ac",
+  "#d4507a", "#5a7d9a", "#b5838d", "#e6a157", "#7c6f9a",
+  "#3a8a6e", "#c06040",
+];
+
+const STATUS_GLOW: Record<string, string> = {
+  active: "#22c55e", running: "#06b6d4", idle: "#6b7280",
+  paused: "#f59e0b", error: "#ef4444",
+};
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+}
+
+function AgentPortrait({ agent }: { agent: Agent }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+
+  const draw = useCallback((time: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const S = 96;
+    ctx.clearRect(0, 0, S, S);
+
+    const h = hashStr(agent.id);
+    const skin = SKIN_TONES[h % SKIN_TONES.length];
+    const hair = HAIR_COLORS[(h >> 4) % HAIR_COLORS.length];
+    const shirt = SHIRT_COLORS[(h >> 8) % SHIRT_COLORS.length];
+    const isWorking = agent.status === "active" || agent.status === "running";
+    const isPaused = agent.status === "paused";
+    const isError = agent.status === "error";
+    const glow = STATUS_GLOW[agent.status] ?? STATUS_GLOW.idle;
+
+    const t = time / 1000;
+    const breathY = Math.sin(t * 2 + h) * 1.5;
+    const cx = S / 2;
+
+    // Background glow
+    const grad = ctx.createRadialGradient(cx, S / 2, 5, cx, S / 2, 45);
+    grad.addColorStop(0, glow + "18");
+    grad.addColorStop(1, "transparent");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, S, S);
+
+    // ── Shoulders / shirt ──
+    const shY = 62 + breathY;
+    ctx.fillStyle = shirt;
+    rr(ctx, cx - 28, shY, 56, 38, 8); ctx.fill();
+    // Collar
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.moveTo(cx - 8, shY); ctx.lineTo(cx, shY + 10); ctx.lineTo(cx + 8, shY); ctx.closePath(); ctx.fill();
+    // Shirt highlight
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(cx - 24, shY + 2, 16, 30);
+    // Shirt button
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    ctx.beginPath(); ctx.arc(cx, shY + 16, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, shY + 24, 1.5, 0, Math.PI * 2); ctx.fill();
+
+    // ── Neck ──
+    ctx.fillStyle = skin;
+    ctx.fillRect(cx - 6, shY - 6, 12, 10);
+
+    // ── Head ──
+    const headY = 18 + breathY;
+    ctx.fillStyle = skin;
+    rr(ctx, cx - 16, headY, 32, 30, 10); ctx.fill();
+    // Ear
+    ctx.beginPath(); ctx.ellipse(cx - 16, headY + 16, 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 16, headY + 16, 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+    // ── Hair ──
+    const hairStyle = h % 4;
+    ctx.fillStyle = hair;
+    if (hairStyle === 0) { rr(ctx, cx - 17, headY - 6, 34, 16, 8); ctx.fill(); ctx.fillRect(cx - 18, headY + 2, 5, 14); ctx.fillRect(cx + 13, headY + 2, 5, 14); }
+    else if (hairStyle === 1) { rr(ctx, cx - 18, headY - 8, 36, 18, 10); ctx.fill(); ctx.fillRect(cx - 19, headY, 6, 16); ctx.fillRect(cx + 13, headY, 6, 16); }
+    else if (hairStyle === 2) { rr(ctx, cx - 19, headY - 8, 38, 16, 10); ctx.fill(); rr(ctx, cx - 20, headY + 2, 7, 22, 3); ctx.fill(); rr(ctx, cx + 13, headY + 2, 7, 22, 3); ctx.fill(); }
+    else { rr(ctx, cx - 17, headY - 10, 34, 18, 6); ctx.fill(); ctx.fillRect(cx - 12, headY - 14, 4, 7); ctx.fillRect(cx - 3, headY - 16, 4, 7); ctx.fillRect(cx + 6, headY - 14, 4, 7); }
+
+    // ── Eyes ──
+    const eyeY = headY + 14;
+    if (isPaused) {
+      // Sleepy eyes (closed lines)
+      ctx.strokeStyle = "#1a1a2e"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(cx - 10, eyeY + 2); ctx.lineTo(cx - 4, eyeY + 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + 4, eyeY + 2); ctx.lineTo(cx + 10, eyeY + 2); ctx.stroke();
+    } else {
+      // Open eyes
+      ctx.fillStyle = "#fff";
+      rr(ctx, cx - 11, eyeY, 8, 6, 3); ctx.fill();
+      rr(ctx, cx + 3, eyeY, 8, 6, 3); ctx.fill();
+      // Pupils (look at viewer)
+      ctx.fillStyle = "#1a1a2e";
+      const px = isWorking ? 1 : 0;
+      ctx.fillRect(cx - 8 + px, eyeY + 2, 3, 3);
+      ctx.fillRect(cx + 5 + px, eyeY + 2, 3, 3);
+      // Catchlight
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.fillRect(cx - 7, eyeY + 1, 1, 1);
+      ctx.fillRect(cx + 6, eyeY + 1, 1, 1);
+    }
+
+    // Eyebrows
+    ctx.fillStyle = hair;
+    ctx.fillRect(cx - 11, eyeY - 3, 7, 2);
+    ctx.fillRect(cx + 4, eyeY - 3, 7, 2);
+    if (isError) {
+      ctx.fillRect(cx - 12, eyeY - 5, 4, 2);
+      ctx.fillRect(cx + 8, eyeY - 5, 4, 2);
+    }
+
+    // Mouth
+    if (isWorking) {
+      ctx.fillStyle = "#c07060";
+      rr(ctx, cx - 3, headY + 22, 6, 3, 2); ctx.fill();
+    } else if (isError) {
+      ctx.strokeStyle = "#a06050"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, headY + 26, 4, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
+    } else if (isPaused) {
+      ctx.fillStyle = "#a06050";
+      ctx.fillRect(cx - 3, headY + 23, 6, 2);
+    } else {
+      ctx.strokeStyle = "#a06050"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, headY + 21, 4, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
+    }
+
+    // Status ring around portrait
+    ctx.strokeStyle = glow;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, S / 2, 44, 0, Math.PI * 2); ctx.stroke();
+  }, [agent]);
+
+  useEffect(() => {
+    let running = true;
+    const loop = (ts: number) => {
+      if (!running) return;
+      draw(ts);
+      animRef.current = requestAnimationFrame(loop);
+    };
+    animRef.current = requestAnimationFrame(loop);
+    return () => { running = false; cancelAnimationFrame(animRef.current); };
+  }, [draw]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={96}
+      height={96}
+      style={{ imageRendering: "pixelated", width: 80, height: 80 }}
+      className="shrink-0 rounded-xl"
+    />
   );
 }
 

@@ -242,10 +242,7 @@ export function IssueProperties({ issue, onUpdate, inline }: IssuePropertiesProp
       )}
     </div>
   ) : (
-    <>
-      <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-      <span className="text-sm text-muted-foreground">No labels</span>
-    </>
+    <span className="text-xs text-muted-foreground/40 italic">Aggiungi...</span>
   );
 
   const labelsContent = (
@@ -598,12 +595,12 @@ export function IssueProperties({ issue, onUpdate, inline }: IssuePropertiesProp
             )}
           </PropertyRow>
         )}
-        {issue.startedAt && (
+        {issue.startedAt && formatDate(issue.startedAt) !== formatDate(issue.createdAt) && (
           <PropertyRow label="Started">
             <span className="text-sm">{formatDate(issue.startedAt)}</span>
           </PropertyRow>
         )}
-        {issue.completedAt && (
+        {issue.completedAt && formatDate(issue.completedAt) !== formatDate(issue.startedAt ?? issue.createdAt) && (
           <PropertyRow label="Completed">
             <span className="text-sm">{formatDate(issue.completedAt)}</span>
           </PropertyRow>

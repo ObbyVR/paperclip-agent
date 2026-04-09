@@ -20,88 +20,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import type { Agent } from "@paperclipai/shared";
-
-/** A department group: leader agent + their direct reports (which may themselves be sub-departments) */
-interface DepartmentGroup {
-  leader: Agent;
-  /** Direct reports that are NOT sub-department leaders */
-  members: Agent[];
-  /** Direct reports that ARE sub-department leaders (have their own reports) */
-  subDepartments: DepartmentGroup[];
-}
-
-/** Build department groups from reportsTo hierarchy (recursive) */
-function buildDepartmentGroups(agents: Agent[]): {
-  ceo: Agent | null;
-  departments: DepartmentGroup[];
-  standalone: Agent[];
-} {
-  const agentById = new Map<string, Agent>();
-  for (const a of agents) agentById.set(a.id, a);
-
-  // Build direct reports map
-  const directReports = new Map<string, Agent[]>();
-  for (const a of agents) {
-    if (a.reportsTo && agentById.has(a.reportsTo)) {
-      const list = directReports.get(a.reportsTo) ?? [];
-      list.push(a);
-      directReports.set(a.reportsTo, list);
-    }
-  }
-
-  // Recursively build a department for an agent that has reports
-  function buildDept(leader: Agent): DepartmentGroup {
-    const reports = directReports.get(leader.id) ?? [];
-    const subDepartments: DepartmentGroup[] = [];
-    const members: Agent[] = [];
-
-    for (const report of reports) {
-      const hasOwnReports = (directReports.get(report.id) ?? []).length > 0;
-      if (hasOwnReports) {
-        subDepartments.push(buildDept(report));
-      } else {
-        members.push(report);
-      }
-    }
-
-    return { leader, members, subDepartments };
-  }
-
-  // Find the CEO (top of the chain)
-  const ceoAgent = agents.find(
-    (a) => !a.reportsTo || !agentById.has(a.reportsTo),
-  );
-
-  if (!ceoAgent) {
-    return { ceo: null, departments: [], standalone: agents };
-  }
-
-  // Build departments from CEO's direct reports
-  const ceoReports = directReports.get(ceoAgent.id) ?? [];
-  const departments: DepartmentGroup[] = [];
-  const standalone: Agent[] = [];
-
-  for (const report of ceoReports) {
-    const hasOwnReports = (directReports.get(report.id) ?? []).length > 0;
-    if (hasOwnReports) {
-      departments.push(buildDept(report));
-    } else {
-      standalone.push(report);
-    }
-  }
-
-  // Any agents not reachable from CEO
-  const reachable = new Set<string>();
-  function markReachable(id: string) {
-    reachable.add(id);
-    for (const r of directReports.get(id) ?? []) markReachable(r.id);
-  }
-  markReachable(ceoAgent.id);
-  const orphans = agents.filter((a) => !reachable.has(a.id));
-  standalone.push(...orphans);
-
-  return { ceo: ceoAgent, departments, standalone };
-}
+import { buildDepartmentGroups, type DepartmentGroup } from "../lib/departmentGroups";
 
 function AgentNavItem({
   agent,
@@ -242,7 +161,8 @@ export function SidebarAgents() {
               openNewAgent();
             }}
             className="flex items-center justify-center h-4 w-4 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent/50 transition-colors"
-            aria-label={t("agent.newAgent")}
+            title={t("agent.newAgent", "Crea nuovo agente")}
+            aria-label={t("agent.newAgent", "Crea nuovo agente")}
           >
             <Plus className="h-3 w-3" />
           </button>

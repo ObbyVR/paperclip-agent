@@ -107,12 +107,20 @@ function buildTree(issues: Issue[], agents: Agent[], viewMode: ViewMode): TreeNo
     !i.parentId && childIds.has(i.id),
   );
 
-  // Standalone issues: no parent, no children, still active — show as single nodes
+  // Standalone issues: no parent, no children, still active — show as single nodes.
+  // Also includes issues whose parentId points outside the filtered set (orphaned by project filter).
   const treeRootIds = new Set(roots.map((i) => i.id));
-  const standaloneRoots = issues.filter((i) =>
-    !i.parentId && !childIds.has(i.id) && !treeRootIds.has(i.id) &&
-    (i.status === "in_progress" || i.status === "blocked" || i.status === "todo" || i.status === "in_review"),
-  );
+  const standaloneRoots = issues.filter((i) => {
+    if (treeRootIds.has(i.id)) return false;
+    // Already a tree root
+    if (!i.parentId && childIds.has(i.id)) return false;
+    // No parent, no children, active
+    const isActive = i.status === "in_progress" || i.status === "blocked" || i.status === "todo" || i.status === "in_review";
+    if (!i.parentId && !childIds.has(i.id) && isActive) return true;
+    // Has parentId but parent is not in the current issue set (filtered out)
+    if (i.parentId && !issueMap.has(i.parentId) && isActive) return true;
+    return false;
+  });
 
   function buildNode(issue: Issue, depth: number): TreeNode {
     const agent = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId) ?? null : null;
@@ -302,7 +310,7 @@ function buildEdges(root: TreeNode, failedIssueIds: Set<string>): TreeEdge[] {
         toY: child.y,
         blocked: child.issue.status === "blocked",
         done: child.issue.status === "done" || child.issue.status === "cancelled",
-        active: child.issue.status === "in_progress",
+        active: child.issue.status === "in_progress" || child.issue.status === "in_review",
         failed: failedIssueIds.has(child.issue.id),
         childIssue: child.issue,
       });
@@ -348,15 +356,18 @@ function ConnectorPath({
   const midY = (edge.fromY + edge.toY) / 2;
   const path = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${midY}, ${edge.toX} ${midY}, ${edge.toX} ${edge.toY}`;
 
+  const isInReview = edge.childIssue.status === "in_review";
   const strokeColor = edge.failed
     ? "#ef4444"
     : edge.blocked
       ? "#f59e0b"
       : edge.done
-        ? "rgba(255,255,255,0.06)"
-        : edge.active
-          ? "#22d3ee"
-          : "rgba(255,255,255,0.15)";
+        ? "rgba(255,255,255,0.08)"
+        : isInReview
+          ? "#8b5cf6"
+          : edge.active
+            ? "#22d3ee"
+            : "rgba(255,255,255,0.25)";
 
   const midX = (edge.fromX + edge.toX) / 2;
 
@@ -366,8 +377,8 @@ function ConnectorPath({
         d={path}
         fill="none"
         stroke={strokeColor}
-        strokeWidth={edge.blocked || edge.failed ? 2.5 : 2}
-        strokeDasharray={edge.active ? "6 4" : "none"}
+        strokeWidth={edge.blocked || edge.failed ? 2.5 : edge.active ? 2 : 1.5}
+        strokeDasharray={edge.active ? "8 5" : "none"}
         className={edge.active ? "animate-[dash-flow_1.5s_linear_infinite]" : ""}
       />
       {/* Blocked = amber approval indicator */}
@@ -376,9 +387,20 @@ function ConnectorPath({
           className="cursor-pointer"
           onClick={() => onBlockedClick?.(edge.childIssue)}
         >
-          <circle cx={midX} cy={midY} r={10} fill="#f59e0b" opacity={0.2} className="animate-ping" />
-          <circle cx={midX} cy={midY} r={8} fill="#d97706" stroke="#fcd34d" strokeWidth={1.5} />
-          <text x={midX} y={midY + 1} textAnchor="middle" dominantBaseline="central" fill="white" fontSize="9" fontWeight="bold">?</text>
+          <circle cx={midX} cy={midY} r={11} fill="#f59e0b" opacity={0.15} className="animate-ping" />
+          <circle cx={midX} cy={midY} r={9} fill="#d97706" stroke="#fcd34d" strokeWidth={1.5} />
+          <text x={midX} y={midY + 1} textAnchor="middle" dominantBaseline="central" fill="white" fontSize="10" fontWeight="bold">?</text>
+        </g>
+      )}
+      {/* In review = violet indicator */}
+      {edge.childIssue.status === "in_review" && !edge.failed && !edge.blocked && (
+        <g
+          className="cursor-pointer"
+          onClick={() => onBlockedClick?.(edge.childIssue)}
+        >
+          <circle cx={midX} cy={midY} r={11} fill="#8b5cf6" opacity={0.15} className="animate-pulse" />
+          <circle cx={midX} cy={midY} r={9} fill="#7c3aed" stroke="#c4b5fd" strokeWidth={1.5} />
+          <text x={midX} y={midY + 1} textAnchor="middle" dominantBaseline="central" fill="white" fontSize="10" fontWeight="bold">⟳</text>
         </g>
       )}
       {/* Failed = red error indicator */}
@@ -387,9 +409,9 @@ function ConnectorPath({
           className="cursor-pointer"
           onClick={() => onBlockedClick?.(edge.childIssue)}
         >
-          <circle cx={midX} cy={midY} r={10} fill="#ef4444" opacity={0.2} className="animate-ping" />
-          <circle cx={midX} cy={midY} r={8} fill="#dc2626" stroke="#fca5a5" strokeWidth={1.5} />
-          <text x={midX} y={midY + 1} textAnchor="middle" dominantBaseline="central" fill="white" fontSize="9" fontWeight="bold">!</text>
+          <circle cx={midX} cy={midY} r={11} fill="#ef4444" opacity={0.15} className="animate-ping" />
+          <circle cx={midX} cy={midY} r={9} fill="#dc2626" stroke="#fca5a5" strokeWidth={1.5} />
+          <text x={midX} y={midY + 1} textAnchor="middle" dominantBaseline="central" fill="white" fontSize="10" fontWeight="bold">!</text>
         </g>
       )}
     </g>
@@ -507,20 +529,23 @@ function NodeCard({
     );
   }
 
+  const isActive = node.issue.status === "in_progress";
+
   return (
     <Link
       to={`/issues/${node.issue.identifier ?? node.issue.id}`}
       data-wf-node
       className={cn(
         "absolute rounded-lg border-l-[3px] px-3 py-2 no-underline text-inherit block",
-        "hover:ring-1 hover:ring-white/10 transition-all",
+        "hover:ring-1 hover:ring-white/15 hover:brightness-110 transition-all",
         stateOverride ? stateOverride.border : colors.border,
         stateOverride ? stateOverride.bg : colors.bg,
         "border border-border/40",
         stateOverride && `ring-1 ${stateOverride.ring}`,
+        isActive && !hasFailed && "ring-1 ring-cyan-500/30 shadow-[0_0_12px_rgba(34,211,238,0.1)]",
         (isBlocked || isInReview) && !hasFailed && "animate-[pulse-blocked_2s_ease-in-out_infinite]",
         hasFailed && "animate-[pulse-blocked_1.5s_ease-in-out_infinite]",
-        isDone && !hasFailed && "opacity-50",
+        isDone && !hasFailed && "opacity-40",
       )}
       style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
     >
@@ -625,6 +650,10 @@ function BlockedPopover({
   issue,
   agents,
   onClose,
+  onApprove,
+  onReject,
+  onRevision,
+  isPending,
   hasFailed,
   failedError,
 }: {
@@ -652,10 +681,12 @@ function BlockedPopover({
         <div className="flex items-center gap-2">
           {hasFailed
             ? <AlertTriangle className="h-4 w-4 text-red-500" />
-            : <AlertCircle className="h-4 w-4 text-amber-500" />
+            : issue.status === "in_review"
+              ? <AlertCircle className="h-4 w-4 text-violet-400" />
+              : <AlertCircle className="h-4 w-4 text-amber-500" />
           }
           <span className="text-sm font-medium">
-            {hasFailed ? "Errore nell'esecuzione" : "Approvazione richiesta"}
+            {hasFailed ? "Errore nell'esecuzione" : issue.status === "in_review" ? "In revisione" : "Approvazione richiesta"}
           </span>
         </div>
         <div>
@@ -674,17 +705,68 @@ function BlockedPopover({
             </p>
           )}
         </div>
+
+        {/* Action buttons — approve/reject/revision for blocked, retry/details for failed */}
+        {isPending && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Aggiornamento in corso...
+          </div>
+        )}
+        {!isPending && hasFailed ? (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onRevision}
+              className="flex-1 inline-flex items-center justify-center h-8 rounded-md text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+            >
+              <RotateCcw className="h-3 w-3 mr-1.5" />
+              Riprova
+            </button>
+            <Link
+              to={`/issues/${issue.identifier ?? issue.id}`}
+              className="flex-1 inline-flex items-center justify-center h-8 rounded-md text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition-colors no-underline"
+            >
+              <AlertTriangle className="h-3 w-3 mr-1.5" />
+              Dettagli
+            </Link>
+          </div>
+        ) : !isPending ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onApprove}
+                className="flex-1 inline-flex items-center justify-center h-8 rounded-md text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+              >
+                <CheckCircle2 className="h-3 w-3 mr-1.5" />
+                Approva
+              </button>
+              <button
+                type="button"
+                onClick={onReject}
+                className="flex-1 inline-flex items-center justify-center h-8 rounded-md text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+              >
+                <XCircle className="h-3 w-3 mr-1.5" />
+                Rifiuta
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={onRevision}
+              className="inline-flex items-center justify-center h-8 rounded-md text-xs font-medium border border-border bg-background hover:bg-accent text-foreground transition-colors"
+            >
+              <RotateCcw className="h-3 w-3 mr-1.5" />
+              Richiedi revisione
+            </button>
+          </div>
+        ) : null}
+
         <Link
           to={`/issues/${issue.identifier ?? issue.id}`}
-          className={cn(
-            "inline-flex items-center justify-center w-full h-8 rounded-md text-xs font-medium text-white transition-colors",
-            hasFailed ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700",
-          )}
+          className="inline-flex items-center justify-center w-full text-[10px] text-muted-foreground hover:text-foreground transition-colors no-underline pt-1"
         >
-          {hasFailed
-            ? <><AlertTriangle className="h-3 w-3 mr-1.5" /> Visualizza dettagli</>
-            : <><CheckCircle2 className="h-3 w-3 mr-1.5" /> Rivedi e approva</>
-          }
+          Apri dettaglio completo →
         </Link>
       </div>
     </div>
@@ -789,8 +871,8 @@ export function WorkflowGraph({
   const [expandedGroup, setExpandedGroup] = useState<TreeNode | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("chronological");
 
-  /* ── Zoom state (scale only, no drag/pan — page scroll stays native) ── */
-  const [zoom, setZoom] = useState(1);
+  /* ── Zoom state per-workflow (keyed by root issue id) ── */
+  const [zoomByWorkflow, setZoomByWorkflow] = useState<Record<string, number>>({});
 
   const trees = useMemo(() => buildTree(issues, agents, viewMode), [issues, agents, viewMode]);
   // Drop trees whose root the user has hidden from the dashboard.
@@ -825,6 +907,10 @@ export function WorkflowGraph({
         const treeRuns = activeRuns.filter((r) => r.issueId && treeIssueIds.has(r.issueId));
 
         const rootId = root.issue.id;
+        const zoom = zoomByWorkflow[rootId] ?? 1;
+        const setZoom = (fn: (z: number) => number) =>
+          setZoomByWorkflow((prev) => ({ ...prev, [rootId]: fn(prev[rootId] ?? 1) }));
+        const resetZoom = () => setZoomByWorkflow((prev) => ({ ...prev, [rootId]: 1 }));
         const isCollapsed = collapsedWorkflowIds?.has(rootId) ?? false;
         const isCompletedColumnOpen = openCompletedColumnIds?.has(rootId) ?? false;
 
@@ -834,14 +920,24 @@ export function WorkflowGraph({
           const s = n.issue.status;
           statusCounts[s] = (statusCounts[s] ?? 0) + 1;
         }
-        const activeCount = (statusCounts.in_progress ?? 0) + (statusCounts.blocked ?? 0) + (statusCounts.in_review ?? 0);
+        const blockedCount = statusCounts.blocked ?? 0;
+        const reviewCount = statusCounts.in_review ?? 0;
+        const needsAttentionCount = blockedCount + reviewCount;
+        const failedInTree = nodes.filter((n) => failedIssueIds.has(n.issue.id));
+        const activeCount = (statusCounts.in_progress ?? 0) + blockedCount + reviewCount;
         const doneCount = (statusCounts.done ?? 0) + (statusCounts.cancelled ?? 0);
         const todoCount = statusCounts.todo ?? 0;
+
+        // Find the specific issues that need attention for diagnostic
+        const attentionIssues = nodes
+          .filter((n) => n.issue.status === "blocked" || n.issue.status === "in_review" || failedIssueIds.has(n.issue.id))
+          .map((n) => n.issue);
 
         return (
           <div
             key={rootId}
-            className="rounded-xl border border-border bg-[#0c0e14] p-4 overflow-x-auto relative"
+            className="rounded-xl border border-border/60 bg-[#0c0e14] p-4 overflow-x-auto relative"
+            style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
           >
             {/* Header: collapse toggle + title + view toggle + hide button */}
             <div className="flex items-center justify-between mb-3 gap-2">
@@ -864,7 +960,10 @@ export function WorkflowGraph({
                 {isCollapsed && (
                   <span className="flex items-center gap-2 text-[10px] text-muted-foreground/70 ml-2 shrink-0">
                     <span>{nodes.length} task</span>
-                    {activeCount > 0 && <span className="text-cyan-400">{activeCount} attivi</span>}
+                    {failedInTree.length > 0 && <span className="text-red-400">{failedInTree.length} errore</span>}
+                    {blockedCount > 0 && <span className="text-amber-400">{blockedCount} da approvare</span>}
+                    {reviewCount > 0 && <span className="text-violet-400">{reviewCount} in revisione</span>}
+                    {activeCount > 0 && needsAttentionCount === 0 && failedInTree.length === 0 && <span className="text-cyan-400">{activeCount} attivi</span>}
                     {todoCount > 0 && <span>{todoCount} da fare</span>}
                     {doneCount > 0 && <span className="text-emerald-400/70">{doneCount} completati</span>}
                   </span>
@@ -887,9 +986,71 @@ export function WorkflowGraph({
               </div>
             </div>
 
+            {/* Diagnostic banner: shows which issues need attention */}
+            {attentionIssues.length > 0 && isCollapsed && (
+              <div className="flex flex-wrap items-center gap-2 mt-1 mb-0 px-1">
+                {attentionIssues.slice(0, 3).map((issue) => {
+                  const isFailed = failedIssueIds.has(issue.id);
+                  const isReview = issue.status === "in_review";
+                  return (
+                    <Link
+                      key={issue.id}
+                      to={`/issues/${issue.identifier ?? issue.id}`}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium no-underline transition-colors",
+                        isFailed
+                          ? "border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                          : isReview
+                            ? "border border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20"
+                            : "border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20",
+                      )}
+                    >
+                      {isFailed ? <AlertTriangle className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                      <span className="font-mono">{issue.identifier}</span>
+                      <span className="text-inherit/70">
+                        {isFailed ? "errore" : isReview ? "in revisione" : "da approvare"}
+                      </span>
+                    </Link>
+                  );
+                })}
+                {attentionIssues.length > 3 && (
+                  <span className="text-[10px] text-muted-foreground">+{attentionIssues.length - 3} altre</span>
+                )}
+              </div>
+            )}
+
             {!isCollapsed && (
               <>
-                {/* Zoom / pan controls */}
+                {/* Diagnostic strip: what needs attention in this workflow */}
+                {attentionIssues.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 mb-2 px-1">
+                    {attentionIssues.slice(0, 4).map((issue) => {
+                      const isFailed = failedIssueIds.has(issue.id);
+                      const isReview = issue.status === "in_review";
+                      return (
+                        <Link
+                          key={issue.id}
+                          to={`/issues/${issue.identifier ?? issue.id}`}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium no-underline transition-colors",
+                            isFailed
+                              ? "border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                              : isReview
+                                ? "border border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20"
+                                : "border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20",
+                          )}
+                        >
+                          {isFailed ? <AlertTriangle className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                          <span className="font-mono">{issue.identifier}</span>
+                          <span className="text-inherit/70">
+                            {isFailed ? "errore" : isReview ? "in revisione" : "da approvare"}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Zoom controls — scale only, no drag/pan */}
                 <div className="sticky top-2 right-2 z-10 flex gap-1 justify-end mb-2">
                   <button
@@ -907,7 +1068,7 @@ export function WorkflowGraph({
                   <button
                     type="button"
                     className="w-7 h-7 flex items-center justify-center bg-background border border-border rounded text-[10px] hover:bg-accent transition-colors"
-                    onClick={() => setZoom(1)}
+                    onClick={() => resetZoom()}
                     title="Reset zoom"
                   >1:1</button>
                 </div>
@@ -963,15 +1124,9 @@ export function WorkflowGraph({
                     height={totalHeight}
                     style={{ overflow: "visible" }}
                   >
-                    <defs>
-                      <style>{`
-                        @keyframes dash-flow {
-                          to { stroke-dashoffset: -20; }
-                        }
-                      `}</style>
-                    </defs>
+                    {/* dash-flow + pulse-blocked keyframes defined in index.css */}
                     {edges.map((edge, i) => (
-                      <g key={i} style={{ pointerEvents: edge.blocked || edge.failed ? "auto" : "none" }}>
+                      <g key={i} style={{ pointerEvents: edge.blocked || edge.failed || edge.childIssue.status === "in_review" ? "auto" : "none" }}>
                         <ConnectorPath
                           edge={edge}
                           onBlockedClick={(issue) => setBlockedIssue(issue)}
@@ -1043,18 +1198,9 @@ export function WorkflowGraph({
           issue={blockedIssue}
           agents={agents}
           onClose={() => setBlockedIssue(null)}
-          onApprove={() => {
-            onApprove(blockedIssue.id);
-            setBlockedIssue(null);
-          }}
-          onReject={() => {
-            onReject(blockedIssue.id);
-            setBlockedIssue(null);
-          }}
-          onRevision={() => {
-            onRevision(blockedIssue.id);
-            setBlockedIssue(null);
-          }}
+          onApprove={() => onApprove(blockedIssue.id)}
+          onReject={() => onReject(blockedIssue.id)}
+          onRevision={() => onRevision(blockedIssue.id)}
           isPending={isPending}
           hasFailed={failedIssueIds.has(blockedIssue.id)}
           failedError={failedIssueErrors.get(blockedIssue.id)}
