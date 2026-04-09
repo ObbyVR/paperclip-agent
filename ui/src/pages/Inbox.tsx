@@ -390,7 +390,28 @@ export function Inbox() {
       const newStatus = action === "approve" ? "done" : "cancelled";
       const comment = action === "approve" ? "✅ Approvato dal founder." : "❌ Rifiutato dal founder.";
       await issuesApi.addComment(issueId, comment);
-      return issuesApi.update(issueId, { status: newStatus });
+      const result = await issuesApi.update(issueId, { status: newStatus });
+
+      // After approval, wake the parent issue's agent (typically the CEO)
+      // so the workflow continues with next steps
+      if (action === "approve") {
+        const issue = issueById.get(issueId);
+        if (issue?.parentId) {
+          const parent = issueById.get(issue.parentId);
+          if (parent?.assigneeAgentId) {
+            try {
+              await agentsApi.wakeup(parent.assigneeAgentId, {
+                source: "assignment",
+                triggerDetail: "system",
+                reason: "Subtask approved by founder — continue workflow",
+                payload: { issueId: parent.id, approvedSubtaskId: issueId },
+                idempotencyKey: `post-approve:${issueId}`,
+              });
+            } catch { /* best-effort — don't block the approval */ }
+          }
+        }
+      }
+      return result;
     },
     onSuccess: () => {
       setActionError(null);

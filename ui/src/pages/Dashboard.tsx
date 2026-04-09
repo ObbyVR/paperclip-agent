@@ -247,7 +247,27 @@ export function Dashboard() {
       const newStatus = action === "approve" ? "done" : "cancelled";
       const comment = action === "approve" ? "✅ Approvato dal founder." : "❌ Rifiutato dal founder.";
       await issuesApi.addComment(issueId, comment);
-      return issuesApi.update(issueId, { status: newStatus });
+      const result = await issuesApi.update(issueId, { status: newStatus });
+
+      // After approval, wake the parent issue's agent (CEO) to continue workflow
+      if (action === "approve" && issues) {
+        const issue = issues.find((i) => i.id === issueId);
+        if (issue?.parentId) {
+          const parent = issues.find((i) => i.id === issue.parentId);
+          if (parent?.assigneeAgentId) {
+            try {
+              await agentsApi.wakeup(parent.assigneeAgentId, {
+                source: "assignment",
+                triggerDetail: "system",
+                reason: "Subtask approved by founder — continue workflow",
+                payload: { issueId: parent.id, approvedSubtaskId: issueId },
+                idempotencyKey: `post-approve:${issueId}`,
+              });
+            } catch { /* best-effort */ }
+          }
+        }
+      }
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
@@ -395,7 +415,7 @@ export function Dashboard() {
                 <div className="text-[10px] text-muted-foreground">{t("dashboard.month", "mese")}</div>
               </div>
             </Link>
-            <Link to="/approvals" className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/50 px-3 py-2 hover:bg-accent/50 transition-colors no-underline text-inherit">
+            <Link to="/inbox" className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/50 px-3 py-2 hover:bg-accent/50 transition-colors no-underline text-inherit">
               <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
               <div>
                 <div className="font-semibold text-foreground">{data.pendingApprovals + data.budgets.pendingApprovals + (issues?.filter((i) => i.status === "in_review").length ?? 0)}</div>
