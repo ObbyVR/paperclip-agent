@@ -1063,25 +1063,68 @@ export function Inbox() {
         />
       )}
 
-      {/* Work items (legacy views) */}
+      {/* ── Action-required banner ── */}
+      {tab !== "projects" && tab !== "archive" && categoryCounts.richiesta > 0 && (
+        <div className="mx-1 flex items-center gap-3 rounded-xl border border-red-500/30 bg-gradient-to-r from-red-500/[0.07] to-purple-500/[0.05] px-4 py-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-lg">🚨</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-red-400">Azioni richieste</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {categoryCounts.richiesta} {categoryCounts.richiesta === 1 ? "elemento richiede" : "elementi richiedono"} la tua attenzione
+            </div>
+          </div>
+          <div className="text-2xl font-bold tabular-nums text-red-400">{categoryCounts.richiesta}</div>
+        </div>
+      )}
+
+      {/* ── Work items grouped by urgency ── */}
       {tab !== "projects" && tab !== "archive" && workItemsToRender.length > 0 && (
         <div className="space-y-4">
-          {(groupedWorkItems ?? [{ groupLabel: null, items: workItemsToRender }]).map((group) => (
-            <div key={group.groupLabel ?? "all"}>
-              {group.groupLabel && (
-                <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                    {group.groupLabel.charAt(0).toUpperCase()}
-                  </span>
-                  {group.groupLabel}
-                  <span className="text-xs font-normal text-muted-foreground">({group.items.length})</span>
-                </h3>
-              )}
-              <div className="overflow-hidden rounded-xl border border-border bg-card">
-                {group.items.map(renderItem)}
+          {groupedWorkItems ? (
+            /* Agent/project grouping active */
+            groupedWorkItems.map((group) => (
+              <div key={group.groupLabel ?? "all"}>
+                {group.groupLabel && (
+                  <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                      {group.groupLabel.charAt(0).toUpperCase()}
+                    </span>
+                    {group.groupLabel}
+                    <span className="text-xs font-normal text-muted-foreground">({group.items.length})</span>
+                  </h3>
+                )}
+                <div className="overflow-hidden rounded-xl border border-border bg-card">
+                  {group.items.map(renderItem)}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            /* Default: group by urgency category */
+            (() => {
+              const richieste = workItemsToRender.filter((i) => categorizeWorkItem(i) === "richiesta");
+              const messaggi = workItemsToRender.filter((i) => categorizeWorkItem(i) === "messaggio");
+              const aggiornamenti = workItemsToRender.filter((i) => categorizeWorkItem(i) === "aggiornamento");
+              const sections: { key: string; label: string; icon: string; items: InboxWorkItem[]; borderColor: string }[] = [
+                { key: "richiesta", label: "Approvazioni e review in attesa", icon: "🔴", items: richieste, borderColor: "border-red-500/30" },
+                { key: "messaggio", label: "Lavoro completato — da revisionare", icon: "🟡", items: messaggi, borderColor: "border-amber-500/30" },
+                { key: "aggiornamento", label: "Aggiornamenti", icon: "🔵", items: aggiornamenti, borderColor: "border-blue-500/20" },
+              ];
+              return sections
+                .filter((s) => s.items.length > 0)
+                .map((section) => (
+                  <div key={section.key}>
+                    <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span>{section.icon}</span>
+                      {section.label}
+                      <span className="text-[10px] font-normal">({section.items.length})</span>
+                    </h3>
+                    <div className={cn("overflow-hidden rounded-xl border bg-card", section.borderColor)}>
+                      {section.items.map(renderItem)}
+                    </div>
+                  </div>
+                ));
+            })()
+          )}
         </div>
       )}
 

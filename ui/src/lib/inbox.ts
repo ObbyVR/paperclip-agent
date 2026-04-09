@@ -93,10 +93,10 @@ export function loadLastInboxTab(): InboxTab {
       raw === "archive"
     )
       return raw;
-    if (raw === "new") return "projects";
-    return "projects";
+    if (raw === "new") return "mine";
+    return "mine";
   } catch {
-    return "projects";
+    return "mine";
   }
 }
 
