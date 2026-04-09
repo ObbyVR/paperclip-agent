@@ -12,6 +12,7 @@ import { heartbeatsApi } from "../api/heartbeats";
 import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
+import { useToast } from "../context/ToastContext";
 import { queryKeys } from "../lib/queryKeys";
 import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
@@ -71,6 +72,7 @@ export function Inbox() {
   const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
+  const { pushToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -413,12 +415,17 @@ export function Inbox() {
       }
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (_data, { action }) => {
       setActionError(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      pushToast({
+        title: action === "approve" ? "Approvata" : "Rifiutata",
+        tone: action === "approve" ? "success" : "warning",
+      });
     },
     onError: (err) => {
       setActionError(err instanceof Error ? err.message : "Failed to update issue");
+      pushToast({ title: "Errore nell'aggiornamento", tone: "error" });
     },
   });
 

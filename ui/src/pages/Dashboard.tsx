@@ -9,6 +9,7 @@ import { projectsApi } from "../api/projects";
 import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
+import { useToast } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
@@ -131,6 +132,7 @@ export function Dashboard() {
   const { t } = useTranslation();
   const { selectedCompanyId, companies } = useCompany();
   const { openOnboarding } = useDialog();
+  const { pushToast } = useToast();
   const { setBreadcrumbs } = useBreadcrumbs();
   // Activity animation state removed — feed no longer on dashboard
 
@@ -269,9 +271,13 @@ export function Dashboard() {
       }
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (_data, { action }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
       queryClient.invalidateQueries({ queryKey: queryKeys.liveRuns(selectedCompanyId!) });
+      pushToast({
+        title: action === "approve" ? "Approvata" : action === "reject" ? "Rifiutata" : "Revisione richiesta",
+        tone: action === "approve" ? "success" : action === "reject" ? "warning" : "info",
+      });
     },
   });
 
