@@ -969,7 +969,6 @@ export function IssueDetail() {
           {assigneeAgent && (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <Identity name={assigneeAgent.name} size="xs" />
-              <span className="truncate max-w-[140px]">{assigneeAgent.name}</span>
             </span>
           )}
 
