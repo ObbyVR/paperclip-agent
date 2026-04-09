@@ -167,11 +167,16 @@ function SectionOutput({ issue }: { issue: Issue }) {
     const isLong = fixedBody.length > 3000;
     const displayBody = showFull || !isLong ? fixedBody : fixedBody.slice(0, 3000);
 
+    // Resolve a human-readable document title
+    const docDisplayTitle = doc.title
+      ?? fixedBody.match(/^#\s+(.+)/m)?.[1]
+      ?? doc.key.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
     return (
       <>
         <div className="px-4 py-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium">{doc.title ?? doc.key}</p>
+            <p className="text-sm font-medium">{docDisplayTitle}</p>
             <button
               type="button"
               onClick={() => setFullscreen(true)}
@@ -218,7 +223,7 @@ function SectionOutput({ issue }: { issue: Issue }) {
                   {issue.title}
                 </h2>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {doc.title ?? doc.key}
+                  {docDisplayTitle}
                 </p>
               </div>
               <button
