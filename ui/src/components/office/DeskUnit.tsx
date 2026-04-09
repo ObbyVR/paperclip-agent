@@ -201,10 +201,13 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
 
       {/* Name tag */}
       <div className="flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700/50 group-hover:border-violet-500/50 group-hover:bg-slate-800/90 group-focus-visible:border-violet-500/50 transition-colors">
-        {isLeader && <span className="text-[8px] shrink-0">👑</span>}
+        {isLeader && <span className="text-[9px] shrink-0" title="Team Lead">👑</span>}
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
         <span className="text-[10px] font-semibold text-slate-200 truncate max-w-[80px]">{firstName}</span>
       </div>
+      {isLeader && !isCeo && (
+        <span className="text-[7px] text-amber-500/50 font-bold uppercase tracking-wider mt-px">Team Lead</span>
+      )}
 
       {/* Sub-label: dynamic status text */}
       <span className={`text-[8px] mt-0.5 ${subLabelColor} truncate max-w-[100px]`}>{subLabel}</span>

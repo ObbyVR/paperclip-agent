@@ -37,17 +37,20 @@ export function CEOOffice({ ceo, approvalQueue, pendingApprovals, lastComments, 
         {/* Skyline window — centered behind desk */}
         <div className="absolute top-2 left-1/2 -translate-x-1/2 w-48 h-16 rounded border border-slate-600/30 overflow-hidden"
           style={{ background: "linear-gradient(180deg, #0a0e1a 0%, #121830 60%, #1a2040 100%)" }}>
-          {/* Buildings silhouette */}
+          {/* Buildings silhouette — window pattern seeded by building index */}
           <div className="absolute bottom-0 w-full flex items-end justify-center gap-[2px] px-2">
             {[20, 28, 16, 32, 24, 18, 30, 14, 26, 22, 34, 20, 28].map((h, i) => (
               <div key={i} className="bg-slate-800/80" style={{ width: 6 + (i % 3) * 2, height: h, borderRadius: "1px 1px 0 0" }}>
-                {/* Windows */}
-                {Array.from({ length: Math.floor(h / 6) }).map((_, j) => (
-                  <div key={j} className="mx-auto mt-1" style={{
-                    width: 2, height: 2, borderRadius: 1,
-                    backgroundColor: Math.random() > 0.4 ? "rgba(255,220,120,0.4)" : "transparent",
-                  }} />
-                ))}
+                {/* Windows — deterministic pattern based on building+floor index */}
+                {Array.from({ length: Math.floor(h / 6) }).map((_, j) => {
+                  const lit = ((i * 7 + j * 13 + 3) % 5) > 1; // deterministic pseudo-random
+                  return (
+                    <div key={j} className="mx-auto mt-1" style={{
+                      width: 2, height: 2, borderRadius: 1,
+                      backgroundColor: lit ? "rgba(255,220,120,0.4)" : "transparent",
+                    }} />
+                  );
+                })}
               </div>
             ))}
           </div>

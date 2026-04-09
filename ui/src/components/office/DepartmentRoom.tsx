@@ -189,14 +189,14 @@ export function DepartmentRoom({ department, pendingApprovals, lastComments, onA
           const pendingCount = allAgents.reduce((sum, a) => sum + (pendingApprovals.get(a.id)?.length ?? 0), 0);
           return (
             <>
-              <div className="flex items-center gap-2.5 text-[9px]">
-                {active > 0 && <span className="flex items-center gap-1 text-green-400"><span className="w-1.5 h-1.5 rounded-full bg-green-500" />{active}</span>}
-                {idle > 0 && <span className="flex items-center gap-1 text-slate-500"><span className="w-1.5 h-1.5 rounded-full bg-slate-500" />{idle}</span>}
+              <div className="flex items-center gap-3 text-[10px]">
+                {active > 0 && <span className="flex items-center gap-1 text-green-400"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />{active}</span>}
+                {idle > 0 && <span className="flex items-center gap-1 text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-slate-500" />{idle}</span>}
                 {paused > 0 && <span className="flex items-center gap-1 text-amber-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />{paused}</span>}
-                {error > 0 && <span className="flex items-center gap-1 text-red-400"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />{error}</span>}
+                {error > 0 && <span className="flex items-center gap-1 text-red-400 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />{error}</span>}
               </div>
               {pendingCount > 0 && (
-                <span className="text-[9px] text-red-400 font-medium">{pendingCount} in attesa</span>
+                <span className="text-[10px] text-red-400 font-semibold">{pendingCount} in attesa</span>
               )}
             </>
           );
