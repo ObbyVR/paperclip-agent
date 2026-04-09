@@ -293,10 +293,16 @@ export function categorizeWorkItem(item: InboxWorkItem): InboxItemCategory {
   if (item.kind === "issue") {
     const { issue } = item;
     if (issue.status === "blocked" || issue.status === "in_review") return "richiesta";
-    if (issue.status === "done") return "messaggio";
+    // Unread issue: agent commented after user's last touch → needs review
     const lastExternal = normalizeTimestamp(issue.lastExternalCommentAt);
     const myLastTouch = normalizeTimestamp(issue.myLastTouchAt);
-    if (lastExternal > 0 && lastExternal > myLastTouch) return "messaggio";
+    const isUnread = lastExternal > 0 && lastExternal > myLastTouch;
+    // Done + unread = agent finished, founder must review
+    if (issue.status === "done" && isUnread) return "richiesta";
+    // Any unread comment from agent = needs attention
+    if (isUnread) return "richiesta";
+    // Done but already seen = informational
+    if (issue.status === "done") return "messaggio";
     return "aggiornamento";
   }
   return "aggiornamento";

@@ -14,6 +14,7 @@ import { activityApi } from "../api/activity";
 import { approvalsApi } from "../api/approvals";
 import { agentsApi } from "../api/agents";
 import { useCompany } from "../context/CompanyContext";
+import { useToast } from "../context/ToastContext";
 import { queryKeys } from "../lib/queryKeys";
 import { timeAgo } from "../lib/timeAgo";
 import { cn } from "../lib/utils";
@@ -106,11 +107,18 @@ export function AgentChatSheet({ agent, open, onOpenChange }: AgentChatSheetProp
     );
   }, [allApprovals, agent]);
 
+  const { pushToast } = useToast();
+
   /* ── Mutations ── */
   const approveMutation = useMutation({
     mutationFn: (id: string) => approvalsApi.approve(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.approvals.list(selectedCompanyId!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId!) });
+      pushToast({ title: "Approvato", tone: "success" });
+    },
+    onError: (err: Error) => {
+      pushToast({ title: "Errore approvazione", body: err.message, tone: "error" });
     },
   });
 
@@ -118,6 +126,11 @@ export function AgentChatSheet({ agent, open, onOpenChange }: AgentChatSheetProp
     mutationFn: (id: string) => approvalsApi.reject(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.approvals.list(selectedCompanyId!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId!) });
+      pushToast({ title: "Rifiutato", tone: "info" });
+    },
+    onError: (err: Error) => {
+      pushToast({ title: "Errore rifiuto", body: err.message, tone: "error" });
     },
   });
 

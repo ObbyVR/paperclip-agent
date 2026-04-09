@@ -1105,8 +1105,8 @@ export function Inbox() {
               const messaggi = workItemsToRender.filter((i) => categorizeWorkItem(i) === "messaggio");
               const aggiornamenti = workItemsToRender.filter((i) => categorizeWorkItem(i) === "aggiornamento");
               const sections: { key: string; label: string; icon: string; items: InboxWorkItem[]; borderColor: string }[] = [
-                { key: "richiesta", label: "Approvazioni e review in attesa", icon: "🔴", items: richieste, borderColor: "border-red-500/30" },
-                { key: "messaggio", label: "Lavoro completato — da revisionare", icon: "🟡", items: messaggi, borderColor: "border-amber-500/30" },
+                { key: "richiesta", label: "Richiedono la tua attenzione", icon: "🔴", items: richieste, borderColor: "border-red-500/30" },
+                { key: "messaggio", label: "Informazioni dai tuoi agenti", icon: "🟡", items: messaggi, borderColor: "border-amber-500/30" },
                 { key: "aggiornamento", label: "Aggiornamenti", icon: "🔵", items: aggiornamenti, borderColor: "border-blue-500/20" },
               ];
               return sections
