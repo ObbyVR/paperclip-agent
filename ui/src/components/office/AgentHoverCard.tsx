@@ -39,6 +39,16 @@ export function AgentHoverCard({ agent, pending, lastComment, isLeader, children
     setVisible(false);
   }, []);
 
+  // Touch: long-press (500ms) to toggle card
+  const handleTouchStart = useCallback(() => {
+    timerRef.current = setTimeout(() => setVisible((v) => !v), 500);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }, []);
+
   const roleName = agent.name.split("—")[1]?.trim() ?? agent.role ?? "";
   const fullName = agent.name.split("—")[0]?.trim() ?? agent.name;
   const statusInfo = STATUS_LABELS[agent.status] ?? STATUS_LABELS.idle;
@@ -57,7 +67,7 @@ export function AgentHoverCard({ agent, pending, lastComment, isLeader, children
   }
 
   return (
-    <div className="relative" onMouseEnter={show} onMouseLeave={hide}>
+    <div className="relative" onMouseEnter={show} onMouseLeave={hide} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       {children}
 
       {visible && (

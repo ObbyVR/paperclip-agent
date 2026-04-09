@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "paperclip-ui",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/.bin/vite"],
+      "port": 5173,
+      "env": {
+        "PATH": "/Users/valeriorullo/.local/node-v22.14.0-darwin-arm64/bin:/usr/bin:/bin"
+      }
+    },
+    {
+      "name": "paperclip-ui-prod",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/.bin/vite", "preview", "--port", "4173", "--strictPort"],
+      "port": 4173,
+      "env": {
+        "PATH": "/Users/valeriorullo/.local/node-v22.14.0-darwin-arm64/bin:/usr/bin:/bin"
+      }
+    }
+  ]
+}

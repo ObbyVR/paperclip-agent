@@ -100,6 +100,8 @@ export function getDeptTheme(leaderRole: string): { wall: string; accent: string
     case "cto":
     case "devops":
       return { wall: "#0f1a2a", accent: "#3b82f6", floor: "#0a1220" };
+    case "ecommerce":
+      return { wall: "#2a1a1a", accent: "#f97316", floor: "#1e1210" };
     case "cmo":
     case "pm":
       return { wall: "#1a2a1a", accent: "#22c55e", floor: "#121e12" };

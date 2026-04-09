@@ -92,15 +92,27 @@ interface DepartmentRoomProps {
   onAgentClick: (agent: Agent) => void;
 }
 
+/** Infer department type from leader name for better icon/label matching */
+function inferDeptRole(agent: { name: string; role: string }): string {
+  const nameLower = agent.name.toLowerCase();
+  if (nameLower.includes("creativ") || nameLower.includes("design") || nameLower.includes("art")) return "designer";
+  if (nameLower.includes("ecommerce") || nameLower.includes("e-commerce")) return "ecommerce";
+  if (nameLower.includes("ricerca") || nameLower.includes("research") || nameLower.includes("intelligence")) return "researcher";
+  if (nameLower.includes("finanz") || nameLower.includes("finance") || nameLower.includes("cfo")) return "cfo";
+  if (nameLower.includes("marketing") || nameLower.includes("growth")) return "cmo";
+  return agent.role;
+}
+
 export function DepartmentRoom({ department, pendingApprovals, lastComments, onAgentClick }: DepartmentRoomProps) {
   // Start collapsed on mobile (<640px)
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const allAgents = flattenDepartment(department);
-  const theme = getDeptTheme(department.leader.role);
+  const inferredRole = inferDeptRole(department.leader);
+  const theme = getDeptTheme(inferredRole);
   const hasError = allAgents.some((a) => a.status === "error");
   const hasActive = allAgents.some((a) => a.status === "active" || a.status === "running");
   const leaderName = department.leader.name.split("—")[1]?.trim() ?? department.leader.name.split("—")[0]?.trim() ?? "Team";
-  const decor = getDeptDecor(department.leader.role);
+  const decor = getDeptDecor(inferredRole);
 
   const borderStyle = hasError
     ? { borderColor: "rgba(239,68,68,0.5)", animation: "pulse-border-red 2s ease-in-out infinite" }
