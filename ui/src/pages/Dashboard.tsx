@@ -16,7 +16,7 @@ import { StatusIcon } from "../components/StatusIcon";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { formatCents } from "../lib/utils";
-import { Bot, ChevronDown, ChevronRight, CircleDot, DollarSign, EyeOff, FolderOpen, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
+import { AlertCircle, Bot, ChevronDown, ChevronRight, CircleDot, DollarSign, EyeOff, FolderOpen, LayoutDashboard, PauseCircle, ShieldCheck, Square } from "lucide-react";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { dashboardPrefs, useDashboardPrefs } from "../lib/dashboardPrefs";
 import { Component, type ErrorInfo, type ReactNode } from "react";
@@ -303,6 +303,41 @@ export function Dashboard() {
           </button>
         </div>
       )}
+
+      {/* ── Action required banner — clear CTA when user needs to act ── */}
+      {(() => {
+        const blockedCount = issues?.filter((i) => i.status === "blocked").length ?? 0;
+        const reviewCount = issues?.filter((i) => i.status === "in_review").length ?? 0;
+        const approvalCount = (data?.pendingApprovals ?? 0) + (data?.budgets?.pendingApprovals ?? 0);
+        const actionCount = blockedCount + reviewCount + approvalCount;
+        if (actionCount === 0) return null;
+        const parts: string[] = [];
+        if (approvalCount > 0) parts.push(`${approvalCount} da approvare`);
+        if (blockedCount > 0) parts.push(`${blockedCount} bloccate`);
+        if (reviewCount > 0) parts.push(`${reviewCount} da revisionare`);
+        return (
+          <Link
+            to="/inbox"
+            className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 hover:bg-amber-500/[0.12] transition-colors no-underline text-inherit group"
+          >
+            <div className="flex items-center justify-center h-9 w-9 rounded-full bg-amber-500/20 shrink-0">
+              <AlertCircle className="h-5 w-5 text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                {actionCount === 1
+                  ? "1 attivita' richiede la tua attenzione"
+                  : `${actionCount} attivita' richiedono la tua attenzione`
+                }
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {parts.join(" · ")} — clicca per gestirle
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-amber-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        );
+      })()}
 
       {/* ── Project filter + Stats card grid ─────────────── */}
       {data && (
