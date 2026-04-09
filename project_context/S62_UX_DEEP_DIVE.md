@@ -1,7 +1,7 @@
 # S62 — UX Deep Dive: Issue Detail + Workflow Graph
 
 > File dedicato. Non sovrascrive SESSION_HANDOFF.md.
-> Creato dalla sessione S61 (dashboard fix).
+> Creato dalla sessione S61 (dashboard fix, branch `fix/dashboard-bugs-and-ux`).
 
 ---
 
@@ -17,55 +17,137 @@ Ma l'utente ha segnalato due aree ancora problematiche:
 
 ---
 
-## TASK 1: Issue Detail Page — UX analysis + fix
+## COMPORTAMENTO DA ASSUMERE
 
-### Problema
+### Chi sei in questa sessione
 
-Quando l'utente clicca su un messaggio/task dall'inbox, la pagina di dettaglio issue non e' immediata. L'utente non si orienta e non capisce cosa blocca il task.
+Devi comportarti simultaneamente come **tre figure professionali**:
 
-### Come affrontare (stessa metodologia usata in S61)
+1. **UX/UI Designer Senior** — Analizzi layout, gerarchia visiva, affordance, flow dell'utente. Ogni elemento ha un peso visivo: lo stai usando bene o stai sprecando attenzione su cose irrilevanti?
 
-1. **Apri issue reali** (WEB-101, WEB-140, o una blocked) e fai screenshot
-2. **Analizza come UX senior designer**: quali informazioni vede l'utente? In che ordine? Cosa manca?
-3. **Analizza come esperto di neurolinguistica**: il cervello processa prima le informazioni pre-attentive (colore, posizione, dimensione). La pagina guida l'occhio verso l'azione necessaria?
-4. **Identifica i friction points**:
-   - L'utente capisce immediatamente lo status del task?
-   - Sa cosa deve fare (approvare? leggere l'output? commentare?)?
-   - L'output dell'agente e' facile da trovare e leggere?
-   - I tab (Output/Briefing/Commenti/Attivita'/Sotto-attivita') sono nell'ordine giusto?
-   - Il call-to-action e' visibile above-the-fold?
-5. **Implementa fix concreti**: banner di stato, riordino tab, CTA in evidenza, semplificazione layout
+2. **Esperto di Neurolinguistica applicata alle interfacce** — Il cervello umano processa le informazioni in quest'ordine:
+   - **Pre-attentivo** (< 200ms): colore, dimensione, posizione, movimento. L'utente NON legge — reagisce.
+   - **Attentivo** (200ms-2s): legge titoli, badge, label. Cerca pattern familiari.
+   - **Cognitivo** (> 2s): legge testo, interpreta dati, decide cosa fare.
+   
+   La tua domanda guida: *"L'informazione piu' importante arriva al cervello nella fase pre-attentiva o l'utente deve cercarla?"*
+
+3. **Senior Developer** — Implementi le fix. Niente teoria senza codice. Ogni analisi deve produrre un cambiamento concreto nel codice.
+
+### Metodo di lavoro (non negoziabile)
+
+Per OGNI problema UX devi seguire questo ciclo:
+
+```
+STEP 1 — OSSERVA
+  → Apri la pagina reale nel preview (preview_start + preview_eval per navigare)
+  → Fai screenshot
+  → NON leggere il codice prima. Guarda solo lo screenshot.
+  → Scrivi cosa vede l'utente nei primi 3 secondi.
+  → Scrivi cosa NON vede ma dovrebbe vedere.
+
+STEP 2 — DIAGNOSTICA
+  → Ora leggi il codice dei componenti coinvolti
+  → Identifica il gap tra "cosa il codice mostra" e "cosa l'utente ha bisogno"
+  → Classifica ogni friction point:
+     - CRITICO: l'utente non sa cosa fare (manca il CTA)
+     - ALTO: l'utente deve cercare l'informazione (gerarchia sbagliata)
+     - MEDIO: l'utente capisce ma con sforzo inutile (terminologia, layout)
+     - BASSO: brutto ma funzionale (estetica)
+
+STEP 3 — PROGETTA
+  → Per ogni friction point CRITICO e ALTO, scrivi la fix in linguaggio naturale
+  → Esempio: "Aggiungere un banner amber sopra i tab che dice 'Questo task e' 
+    in attesa della tua approvazione — [Approva] [Rifiuta]'"
+  → Verifica che la fix rispetti il principio: l'azione necessaria deve 
+    essere visibile nella fase pre-attentiva (< 200ms, colore + posizione)
+
+STEP 4 — IMPLEMENTA
+  → Scrivi il codice
+  → Verifica nel preview con screenshot
+  → Se non funziona, torna a STEP 1
+
+STEP 5 — VALIDA
+  → Fai screenshot finale
+  → Confronta "prima" e "dopo"
+  → L'utente ora capisce cosa fare nei primi 3 secondi? Se no, torna a STEP 3.
+```
+
+### Cosa NON fare
+
+- Non leggere il codice prima di guardare lo screenshot
+- Non proporre soluzioni senza implementarle
+- Non fare analisi teoriche senza screenshot reali
+- Non assumere che l'utente "capira'" — se deve pensare, hai sbagliato
+- Non aggiungere complessita' (nuovi componenti, nuovi state) se basta riordinare/colorare/spostare
+
+---
+
+## TASK 1: Issue Detail Page — "Non capisco cosa devo fare"
+
+### Il problema dell'utente
+
+Dall'inbox clicco su un task (es. WEB-101 "Sviluppo App fridge", status `in_review`). Si apre la pagina di dettaglio. L'utente si perde:
+- Non capisce immediatamente lo status
+- Non sa se deve approvare, leggere l'output, o commentare
+- I tab (Output/Briefing/Commenti/Attivita'/Sotto-attivita') non lo guidano
+- L'output dell'agente e' sepolto dentro un tab
+
+### Issue da testare
+
+- `WEB-101` (in_review) — Smart Fridge
+- `WEB-140` (in_review) — TrendLoot
+- `WEB-160` (in_review) — Smart Fridge UI Redesign
+- Qualunque issue `blocked` se presente
+
+### Domande a cui rispondere (con screenshot)
+
+1. Quando apro la pagina, cosa vedo above-the-fold? C'e' un CTA?
+2. Lo status dell'issue e' evidente o devo cercarlo?
+3. Se l'issue e' `in_review`, c'e' un bottone "Approva" visibile senza scrollare?
+4. L'output dell'agente (il deliverable) e' immediatamente accessibile?
+5. I tab sono nell'ordine giusto per un'issue che aspetta review?
+6. Il thread di commenti mostra chiaramente chi ha detto cosa e quando?
 
 ### File coinvolti
 
-- `ui/src/pages/IssueDetail.tsx` — pagina principale
+- `ui/src/pages/IssueDetail.tsx` — pagina principale (~1500 righe)
 - `ui/src/components/IssueReviewLayout.tsx` — layout per issue in review
-- `ui/src/components/IssueResultsInline.tsx` — output agente
-- `ui/src/components/IssueProperties.tsx` — pannello proprietà laterale
+- `ui/src/components/IssueResultsInline.tsx` — output agente inline
+- `ui/src/components/IssueProperties.tsx` — pannello proprieta'
 - `ui/src/components/CommentThread.tsx` — thread commenti
 
 ---
 
-## TASK 2: Workflow Graph — analisi blocchi agenti
+## TASK 2: Workflow Graph — "Perche' e' tutto bloccato?"
 
-### Problema
+### Il problema dell'utente
 
-L'utente guarda il grafo e non capisce PERCHE' un workflow e' bloccato. Vede nodi amber/rossi ma non sa la causa.
+L'utente guarda il grafo nella dashboard e vede nodi amber/rossi/viola. Ma non capisce:
+- Perche' un workflow e' fermo
+- Quale nodo specifico blocca il progresso
+- Cosa deve fare per sbloccarlo
+- Se il blocco e' un errore tecnico o un'attesa di approvazione
 
-### Come affrontare
+### Domande a cui rispondere (con screenshot)
 
-1. **Analizza i dati reali**: per ogni workflow visibile, qual e' lo stato dei subtask? Quali sono bloccati e perche'?
-2. **Identifica il pattern**: i workflow si bloccano perche' il CEO non viene triggerato? Perche' un agente ha fallito? Perche' manca un'approvazione?
-3. **Implementa "diagnosi visiva"**:
-   - Nel grafo, aggiungere tooltip/hover che spieghi PERCHE' un nodo e' in quel stato
-   - Nel header del workflow collassato, mostrare "Bloccato: in attesa di approvazione su WEB-XXX"
-   - Aggiungere un bottone "Rilancia" nel popover errore che riprova l'esecuzione dell'agente
-4. **Testare il flusso end-to-end**: crea un task → CEO crea subtask → approva → CEO riparte
+1. Guardando un workflow con nodi bloccati, l'utente capisce in 3 secondi cosa fare?
+2. L'header collassato del workflow dice qualcosa di utile sullo stato?
+3. Quando faccio hover su un nodo, ottengo informazioni utili?
+4. L'indicatore sull'edge (il cerchietto ?) e' abbastanza grande e chiaro?
+5. Il popover che si apre cliccando l'edge ha abbastanza contesto?
+
+### Cosa implementare
+
+- **Tooltip hover sui nodi**: mostra lo status + da quanto tempo e' in quello stato + chi e' assegnato
+- **Header workflow collassato migliorato**: "Bloccato: in attesa di approvazione su WEB-XXX" invece di solo "3 attivi"
+- **Popover errore con "Rilancia"**: se un agente ha fallito, l'utente deve poter rilanciare con un click (usa `agentsApi.wakeup()`)
+- **Visual priority**: i nodi che richiedono azione utente devono essere visivamente dominanti (piu' grandi? bordo piu' spesso? glow?)
 
 ### File coinvolti
 
-- `ui/src/components/WorkflowGraph.tsx` — nodi, edge, popover
-- `ui/src/pages/Dashboard.tsx` — dati passati al grafo
+- `ui/src/components/WorkflowGraph.tsx` — nodi, edge, popover, layout
+- `ui/src/pages/Dashboard.tsx` — dati passati al grafo (failedIssueIds, activeRuns)
 
 ---
 
@@ -81,14 +163,14 @@ L'utente guarda il grafo e non capisce PERCHE' un workflow e' bloccato. Vede nod
 
 ## Branch
 
-Continuare su `fix/dashboard-bugs-and-ux` oppure creare branch dedicato.
+Continuare su `fix/dashboard-bugs-and-ux` o creare branch dedicato `fix/ux-issue-detail-graph`.
 
 ## Riferimenti S61
 
-Commit della sessione precedente (6 commit su `fix/dashboard-bugs-and-ux`):
+6 commit su `fix/dashboard-bugs-and-ux`:
 - `380c46c1` — 8 bug fix (popover, polling, zoom, cache, orphan, keyframes)
 - `ad2666d4` — Banner azione in dashboard
 - `88bd8734` — Bottoni Approva/Rifiuta inbox per issue blocked/in_review
-- `c4dda893` — CEO wakeup post-approvazione + fix link /approvals
+- `c4dda893` — CEO wakeup post-approvazione
 - `b5ae3942` — Toast feedback
 - `ed45ec08` — Session handoff
