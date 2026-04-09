@@ -32,8 +32,10 @@ export function approvalLabel(type: string, payload?: Record<string, unknown> | 
   if (type === "approve_ceo_strategy" && payload?.title) {
     return String(payload.title);
   }
-  if ((type === "blueprint_step_input" || type === "blueprint_step_review") && payload?.stepTitle) {
-    return `Blueprint: ${String(payload.stepTitle)}`;
+  if (type === "blueprint_step_input" || type === "blueprint_step_review") {
+    const bpName = payload?.blueprintTitle ? String(payload.blueprintTitle) : "Blueprint";
+    const step = payload?.stepTitle ? String(payload.stepTitle) : null;
+    return step ? `${bpName}: ${step}` : bpName;
   }
   return base;
 }

@@ -250,6 +250,7 @@ export function blueprintService(db: Db) {
         type: "blueprint_step_input",
         payload: {
           blueprintRunId: runId,
+          blueprintTitle: runDetail.blueprint.title,
           stepId: currentStep.id,
           stepTitle: currentStep.title,
           paramsSchema: currentStep.paramsSchema ?? null,
@@ -268,6 +269,7 @@ export function blueprintService(db: Db) {
         type: "blueprint_step_review",
         payload: {
           blueprintRunId: runId,
+          blueprintTitle: runDetail.blueprint.title,
           stepId: currentStep.id,
           stepTitle: currentStep.title,
           stepOutput: prevOutput,
