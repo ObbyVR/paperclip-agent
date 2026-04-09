@@ -820,3 +820,14 @@ a.paperclip-project-mention-chip {
   0%, 100% { transform: translate(-50%, -100%) translateY(0); }
   50% { transform: translate(-50%, -100%) translateY(-3px); }
 }
+
+/* ── WorkflowGraph: blocked/error node pulse ────── */
+@keyframes pulse-blocked {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 8px 2px rgba(245, 158, 11, 0.15); }
+}
+
+/* ── WorkflowGraph: active edge animated dash ────── */
+@keyframes dash-flow {
+  to { stroke-dashoffset: -20; }
+}

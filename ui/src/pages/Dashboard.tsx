@@ -154,6 +154,7 @@ export function Dashboard() {
     queryKey: queryKeys.issues.list(selectedCompanyId!),
     queryFn: () => issuesApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
+    refetchInterval: 15_000,
   });
 
   const { data: projectsList } = useQuery({
@@ -198,16 +199,16 @@ export function Dashboard() {
     queryKey: [...queryKeys.liveRuns(selectedCompanyId ?? ""), "dashboard-wf"],
     queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!, 4),
     enabled: !!selectedCompanyId,
-    refetchInterval: 60000,
+    refetchInterval: 10_000,
   });
   const activeRuns = (liveRuns ?? []).filter((r) => r.status === "running" || r.status === "queued");
 
   // Fetch all runs to identify failed issues for WorkflowGraph coloring
   const { data: allRuns } = useQuery({
     queryKey: [...queryKeys.liveRuns(selectedCompanyId ?? ""), "all-runs"],
-    queryFn: () => heartbeatsApi.list(selectedCompanyId!),
+    queryFn: () => heartbeatsApi.list(selectedCompanyId!, undefined, 200),
     enabled: !!selectedCompanyId,
-    refetchInterval: 60000,
+    refetchInterval: 15_000,
   });
 
   // Build sets of failed issue IDs + error messages (only for issues that haven't succeeded since)
@@ -219,7 +220,8 @@ export function Dashboard() {
     // Group runs by issueId, check if latest run for each issue is a failure
     const latestByIssue = new Map<string, { status: string; error: string }>();
     for (const run of allRuns) {
-      const issueId = (run as any).contextSnapshot?.issueId;
+      // Use direct issueId first, fall back to contextSnapshot for older runs
+      const issueId = (run as any).issueId ?? (run as any).contextSnapshot?.issueId;
       if (!issueId) continue;
       // Runs are ordered newest first — only keep the first (latest) per issue
       if (!latestByIssue.has(issueId)) {
@@ -249,6 +251,7 @@ export function Dashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.liveRuns(selectedCompanyId!) });
     },
   });
 
