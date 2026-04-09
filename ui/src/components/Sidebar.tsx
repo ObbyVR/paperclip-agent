@@ -14,6 +14,7 @@ import {
   Map,
   Settings,
   Users,
+  Building2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -88,6 +89,7 @@ export function Sidebar() {
             <span className="truncate">{t("nav.newIssue")}</span>
           </button>
           <SidebarNavItem to="/dashboard" label={t("nav.dashboard")} icon={LayoutDashboard} liveCount={liveRunCount} />
+          <SidebarNavItem to="/office" label="Ufficio" icon={Building2} />
           <SidebarNavItem
             to="/inbox"
             label={t("nav.inbox")}

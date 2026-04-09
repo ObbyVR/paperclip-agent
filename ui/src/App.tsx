@@ -36,6 +36,7 @@ import { InstanceExperimentalSettings } from "./pages/InstanceExperimentalSettin
 import { PluginManager } from "./pages/PluginManager";
 import { PluginSettings } from "./pages/PluginSettings";
 import { PluginPage } from "./pages/PluginPage";
+import { PixelOffice } from "./pages/PixelOffice";
 import { RunTranscriptUxLab } from "./pages/RunTranscriptUxLab";
 import { OrgChart } from "./pages/OrgChart";
 import { RoundTable } from "./pages/RoundTable";
@@ -123,6 +124,7 @@ function boardRoutes() {
     <>
       <Route index element={<Navigate to="dashboard" replace />} />
       <Route path="dashboard" element={<Dashboard />} />
+      <Route path="office" element={<PixelOffice />} />
       <Route path="onboarding" element={<OnboardingRoutePage />} />
       <Route path="companies" element={<Companies />} />
       <Route path="company/settings" element={<CompanySettings />} />
