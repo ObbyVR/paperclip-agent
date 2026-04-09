@@ -456,25 +456,29 @@ function ActivityFeedRow({
 
       {/* Main content */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className={cn("flex items-center gap-2 flex-wrap", isCompact && "opacity-70")}>
           <span className={cn("font-medium uppercase tracking-wide shrink-0", colors.text, isCompact ? "text-[9px]" : "text-[10px]")}>
             {actionLabel}
           </span>
-          <span className="text-xs text-muted-foreground shrink-0">·</span>
-          <div className="flex items-center gap-1 shrink-0">
-            {head.actorType === "agent" ? (
-              <Identity name={actor} size="xs" />
-            ) : (
-              <>
-                {head.actorType === "system" ? (
-                  <Cog className="h-3 w-3 text-muted-foreground" />
+          {!isCompact && (
+            <>
+              <span className="text-xs text-muted-foreground shrink-0">·</span>
+              <div className="flex items-center gap-1 shrink-0">
+                {head.actorType === "agent" ? (
+                  <Identity name={actor} size="xs" />
                 ) : (
-                  <User className="h-3 w-3 text-muted-foreground" />
+                  <>
+                    {head.actorType === "system" ? (
+                      <Cog className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <User className="h-3 w-3 text-muted-foreground" />
+                    )}
+                    <span className="text-xs text-foreground/80">{actor}</span>
+                  </>
                 )}
-                <span className="text-xs text-foreground/80">{actor}</span>
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
           {isBurst && (
             <button
               type="button"

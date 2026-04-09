@@ -15,6 +15,7 @@ import {
   UserPlus,
   AlertTriangle,
   ArrowUp,
+  Minus,
 } from "lucide-react";
 import type { Approval, HeartbeatRun, Issue, JoinRequest } from "@paperclipai/shared";
 import type { InboxWorkItem, InboxItemContext } from "../lib/inbox";
@@ -128,9 +129,10 @@ function firstNonEmptyLine(value: string | null | undefined): string | null {
 
 // ── Render per kind ──────────────────────────────────────────────────
 
-const PRIORITY_ICON_CFG: Record<string, { icon: typeof AlertTriangle; color: string }> = {
+const PRIORITY_ICON_CFG: Record<string, { icon: typeof AlertTriangle; color: string; subtle?: boolean }> = {
   critical: { icon: AlertTriangle, color: "text-red-500 dark:text-red-400" },
   high: { icon: ArrowUp, color: "text-orange-500 dark:text-orange-400" },
+  medium: { icon: Minus, color: "text-yellow-600/50 dark:text-yellow-400/40", subtle: true },
 };
 
 function IssueContent({ issue, issueLinkState }: { issue: Issue; issueLinkState?: unknown }) {
@@ -148,7 +150,7 @@ function IssueContent({ issue, issueLinkState }: { issue: Issue; issueLinkState?
       </span>
       <span className="min-w-0 flex-1">
         <span className="line-clamp-2 text-sm font-medium sm:truncate sm:line-clamp-none">
-          {pri && <pri.icon className={cn("inline h-3.5 w-3.5 mr-1 -mt-0.5", pri.color)} />}
+          {pri && <pri.icon className={cn("inline mr-1 -mt-0.5", pri.color, pri.subtle ? "h-3 w-3" : "h-3.5 w-3.5")} />}
           <span className="font-mono text-muted-foreground mr-1.5">{identifier}</span>
           {issue.title}
         </span>

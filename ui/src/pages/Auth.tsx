@@ -51,7 +51,7 @@ export function AuthPage() {
       navigate(nextPath, { replace: true });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      setError(err instanceof Error ? err.message : "Autenticazione fallita");
     },
   });
 
@@ -79,12 +79,12 @@ export function AuthPage() {
           </div>
 
           <h1 className="text-xl font-semibold">
-            {mode === "sign_in" ? "Sign in to Paperclip" : "Create your Paperclip account"}
+            {mode === "sign_in" ? "Accedi a Paperclip" : "Crea il tuo account Paperclip"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {mode === "sign_in"
-              ? "Use your email and password to access this instance."
-              : "Create an account for this instance. Email confirmation is not required in v1."}
+              ? "Usa email e password per accedere a questa istanza."
+              : "Crea un account per questa istanza. La conferma email non e' richiesta in v1."}
           </p>
 
           <form
@@ -95,7 +95,7 @@ export function AuthPage() {
               event.preventDefault();
               if (mutation.isPending) return;
               if (!canSubmit) {
-                setError("Please fill in all required fields.");
+                setError("Compila tutti i campi obbligatori.");
                 return;
               }
               mutation.mutate();
@@ -103,7 +103,7 @@ export function AuthPage() {
           >
             {mode === "sign_up" && (
               <div>
-                <label htmlFor="name" className="text-xs text-muted-foreground mb-1 block">Name</label>
+                <label htmlFor="name" className="text-xs text-muted-foreground mb-1 block">Nome</label>
                 <input
                   id="name"
                   name="name"
@@ -148,15 +148,15 @@ export function AuthPage() {
               className={`w-full ${!canSubmit && !mutation.isPending ? "opacity-50" : ""}`}
             >
               {mutation.isPending
-                ? "Working…"
+                ? "Accesso in corso…"
                 : mode === "sign_in"
-                  ? "Sign In"
-                  : "Create Account"}
+                  ? "Accedi"
+                  : "Crea Account"}
             </Button>
           </form>
 
           <div className="mt-5 text-sm text-muted-foreground">
-            {mode === "sign_in" ? "Need an account?" : "Already have an account?"}{" "}
+            {mode === "sign_in" ? "Non hai un account?" : "Hai gia' un account?"}{" "}
             <button
               type="button"
               className="font-medium text-foreground underline underline-offset-2"
@@ -165,7 +165,7 @@ export function AuthPage() {
                 setMode(mode === "sign_in" ? "sign_up" : "sign_in");
               }}
             >
-              {mode === "sign_in" ? "Create one" : "Sign in"}
+              {mode === "sign_in" ? "Creane uno" : "Accedi"}
             </button>
           </div>
         </div>
