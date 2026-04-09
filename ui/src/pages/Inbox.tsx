@@ -384,6 +384,23 @@ export function Inbox() {
     },
   });
 
+  // ── Issue approve/reject (for blocked/in_review issues shown in inbox) ──
+  const issueActionMutation = useMutation({
+    mutationFn: async ({ issueId, action }: { issueId: string; action: "approve" | "reject" }) => {
+      const newStatus = action === "approve" ? "done" : "cancelled";
+      const comment = action === "approve" ? "✅ Approvato dal founder." : "❌ Rifiutato dal founder.";
+      await issuesApi.addComment(issueId, comment);
+      return issuesApi.update(issueId, { status: newStatus });
+    },
+    onSuccess: () => {
+      setActionError(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+    },
+    onError: (err) => {
+      setActionError(err instanceof Error ? err.message : "Failed to update issue");
+    },
+  });
+
   const [retryingRunIds, setRetryingRunIds] = useState<Set<string>>(new Set());
 
   const retryRunMutation = useMutation({
@@ -686,6 +703,7 @@ export function Inbox() {
       const isUnread = issue.isUnreadForMe && !fadingOutIssues.has(issue.id);
       const isFading = fadingOutIssues.has(issue.id);
       const isArchiving = archivingIssueIds.has(issue.id);
+      const isActionable = issue.status === "blocked" || issue.status === "in_review";
       const row = (
         <InboxItemRow
           key={`issue:${issue.id}`}
@@ -697,6 +715,9 @@ export function Inbox() {
           onMarkRead={() => markReadMutation.mutate(issue.id)}
           onArchive={isMineTab ? () => archiveIssueMutation.mutate(issue.id) : undefined}
           archiveDisabled={isArchiving || archiveIssueMutation.isPending}
+          onApprove={isActionable ? () => issueActionMutation.mutate({ issueId: issue.id, action: "approve" }) : undefined}
+          onReject={isActionable ? () => issueActionMutation.mutate({ issueId: issue.id, action: "reject" }) : undefined}
+          isPending={issueActionMutation.isPending}
           className={
             isArchiving
               ? "pointer-events-none -translate-x-4 scale-[0.98] opacity-0 transition-all duration-200 ease-out"
