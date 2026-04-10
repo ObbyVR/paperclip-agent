@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useLocation } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
@@ -46,10 +46,19 @@ function matchesFilter(status: string, tab: FilterTab, showTerminated: boolean):
   return true;
 }
 
+const STATUS_ORDER: Record<string, number> = {
+  running: 0, active: 0, error: 1, paused: 2, idle: 3, terminated: 4,
+};
+
 function filterAgents(agents: Agent[], tab: FilterTab, showTerminated: boolean): Agent[] {
   return agents
     .filter((a) => matchesFilter(a.status, tab, showTerminated))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      const sa = STATUS_ORDER[a.status] ?? 3;
+      const sb = STATUS_ORDER[b.status] ?? 3;
+      if (sa !== sb) return sa - sb;
+      return a.name.localeCompare(b.name);
+    });
 }
 
 function filterOrgTree(nodes: OrgNode[], tab: FilterTab, showTerminated: boolean): OrgNode[] {
@@ -230,8 +239,21 @@ export function Agents() {
       {/* List view */}
       {effectiveView === "list" && filtered.length > 0 && (
         <div className="border border-border">
-          {filtered.map((agent) => {
+          {filtered.map((agent, idx) => {
+            const prevStatus = idx > 0 ? filtered[idx - 1].status : null;
+            const statusGroup = STATUS_ORDER[agent.status] ?? 3;
+            const prevGroup = prevStatus != null ? (STATUS_ORDER[prevStatus] ?? 3) : -1;
+            const showDivider = tab === "all" && statusGroup !== prevGroup && idx > 0;
             return (
+              <Fragment key={agent.id}>
+              {showDivider && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 border-t border-border/50">
+                  <span className={cn("h-1.5 w-1.5 rounded-full", agentStatusDot[agent.status] ?? agentStatusDotDefault)} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t(`status.${agent.status}`, agent.status)}
+                  </span>
+                </div>
+              )}
               <EntityRow
                 key={agent.id}
                 title={agent.name}
@@ -290,6 +312,7 @@ export function Agents() {
                   </div>
                 }
               />
+              </Fragment>
             );
           })}
         </div>
