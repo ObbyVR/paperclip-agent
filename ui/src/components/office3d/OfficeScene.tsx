@@ -63,8 +63,8 @@ export function OfficeScene({ agents, onAgentClick, onReady }: OfficeSceneProps)
     >
       {/* Background behind any transparent edges */}
       <color attach="background" args={["#e8cfa0"]} />
-      {/* Soft warm fog — far enough to only affect depth perception */}
-      <fog attach="fog" args={["#e8cfa0", 30, 80]} />
+      {/* Soft warm fog — pushed out to fit the bigger v12 office */}
+      <fog attach="fog" args={["#e8cfa0", 45, 110]} />
 
       <Lighting />
       <Atmosphere />
@@ -118,8 +118,8 @@ function ManualOrbitControls() {
     controls.enableRotate = true;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.minDistance = 6;
-    controls.maxDistance = 30;
+    controls.minDistance = 8;
+    controls.maxDistance = 50;
     controls.minPolarAngle = Math.PI * 0.15;
     controls.maxPolarAngle = Math.PI * 0.49;
     controls.rotateSpeed = 0.8;
@@ -183,9 +183,9 @@ function Atmosphere() {
   return (
     <>
       {/* God ray: a long, stretched, additive-blended box coming from the
-          window toward the floor, angled like a golden-hour beam. */}
+          window (now at z=-5, inside Creative Lab) toward the floor. */}
       <mesh
-        position={[3, 1.8, 0]}
+        position={[6, 1.8, -5]}
         rotation={[0, 0, -Math.PI / 4]}
       >
         <boxGeometry args={[9, 2.2, 3.2]} />
@@ -199,7 +199,7 @@ function Atmosphere() {
       </mesh>
       {/* A second, softer wider beam for the bloom feel */}
       <mesh
-        position={[2.5, 1.4, 0]}
+        position={[5.5, 1.4, -5]}
         rotation={[0, 0, -Math.PI / 4]}
       >
         <boxGeometry args={[10, 3.2, 4.2]} />
@@ -226,7 +226,7 @@ function Atmosphere() {
       <Sparkles
         count={40}
         scale={[3, 2, 4]}
-        position={[6, 2, 0]}
+        position={[10, 2, -5]}
         size={3}
         speed={0.25}
         color="#ffe4b0"

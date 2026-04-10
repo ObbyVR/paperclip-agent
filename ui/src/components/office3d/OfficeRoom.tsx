@@ -1,71 +1,19 @@
 /**
- * OfficeRoom — floor, 4 walls, window frame. All low-poly, procedural textures.
+ * OfficeRoom — outer shell + per-room floors + interior walls (with portal
+ * cutouts). All low-poly, procedural textures.
  *
- * Walls are single-sided planes with normals pointing INWARD. This relies on
- * the default FrontSide rendering: a wall is visible only from the side its
- * normal faces (inside the room), so when the camera orbits behind a wall
- * (outside the room) that wall is backface-culled automatically — you always
- * see the 3 far walls closing the scene, never the wall between camera and
- * subject.
+ * v12: the room is divided into 5 sub-rooms by interior walls. Each sub-room
+ * gets its own floor patch + material; the walls between sub-rooms are
+ * rendered with cutouts at portal positions so agents can walk through.
+ *
+ * Outer walls are single-sided planes with normals pointing INWARD so the
+ * camera-facing wall is automatically backface-culled when orbiting.
  */
 import { useMemo } from "react";
 import * as THREE from "three";
 import { ROOM, WINDOW } from "./officeLayout";
-
-/** Generate a procedural parquet wood texture via CanvasTexture. */
-function makeParquetTexture(): THREE.CanvasTexture {
-  const size = 512;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-
-  // Base warm wood
-  ctx.fillStyle = "#6b4226";
-  ctx.fillRect(0, 0, size, size);
-
-  // Planks — staggered stripes
-  const plankW = 64;
-  const plankH = 16;
-  for (let y = 0; y < size; y += plankH) {
-    for (let x = 0; x < size; x += plankW) {
-      const offsetX = (Math.floor(y / plankH) % 2) * (plankW / 2);
-      const px = (x + offsetX) % size;
-      const shade = 0.78 + Math.random() * 0.24;
-      const r = Math.floor(107 * shade);
-      const g = Math.floor(66 * shade);
-      const b = Math.floor(38 * shade);
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      ctx.fillRect(px, y, plankW - 1, plankH - 1);
-
-      // Wood grain lines
-      ctx.strokeStyle = `rgba(30, 18, 10, 0.35)`;
-      ctx.lineWidth = 0.5;
-      const grainCount = 3 + Math.floor(Math.random() * 3);
-      for (let g = 0; g < grainCount; g++) {
-        const gy = y + 2 + Math.random() * (plankH - 4);
-        ctx.beginPath();
-        ctx.moveTo(px, gy);
-        ctx.lineTo(px + plankW, gy + (Math.random() - 0.5) * 1.5);
-        ctx.stroke();
-      }
-    }
-  }
-
-  // Warm sheen overlay
-  const gradient = ctx.createLinearGradient(0, 0, 0, size);
-  gradient.addColorStop(0, "rgba(255, 220, 150, 0.08)");
-  gradient.addColorStop(1, "rgba(0, 0, 0, 0.12)");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(4, 3);
-  tex.anisotropy = 8;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
+import { ROOMS, INTERNAL_WALLS } from "./officeRooms";
+import { buildFloorStyle } from "./floorMaterials";
 
 /** Golden-hour sky gradient for the window view with skyline silhouette. */
 function makeSkyTexture(): THREE.CanvasTexture {
@@ -104,7 +52,7 @@ function makeSkyTexture(): THREE.CanvasTexture {
   ctx.arc(sunX, sunY, 18, 0, Math.PI * 2);
   ctx.fill();
 
-  // Background (distant) mountains — very faint purple-brown silhouette
+  // Background mountains
   ctx.fillStyle = "rgba(80, 40, 50, 0.35)";
   ctx.beginPath();
   const mountainH = h * 0.68;
@@ -122,7 +70,7 @@ function makeSkyTexture(): THREE.CanvasTexture {
   ctx.closePath();
   ctx.fill();
 
-  // Foreground skyline — darker buildings with varying heights & widths
+  // Foreground skyline
   ctx.fillStyle = "rgba(30, 12, 18, 0.88)";
   const baseY = h * 0.82;
   ctx.beginPath();
@@ -135,7 +83,7 @@ function makeSkyTexture(): THREE.CanvasTexture {
     { w: 38, h: 72 },
     { w: 18, h: 44 },
     { w: 28, h: 58 },
-    { w: 46, h: 96 }, // tall tower
+    { w: 46, h: 96 },
     { w: 20, h: 36 },
     { w: 36, h: 64 },
     { w: 24, h: 48 },
@@ -150,9 +98,8 @@ function makeSkyTexture(): THREE.CanvasTexture {
   for (const b of buildings) {
     const top = baseY - b.h;
     ctx.lineTo(cx, top);
-    // Small rooftop detail (antenna or slanted roof) every few buildings
     if (b.h > 70) {
-      ctx.lineTo(cx + b.w * 0.45, top - 12); // antenna
+      ctx.lineTo(cx + b.w * 0.45, top - 12);
       ctx.lineTo(cx + b.w * 0.5, top);
     }
     ctx.lineTo(cx + b.w, top);
@@ -164,7 +111,7 @@ function makeSkyTexture(): THREE.CanvasTexture {
   ctx.closePath();
   ctx.fill();
 
-  // Lit windows — small bright yellow dots on the taller buildings
+  // Lit windows
   ctx.fillStyle = "rgba(255, 220, 130, 0.9)";
   cx = 0;
   for (const b of buildings) {
@@ -173,7 +120,6 @@ function makeSkyTexture(): THREE.CanvasTexture {
       const rows = Math.floor(b.h / 10);
       for (let r = 1; r < rows; r++) {
         for (let col = 0; col < cols; col++) {
-          // Sparse: only ~40% windows lit
           if (((r * 13 + col * 7 + Math.floor(cx)) % 5) < 2) {
             const wx = cx + 3 + col * 6;
             const wy = baseY - r * 10;
@@ -185,7 +131,7 @@ function makeSkyTexture(): THREE.CanvasTexture {
     cx += b.w;
   }
 
-  // Cloud wisps — layered, warm-tinted
+  // Cloud wisps
   ctx.strokeStyle = "rgba(255, 240, 200, 0.5)";
   ctx.lineWidth = 12;
   ctx.lineCap = "round";
@@ -205,7 +151,6 @@ function makeSkyTexture(): THREE.CanvasTexture {
     );
     ctx.stroke();
   }
-  // Second softer cloud pass
   ctx.strokeStyle = "rgba(255, 210, 160, 0.35)";
   ctx.lineWidth = 22;
   for (let i = 0; i < 3; i++) {
@@ -223,7 +168,7 @@ function makeSkyTexture(): THREE.CanvasTexture {
     ctx.stroke();
   }
 
-  // Flying birds — tiny black "m" shapes
+  // Birds
   ctx.strokeStyle = "rgba(20, 10, 12, 0.65)";
   ctx.lineWidth = 1.8;
   ctx.lineCap = "round";
@@ -283,9 +228,23 @@ function makeWallTexture(): THREE.CanvasTexture {
 }
 
 export function OfficeRoom() {
-  const parquet = useMemo(() => makeParquetTexture(), []);
   const wall = useMemo(() => makeWallTexture(), []);
   const sky = useMemo(() => makeSkyTexture(), []);
+
+  // Build one floor style per room (memoised). Each room clones its texture
+  // so the UV repeat can be set per-room without mutating shared state.
+  const floorPatches = useMemo(() => {
+    return ROOMS.map((room) => {
+      const style = buildFloorStyle(room.floorMaterial);
+      const w = room.bounds.xMax - room.bounds.xMin;
+      const d = room.bounds.zMax - room.bounds.zMin;
+      const cx = (room.bounds.xMin + room.bounds.xMax) / 2;
+      const cz = (room.bounds.zMin + room.bounds.zMax) / 2;
+      style.texture.repeat.set(w * style.repeatPerUnit, d * style.repeatPerUnit);
+      style.texture.needsUpdate = true;
+      return { room, style, w, d, cx, cz };
+    });
+  }, []);
 
   const halfW = ROOM.width / 2;
   const halfD = ROOM.depth / 2;
@@ -293,26 +252,32 @@ export function OfficeRoom() {
 
   return (
     <group>
-      {/* Floor */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[ROOM.width, ROOM.depth]} />
-        <meshStandardMaterial map={parquet} roughness={0.75} metalness={0.05} />
-      </mesh>
+      {/* Per-room floor patches */}
+      {floorPatches.map(({ room, style, w, d, cx, cz }) => (
+        <mesh
+          key={room.id}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[cx, 0.001, cz]}
+          receiveShadow
+        >
+          <planeGeometry args={[w, d]} />
+          <meshStandardMaterial
+            map={style.texture}
+            roughness={style.roughness}
+            metalness={style.metalness}
+          />
+        </mesh>
+      ))}
 
-      {/*
-        Walls are single-sided planes with normals pointing INTO the room.
-        Result: a wall disappears when the camera moves behind it (outside
-        the room), so you can orbit freely and always see the 3 far walls
-        while the wall in front of the camera is culled.
-      */}
+      {/* OUTER walls — single-sided, normal pointing inward */}
 
-      {/* Back wall (at z=-halfD) — default plane normal +Z already points inward */}
+      {/* Back wall (z=-halfD) */}
       <mesh position={[0, wallH / 2, -halfD]} receiveShadow>
         <planeGeometry args={[ROOM.width, wallH]} />
         <meshStandardMaterial map={wall} roughness={0.9} />
       </mesh>
 
-      {/* Front wall (at z=+halfD) — rotate 180° so normal points -Z (inward) */}
+      {/* Front wall (z=+halfD) */}
       <mesh
         position={[0, wallH / 2, halfD]}
         rotation={[0, Math.PI, 0]}
@@ -322,7 +287,7 @@ export function OfficeRoom() {
         <meshStandardMaterial map={wall} roughness={0.9} />
       </mesh>
 
-      {/* Left wall (at x=-halfW) — rotate +90° Y so normal points +X (inward) */}
+      {/* Left wall (-X) */}
       <mesh
         position={[-halfW, wallH / 2, 0]}
         rotation={[0, Math.PI / 2, 0]}
@@ -332,11 +297,121 @@ export function OfficeRoom() {
         <meshStandardMaterial map={wall} roughness={0.9} />
       </mesh>
 
-      {/* Right wall (+X) with window cut-out — split into 4 plane segments */}
+      {/* Right wall (+X) with window */}
       <RightWallWithWindow wallTexture={wall} skyTexture={sky} />
 
-      {/* Baseboards — thin dark strip at bottom of walls */}
+      {/* Baseboards on outer walls */}
       <BaseBoards />
+
+      {/* INTERIOR walls between rooms, with portal cutouts */}
+      <InternalWalls wallTexture={wall} />
+    </group>
+  );
+}
+
+/**
+ * Renders all interior walls listed in INTERNAL_WALLS. Each wall is a series
+ * of plane segments arranged around the portal openings on that wall. Walls
+ * are double-sided (visible from both rooms they divide).
+ */
+function InternalWalls({ wallTexture }: { wallTexture: THREE.Texture }) {
+  const wallH = ROOM.height;
+
+  return (
+    <group>
+      {INTERNAL_WALLS.map((wallDef, wallIdx) => {
+        // Sort openings by center, then build the wall as N+1 segments
+        const openings = [...wallDef.openings].sort(
+          (a, b) => a.center - b.center,
+        );
+        const segments: Array<{ start: number; end: number }> = [];
+        let cursor = wallDef.range[0];
+        for (const op of openings) {
+          const opStart = op.center - op.width / 2;
+          const opEnd = op.center + op.width / 2;
+          if (opStart > cursor) {
+            segments.push({ start: cursor, end: opStart });
+          }
+          cursor = Math.max(cursor, opEnd);
+        }
+        if (cursor < wallDef.range[1]) {
+          segments.push({ start: cursor, end: wallDef.range[1] });
+        }
+
+        return segments.map((seg, segIdx) => {
+          const segLen = seg.end - seg.start;
+          if (segLen <= 0.01) return null;
+          const segCenter = (seg.start + seg.end) / 2;
+          if (wallDef.axis === "x") {
+            // Wall lies on a constant-X plane, extends along Z
+            return (
+              <mesh
+                key={`w${wallIdx}s${segIdx}`}
+                position={[wallDef.at, wallH / 2, segCenter]}
+                rotation={[0, Math.PI / 2, 0]}
+                receiveShadow
+                castShadow
+              >
+                <planeGeometry args={[segLen, wallH]} />
+                <meshStandardMaterial
+                  map={wallTexture}
+                  roughness={0.9}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+            );
+          } else {
+            // Wall lies on a constant-Z plane, extends along X
+            return (
+              <mesh
+                key={`w${wallIdx}s${segIdx}`}
+                position={[segCenter, wallH / 2, wallDef.at]}
+                receiveShadow
+                castShadow
+              >
+                <planeGeometry args={[segLen, wallH]} />
+                <meshStandardMaterial
+                  map={wallTexture}
+                  roughness={0.9}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+            );
+          }
+        });
+      })}
+
+      {/* Door lintels — slim header bar above each opening to read as a
+          doorway rather than a wall hole */}
+      {INTERNAL_WALLS.flatMap((wallDef, wallIdx) =>
+        wallDef.openings.map((op, opIdx) => {
+          const lintelH = 0.18;
+          const lintelY = wallH - lintelH / 2 - 0.6;
+          if (wallDef.axis === "x") {
+            return (
+              <mesh
+                key={`l${wallIdx}_${opIdx}`}
+                position={[wallDef.at, lintelY, op.center]}
+                castShadow
+              >
+                <boxGeometry args={[0.16, lintelH, op.width]} />
+                <meshStandardMaterial color="#3a2414" roughness={0.7} />
+              </mesh>
+            );
+          } else {
+            return (
+              <mesh
+                key={`l${wallIdx}_${opIdx}`}
+                position={[op.center, lintelY, wallDef.at]}
+                castShadow
+              >
+                <boxGeometry args={[op.width, lintelH, 0.16]} />
+                <meshStandardMaterial color="#3a2414" roughness={0.7} />
+              </mesh>
+            );
+          }
+        }),
+      )}
     </group>
   );
 }
@@ -367,12 +442,10 @@ function RightWallWithWindow({
   const leftD = winZL - -halfD;
   const rightD = halfD - winZR;
 
-  // All right-wall segments are planes facing -X (room interior side).
   const rotation: [number, number, number] = [0, -Math.PI / 2, 0];
 
   return (
     <group>
-      {/* Below window — full width */}
       {belowH > 0.01 && (
         <mesh
           position={[halfW, belowH / 2, 0]}
@@ -383,7 +456,6 @@ function RightWallWithWindow({
           <meshStandardMaterial map={wallTexture} roughness={0.9} />
         </mesh>
       )}
-      {/* Above window */}
       {aboveH > 0.01 && (
         <mesh
           position={[halfW, winTop + aboveH / 2, 0]}
@@ -394,7 +466,6 @@ function RightWallWithWindow({
           <meshStandardMaterial map={wallTexture} roughness={0.9} />
         </mesh>
       )}
-      {/* Left of window */}
       {leftD > 0.01 && (
         <mesh
           position={[halfW, winCy, -halfD + leftD / 2]}
@@ -405,7 +476,6 @@ function RightWallWithWindow({
           <meshStandardMaterial map={wallTexture} roughness={0.9} />
         </mesh>
       )}
-      {/* Right of window */}
       {rightD > 0.01 && (
         <mesh
           position={[halfW, winCy, halfD - rightD / 2]}
@@ -416,7 +486,6 @@ function RightWallWithWindow({
           <meshStandardMaterial map={wallTexture} roughness={0.9} />
         </mesh>
       )}
-      {/* Window frame */}
       <WindowFrame skyTexture={skyTexture} />
     </group>
   );
@@ -434,39 +503,30 @@ function WindowFrame({ skyTexture }: { skyTexture: THREE.Texture }) {
 
   return (
     <group>
-      {/* Top */}
       <mesh position={[x, winCy + winH / 2, winCz]}>
         <boxGeometry args={[frameDepth, frameT, winW + frameT * 2]} />
         <meshStandardMaterial color="#3a2414" roughness={0.7} />
       </mesh>
-      {/* Bottom */}
       <mesh position={[x, winCy - winH / 2, winCz]}>
         <boxGeometry args={[frameDepth, frameT, winW + frameT * 2]} />
         <meshStandardMaterial color="#3a2414" roughness={0.7} />
       </mesh>
-      {/* Left */}
       <mesh position={[x, winCy, winCz - winW / 2]}>
         <boxGeometry args={[frameDepth, winH, frameT]} />
         <meshStandardMaterial color="#3a2414" roughness={0.7} />
       </mesh>
-      {/* Right */}
       <mesh position={[x, winCy, winCz + winW / 2]}>
         <boxGeometry args={[frameDepth, winH, frameT]} />
         <meshStandardMaterial color="#3a2414" roughness={0.7} />
       </mesh>
-      {/* Horizontal center mullion */}
       <mesh position={[x, winCy, winCz]}>
         <boxGeometry args={[frameDepth * 0.8, frameT * 0.7, winW]} />
         <meshStandardMaterial color="#3a2414" roughness={0.7} />
       </mesh>
-      {/* Vertical center mullion */}
       <mesh position={[x, winCy, winCz]}>
         <boxGeometry args={[frameDepth * 0.8, winH, frameT * 0.7]} />
         <meshStandardMaterial color="#3a2414" roughness={0.7} />
       </mesh>
-      {/* Sky visible through window — gradient texture (cream → gold → amber
-          → sun disc) facing into the room. DoubleSide so it's visible from
-          both sides when the camera orbits. */}
       <mesh
         position={[x - 0.05, winCy, winCz]}
         rotation={[0, Math.PI / 2, 0]}
@@ -485,22 +545,18 @@ function BaseBoards() {
   const bbT = 0.04;
   return (
     <group>
-      {/* Back */}
       <mesh position={[0, bbH / 2, -halfD + bbT / 2]}>
         <boxGeometry args={[ROOM.width, bbH, bbT]} />
         <meshStandardMaterial color="#2a1810" roughness={0.8} />
       </mesh>
-      {/* Front */}
       <mesh position={[0, bbH / 2, halfD - bbT / 2]}>
         <boxGeometry args={[ROOM.width, bbH, bbT]} />
         <meshStandardMaterial color="#2a1810" roughness={0.8} />
       </mesh>
-      {/* Left */}
       <mesh position={[-halfW + bbT / 2, bbH / 2, 0]}>
         <boxGeometry args={[bbT, bbH, ROOM.depth]} />
         <meshStandardMaterial color="#2a1810" roughness={0.8} />
       </mesh>
-      {/* Right */}
       <mesh position={[halfW - bbT / 2, bbH / 2, 0]}>
         <boxGeometry args={[bbT, bbH, ROOM.depth]} />
         <meshStandardMaterial color="#2a1810" roughness={0.8} />

@@ -6,25 +6,30 @@
  *   +Y = up
  *   +Z = toward camera / front of room
  *
- * Room bounds: x=[-8, 8], z=[-6, 6]. Walls at edges.
- * Window on +X wall (right side).
+ * v12: the room is divided into 5 sub-rooms (CEO Office, Creative Studio,
+ * Creative Lab, Tech Lab, Lounge) by interior walls with portal openings.
+ * See `officeRooms.ts` for the room graph + multi-room pathfinding.
+ *
+ * Outer room bounds: x=[-15, 15], z=[-9, 9]. Window on +X wall.
  */
+
+import { computeRoomPath } from "./officeRooms";
 
 export type Vec3 = [number, number, number];
 
 export const ROOM = {
-  width: 22,   // X extent — widened in v11.1 for 18-agent capacity
-  depth: 12,   // Z extent
+  width: 30,   // X extent — widened in v12 for multi-room layout
+  depth: 18,   // Z extent
   height: 4,   // wall height
   wallThickness: 0.2,
 } as const;
 
-/** Window cutout on the right (+X) wall — source of golden-hour light */
+/** Window cutout on the right (+X) wall — falls inside Creative Lab */
 export const WINDOW = {
   width: 6,           // Z extent
   height: 2.4,        // Y extent
   centerY: 2.2,       // center height
-  centerZ: 0,         // center along Z
+  centerZ: -5,        // moved up so it sits in Creative Lab (z=[-9,-1])
 } as const;
 
 /** Fixed floor height for agents sitting on chairs / standing.
@@ -38,21 +43,21 @@ export const SEAT_Y = 0.46;
 export const STAND_Y = 0;
 
 /** Light positions */
-export const LIGHT_SUN_POS: Vec3 = [13, 8, 3];
+export const LIGHT_SUN_POS: Vec3 = [16, 9, -3];
 export const LIGHT_SUN_TARGET: Vec3 = [-2, 0, 0];
-export const LIGHT_CEO_LAMP_POS: Vec3 = [-8.5, 2, -4];
+export const LIGHT_CEO_LAMP_POS: Vec3 = [-12.5, 2, -7];
 
 /** Dust particle cluster (Sparkles) — inside the sun beam */
-export const DUST_CENTER: Vec3 = [4, 2, 0];
+export const DUST_CENTER: Vec3 = [6, 2, -5];
 export const DUST_SIZE: Vec3 = [10, 3, 8];
 
-/** Camera — pulled back and slightly higher to frame the wider room */
+/** Camera — pulled back and slightly higher to frame the larger 30×18 office */
 export const CAMERA = {
-  position: [14, 10, 14] as Vec3,
-  lookAt: [-1, 1, 0] as Vec3,
-  fov: 34,
+  position: [22, 16, 22] as Vec3,
+  lookAt: [0, 1, 0] as Vec3,
+  fov: 38,
   near: 0.1,
-  far: 70,
+  far: 90,
 } as const;
 
 /** Shared desk positions — each desk has N seats */
@@ -67,181 +72,123 @@ export interface DeskLayout {
   reportSpot: Vec3;
 }
 
+/**
+ * v12 desks — repositioned into per-room layouts.
+ *
+ * Capacity: 18 seats total
+ *   ceo (CEO Office)         → 2 seats
+ *   creative (Creative Studio) → 4 seats
+ *   creative-lab (Creative Lab) → 4 seats
+ *   tech (Tech Lab)          → 4 seats
+ *   tech-lab (Tech Lab)      → 4 seats   ← second desk in same room
+ *
+ * Tech Lab hosts BOTH "tech" and "tech-lab" desks side by side, so the
+ * existing dept→desk fan-out logic in OfficeAgents keeps working unchanged.
+ */
 export const DESKS: DeskLayout[] = [
-  // CEO corner desk — back-left. Now has 2 seats (CEO + chief of staff).
+  // CEO desk inside CEO Office (xMin=-15, xMax=-7, zMin=-9, zMax=-1)
   {
     id: "ceo",
     label: "CEO",
-    position: [-8.5, 0, -4],
+    position: [-11, 0, -5],
     rotation: 0,
     seats: [
-      [-9.1, SEAT_Y, -5.0], // leader (CEO)
-      [-7.9, SEAT_Y, -5.0], // chief of staff
+      [-11.6, SEAT_Y, -6.0], // leader (CEO)
+      [-10.4, SEAT_Y, -6.0], // chief of staff
     ],
     leaderSeat: 0,
-    reportSpot: [-8.5, STAND_Y, -2.5],
+    reportSpot: [-11, STAND_Y, -3.5],
   },
-  // Creative Lab — west end, far left. 4 seats in 2 rows.
-  // Desk bbox z=[-0.1, 2.1]. Front row at z=-0.9, back row at z=2.9.
-  {
-    id: "creative-lab",
-    label: "CREATIVE LAB",
-    position: [-7, 0, 1],
-    rotation: 0,
-    seats: [
-      [-8.3, SEAT_Y, -0.9], // leader — front-left
-      [-5.7, SEAT_Y, -0.9], // front-right
-      [-8.3, SEAT_Y, 2.9],  // back-left
-      [-5.7, SEAT_Y, 2.9],  // back-right
-    ],
-    leaderSeat: 0,
-    reportSpot: [-8.3, STAND_Y, -1.8],
-  },
-  // Creative dept — center-left. 4 seats in 2 rows.
+  // Creative dept inside Creative Studio (xMin=-7, xMax=5, zMin=-9, zMax=-1)
   {
     id: "creative",
     label: "CREATIVE",
-    position: [-2.5, 0, 1],
+    position: [-1, 0, -5],
     rotation: 0,
     seats: [
-      [-3.8, SEAT_Y, -0.9], // leader — front-left
-      [-1.2, SEAT_Y, -0.9], // front-right
-      [-3.8, SEAT_Y, 2.9],  // back-left
-      [-1.2, SEAT_Y, 2.9],  // back-right
+      [-2.3, SEAT_Y, -6.6], // front-left (leader)
+      [0.3, SEAT_Y, -6.6],  // front-right
+      [-2.3, SEAT_Y, -3.4], // back-left
+      [0.3, SEAT_Y, -3.4],  // back-right
     ],
     leaderSeat: 0,
-    reportSpot: [-3.8, STAND_Y, -1.8],
+    reportSpot: [-2.3, STAND_Y, -2.4],
   },
-  // Tech dept — center-right. Same geometry as creative.
+  // Creative Lab inside Creative Lab room (xMin=5, xMax=15, zMin=-9, zMax=-1)
+  {
+    id: "creative-lab",
+    label: "CREATIVE LAB",
+    position: [10, 0, -5],
+    rotation: 0,
+    seats: [
+      [8.7, SEAT_Y, -6.6],  // front-left (leader)
+      [11.3, SEAT_Y, -6.6], // front-right
+      [8.7, SEAT_Y, -3.4],  // back-left
+      [11.3, SEAT_Y, -3.4], // back-right
+    ],
+    leaderSeat: 0,
+    reportSpot: [8.7, STAND_Y, -2.4],
+  },
+  // Tech dept (first desk) inside Tech Lab (xMin=-3, xMax=15, zMin=-1, zMax=9)
   {
     id: "tech",
     label: "TECH",
-    position: [3, 0, 1],
+    position: [1, 0, 4],
     rotation: 0,
     seats: [
-      [1.8, SEAT_Y, -0.9],
-      [4.2, SEAT_Y, -0.9],
-      [1.8, SEAT_Y, 2.9],
-      [4.2, SEAT_Y, 2.9],
+      [-0.3, SEAT_Y, 2.4],  // front-left (leader)
+      [2.3, SEAT_Y, 2.4],   // front-right
+      [-0.3, SEAT_Y, 5.6],  // back-left
+      [2.3, SEAT_Y, 5.6],   // back-right
     ],
     leaderSeat: 0,
-    reportSpot: [1.8, STAND_Y, -1.8],
+    reportSpot: [-0.3, STAND_Y, 1.4],
   },
-  // Tech Lab — east end, far right (closer to window).
+  // Tech Lab (second desk) inside the same Tech Lab room
   {
     id: "tech-lab",
     label: "TECH LAB",
-    position: [7.5, 0, 1],
+    position: [10, 0, 4],
     rotation: 0,
     seats: [
-      [6.2, SEAT_Y, -0.9],  // leader — front-left
-      [8.8, SEAT_Y, -0.9],  // front-right
-      [6.2, SEAT_Y, 2.9],   // back-left
-      [8.8, SEAT_Y, 2.9],   // back-right
+      [8.7, SEAT_Y, 2.4],   // front-left (leader)
+      [11.3, SEAT_Y, 2.4],  // front-right
+      [8.7, SEAT_Y, 5.6],   // back-left
+      [11.3, SEAT_Y, 5.6],  // back-right
     ],
     leaderSeat: 0,
-    reportSpot: [6.2, STAND_Y, -1.8],
+    reportSpot: [8.7, STAND_Y, 1.4],
   },
 ];
 
-/** Relax zone (couch + coffee table) — back-right, between tech-lab and the window */
+/** Relax zone (couch + coffee table) — inside the Lounge room */
 export const RELAX = {
-  couchPosition: [0.5, 0, -4.5] as Vec3,
+  couchPosition: [-9, 0, 5] as Vec3,
   couchRotation: 0,
-  coffeeTablePosition: [0.5, 0, -3.3] as Vec3,
+  coffeeTablePosition: [-9, 0, 6.2] as Vec3,
   seats: [
-    [-0.3, SEAT_Y, -4.5] as Vec3,
-    [1.3, SEAT_Y, -4.5] as Vec3,
+    [-9.8, SEAT_Y, 5] as Vec3,
+    [-8.2, SEAT_Y, 5] as Vec3,
   ],
   /** Standing spot near coffee table (for agents that walk over) */
-  standSpot: [0.3, STAND_Y, -3.0] as Vec3,
+  standSpot: [-9, STAND_Y, 6.5] as Vec3,
 } as const;
 
-/** Center of the room — for CEO panoramic walks */
-export const ROOM_CENTER: Vec3 = [0, STAND_Y, 0];
-
 /**
- * Corridor waypoints — "lanes" that agents route through when walking from
- * one zone to another, to avoid clipping through desks.
- *
- * Layout strategy:
- *   - Front corridor at z = -1.8 (south of desks)
- *   - Back corridor at z = 3.7 (north of desks)
- *   - East corridor at x = 6 (east of tech desk, toward window)
- *   - West corridor at x = -6.5 (west of ceo, creative)
- *
- * To walk from A to B:
- *   1. Nearest corridor entry from A
- *   2. (optional) intermediate corridor node
- *   3. Nearest corridor exit to B
+ * Center the CEO uses for "panoramic" ambient walks. In v12 this is the
+ * center of the CEO Office room so the CEO never wanders into open space.
  */
-export const CORRIDORS = {
-  frontZ: -1.8,
-  backZ: 3.7,
-  eastX: 10,
-  westX: -10.5,
-} as const;
-
-/** Pre-computed nav waypoints agents cycle through to avoid desks. */
-export interface NavPath {
-  waypoints: Vec3[];
-}
+export const ROOM_CENTER: Vec3 = [-11, STAND_Y, -5];
 
 /**
- * Compute a path from start to end that routes around desk footprints.
+ * Compute a path from start to end. v12: delegates to the multi-room
+ * pathfinder which routes through portal openings between rooms.
  *
- * Desk zone is roughly z ∈ [-0.1, 2.1] (front edge to back edge of shared desks).
- * We classify both endpoints as "front" (z < 1) or "back" (z ≥ 1) and route:
- *   - Same side: L-shape via the shared corridor (frontZ or backZ)
- *   - Opposite sides: U-shape via the east or west perimeter corridor
- *
- * Straight segments never cross the desk zone because every waypoint sits
- * in a corridor lane or at the endpoint itself (which is always off-desk).
+ * Within a single room the path is a straight line — rooms are small enough
+ * that fancy desk avoidance isn't required for v12.
  */
 export function computePath(start: Vec3, end: Vec3): Vec3[] {
-  const [sx, sy, sz] = start;
-  const [ex, ey, ez] = end;
-  const y = Math.max(sy, ey);
-
-  // Which corridor band does each endpoint belong to?
-  const startBand: "front" | "back" = sz < 1 ? "front" : "back";
-  const endBand: "front" | "back" = ez < 1 ? "front" : "back";
-  const startCorridor = startBand === "front" ? CORRIDORS.frontZ : CORRIDORS.backZ;
-  const endCorridor = endBand === "front" ? CORRIDORS.frontZ : CORRIDORS.backZ;
-
-  const raw: Vec3[] = [];
-
-  if (startBand === endBand) {
-    // L-shape: start → (sx, corridorZ) → (ex, corridorZ) → end
-    raw.push([sx, y, startCorridor]);
-    raw.push([ex, y, endCorridor]);
-  } else {
-    // U-shape via perimeter: pick the side closer to both endpoints in X
-    const avgX = (sx + ex) / 2;
-    const bridgeX =
-      Math.abs(avgX - CORRIDORS.eastX) < Math.abs(avgX - CORRIDORS.westX)
-        ? CORRIDORS.eastX
-        : CORRIDORS.westX;
-    raw.push([sx, y, startCorridor]);
-    raw.push([bridgeX, y, startCorridor]);
-    raw.push([bridgeX, y, endCorridor]);
-    raw.push([ex, y, endCorridor]);
-  }
-  raw.push([ex, ey, ez]);
-
-  // Drop waypoints that are closer than 0.2 units to the previous one
-  const path: Vec3[] = [];
-  let prev: Vec3 = [sx, sy, sz];
-  for (const p of raw) {
-    const dx = p[0] - prev[0];
-    const dz = p[2] - prev[2];
-    if (Math.hypot(dx, dz) > 0.2) {
-      path.push(p);
-      prev = p;
-    }
-  }
-  if (path.length === 0) path.push(end);
-  return path;
+  return computeRoomPath(start, end);
 }
 
 /** Flatten all seat positions with metadata for agent assignment */
