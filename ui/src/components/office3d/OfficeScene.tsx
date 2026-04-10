@@ -11,6 +11,8 @@
 import { Suspense, useEffect, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Sparkles } from "@react-three/drei";
+import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
+import { BlendFunction, KernelSize } from "postprocessing";
 import { OrbitControls as OrbitControlsImpl } from "three/examples/jsm/controls/OrbitControls.js";
 import * as THREE from "three";
 import { OfficeRoom } from "./OfficeRoom";
@@ -72,6 +74,24 @@ export function OfficeScene({ agents, onAgentClick, onReady }: OfficeSceneProps)
         <OfficeFurniture />
         <OfficeAgents agents={agents} onAgentClick={onAgentClick} />
       </Suspense>
+
+      {/* Post-processing pipeline — cinematic bloom on emissive materials
+          (monitors, window gradient, sun disc, CEO halo, lamp shade) plus a
+          soft vignette to frame the scene. */}
+      <EffectComposer multisampling={0}>
+        <Bloom
+          intensity={0.75}
+          luminanceThreshold={0.55}
+          luminanceSmoothing={0.35}
+          mipmapBlur
+          kernelSize={KernelSize.LARGE}
+        />
+        <Vignette
+          offset={0.2}
+          darkness={0.55}
+          blendFunction={BlendFunction.NORMAL}
+        />
+      </EffectComposer>
 
       {/* Manual OrbitControls attached directly to gl.domElement — more
           reliable than the drei wrapper on React 19 + R3F 9. */}

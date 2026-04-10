@@ -13,7 +13,7 @@
 export type Vec3 = [number, number, number];
 
 export const ROOM = {
-  width: 16,   // X extent
+  width: 22,   // X extent — widened in v11.1 for 18-agent capacity
   depth: 12,   // Z extent
   height: 4,   // wall height
   wallThickness: 0.2,
@@ -38,21 +38,21 @@ export const SEAT_Y = 0.46;
 export const STAND_Y = 0;
 
 /** Light positions */
-export const LIGHT_SUN_POS: Vec3 = [10, 8, 3];
+export const LIGHT_SUN_POS: Vec3 = [13, 8, 3];
 export const LIGHT_SUN_TARGET: Vec3 = [-2, 0, 0];
-export const LIGHT_CEO_LAMP_POS: Vec3 = [-5.5, 2, -4];
+export const LIGHT_CEO_LAMP_POS: Vec3 = [-8.5, 2, -4];
 
 /** Dust particle cluster (Sparkles) — inside the sun beam */
-export const DUST_CENTER: Vec3 = [3, 2, 0];
-export const DUST_SIZE: Vec3 = [8, 3, 8];
+export const DUST_CENTER: Vec3 = [4, 2, 0];
+export const DUST_SIZE: Vec3 = [10, 3, 8];
 
-/** Camera */
+/** Camera — pulled back and slightly higher to frame the wider room */
 export const CAMERA = {
-  position: [11, 8.5, 13] as Vec3,
+  position: [14, 10, 14] as Vec3,
   lookAt: [-1, 1, 0] as Vec3,
-  fov: 32,
+  fov: 34,
   near: 0.1,
-  far: 60,
+  far: 70,
 } as const;
 
 /** Shared desk positions — each desk has N seats */
@@ -68,28 +68,46 @@ export interface DeskLayout {
 }
 
 export const DESKS: DeskLayout[] = [
-  // CEO corner desk — back-left. Single seat BEHIND desk (closer to back wall).
+  // CEO corner desk — back-left. Now has 2 seats (CEO + chief of staff).
   {
     id: "ceo",
     label: "CEO",
-    position: [-5.5, 0, -4],
+    position: [-8.5, 0, -4],
     rotation: 0,
-    seats: [[-5.5, SEAT_Y, -5.0]],
+    seats: [
+      [-9.1, SEAT_Y, -5.0], // leader (CEO)
+      [-7.9, SEAT_Y, -5.0], // chief of staff
+    ],
     leaderSeat: 0,
-    reportSpot: [-5.5, STAND_Y, -2.5],
+    reportSpot: [-8.5, STAND_Y, -2.5],
   },
-  // Creative dept — center-left. 4 seats in 2 rows, both rows OUTSIDE desk bbox.
+  // Creative Lab — west end, far left. 4 seats in 2 rows.
   // Desk bbox z=[-0.1, 2.1]. Front row at z=-0.9, back row at z=2.9.
+  {
+    id: "creative-lab",
+    label: "CREATIVE LAB",
+    position: [-7, 0, 1],
+    rotation: 0,
+    seats: [
+      [-8.3, SEAT_Y, -0.9], // leader — front-left
+      [-5.7, SEAT_Y, -0.9], // front-right
+      [-8.3, SEAT_Y, 2.9],  // back-left
+      [-5.7, SEAT_Y, 2.9],  // back-right
+    ],
+    leaderSeat: 0,
+    reportSpot: [-8.3, STAND_Y, -1.8],
+  },
+  // Creative dept — center-left. 4 seats in 2 rows.
   {
     id: "creative",
     label: "CREATIVE",
     position: [-2.5, 0, 1],
     rotation: 0,
     seats: [
-      [-3.8, SEAT_Y, -0.9],  // leader — front-left
-      [-1.2, SEAT_Y, -0.9],  // front-right
-      [-3.8, SEAT_Y, 2.9],   // back-left
-      [-1.2, SEAT_Y, 2.9],   // back-right
+      [-3.8, SEAT_Y, -0.9], // leader — front-left
+      [-1.2, SEAT_Y, -0.9], // front-right
+      [-3.8, SEAT_Y, 2.9],  // back-left
+      [-1.2, SEAT_Y, 2.9],  // back-right
     ],
     leaderSeat: 0,
     reportSpot: [-3.8, STAND_Y, -1.8],
@@ -109,19 +127,34 @@ export const DESKS: DeskLayout[] = [
     leaderSeat: 0,
     reportSpot: [1.8, STAND_Y, -1.8],
   },
+  // Tech Lab — east end, far right (closer to window).
+  {
+    id: "tech-lab",
+    label: "TECH LAB",
+    position: [7.5, 0, 1],
+    rotation: 0,
+    seats: [
+      [6.2, SEAT_Y, -0.9],  // leader — front-left
+      [8.8, SEAT_Y, -0.9],  // front-right
+      [6.2, SEAT_Y, 2.9],   // back-left
+      [8.8, SEAT_Y, 2.9],   // back-right
+    ],
+    leaderSeat: 0,
+    reportSpot: [6.2, STAND_Y, -1.8],
+  },
 ];
 
-/** Relax zone (couch + coffee table) — back-right */
+/** Relax zone (couch + coffee table) — back-right, between tech-lab and the window */
 export const RELAX = {
-  couchPosition: [4, 0, -4.5] as Vec3,
+  couchPosition: [0.5, 0, -4.5] as Vec3,
   couchRotation: 0,
-  coffeeTablePosition: [4, 0, -3.3] as Vec3,
+  coffeeTablePosition: [0.5, 0, -3.3] as Vec3,
   seats: [
-    [3.2, SEAT_Y, -4.5] as Vec3,
-    [4.8, SEAT_Y, -4.5] as Vec3,
+    [-0.3, SEAT_Y, -4.5] as Vec3,
+    [1.3, SEAT_Y, -4.5] as Vec3,
   ],
   /** Standing spot near coffee table (for agents that walk over) */
-  standSpot: [3.8, STAND_Y, -3.0] as Vec3,
+  standSpot: [0.3, STAND_Y, -3.0] as Vec3,
 } as const;
 
 /** Center of the room — for CEO panoramic walks */
@@ -145,8 +178,8 @@ export const ROOM_CENTER: Vec3 = [0, STAND_Y, 0];
 export const CORRIDORS = {
   frontZ: -1.8,
   backZ: 3.7,
-  eastX: 6,
-  westX: -6.5,
+  eastX: 10,
+  westX: -10.5,
 } as const;
 
 /** Pre-computed nav waypoints agents cycle through to avoid desks. */

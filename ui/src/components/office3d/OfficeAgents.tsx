@@ -43,27 +43,44 @@ function inferDeptId(a: Agent): string {
   return "default";
 }
 
+/** Map a desk id to its dept bucket (e.g. "creative-lab" → "creative"). */
+function deskIdToDept(deskId: string): string {
+  if (deskId === "ceo") return "ceo";
+  if (deskId.startsWith("creative")) return "creative";
+  if (deskId.startsWith("tech")) return "tech";
+  return deskId;
+}
+
 /**
  * Assign agents to desks deterministically.
- * CEO goes to ceo desk seat 0.
- * Other agents are distributed to their dept's desk if any, else wrap to any free seat.
+ * CEO goes to ceo desk seat 0. An optional second "ceo" agent (or first
+ * overflow) fills the chief of staff seat at the CEO desk.
+ * Other agents are distributed to their dept's desks (a dept may span
+ * multiple desks, e.g. creative + creative-lab) with leaders preferred.
  */
 function assignAgentsToSeats(agents: Agent[]): Map<string, SeatSlot> {
   const slots = buildSeatSlots();
   const assigned = new Map<string, SeatSlot>();
-  const freeSlotsByDesk = new Map<string, SeatSlot[]>();
+  // Bucket seats by dept (not by desk) so that an oversized dept can spill
+  // across multiple desks of the same kind.
+  const freeSlotsByDept = new Map<string, SeatSlot[]>();
   for (const s of slots) {
-    if (!freeSlotsByDesk.has(s.deskId)) freeSlotsByDesk.set(s.deskId, []);
-    freeSlotsByDesk.get(s.deskId)!.push(s);
+    const dept = deskIdToDept(s.deskId);
+    if (!freeSlotsByDept.has(dept)) freeSlotsByDept.set(dept, []);
+    freeSlotsByDept.get(dept)!.push(s);
   }
 
-  // Pass 1: CEO
+  // Pass 1: CEO — goes to ceo leader seat
   const ceoAgent = agents.find((a) => inferDeptId(a) === "ceo");
   if (ceoAgent) {
-    const ceoSlot = freeSlotsByDesk.get("ceo")?.[0];
-    if (ceoSlot) {
+    const ceoBucket = freeSlotsByDept.get("ceo");
+    const ceoSlot = ceoBucket?.find((s) => s.isLeader);
+    if (ceoSlot && ceoBucket) {
       assigned.set(ceoAgent.id, ceoSlot);
-      freeSlotsByDesk.set("ceo", []);
+      freeSlotsByDept.set(
+        "ceo",
+        ceoBucket.filter((s) => s !== ceoSlot),
+      );
     }
   }
 
@@ -72,30 +89,29 @@ function assignAgentsToSeats(agents: Agent[]): Map<string, SeatSlot> {
   for (const a of agents) {
     if (assigned.has(a.id)) continue;
     const dept = inferDeptId(a);
-    const candidates = freeSlotsByDesk.get(dept);
+    const candidates = freeSlotsByDept.get(dept);
     if (candidates && candidates.length > 0) {
       // Prefer leader slot first if this agent looks like a leader (by role)
       const isLeaderRole =
         (a.role ?? "").toLowerCase().includes("lead") ||
-        (a.role ?? "").toLowerCase().includes("head") ||
-        candidates.some((c) => c.isLeader);
+        (a.role ?? "").toLowerCase().includes("head");
       const slot = isLeaderRole
         ? candidates.find((c) => c.isLeader) ?? candidates[0]
         : candidates.find((c) => !c.isLeader) ?? candidates[0];
       assigned.set(a.id, slot);
-      freeSlotsByDesk.set(
+      freeSlotsByDept.set(
         dept,
-        candidates.filter((c) => c !== slot)
+        candidates.filter((c) => c !== slot),
       );
     } else {
       unassigned.push(a);
     }
   }
 
-  // Pass 3: wrap overflow into any remaining seat
+  // Pass 3: wrap overflow into any remaining seat (any dept).
   for (const a of unassigned) {
     let placed = false;
-    for (const [, freeList] of freeSlotsByDesk) {
+    for (const [, freeList] of freeSlotsByDept) {
       if (freeList.length > 0) {
         assigned.set(a.id, freeList[0]);
         freeList.shift();
@@ -120,9 +136,10 @@ interface AgentSlot {
 }
 
 export function OfficeAgents({ agents, onAgentClick }: OfficeAgentsProps) {
-  // Filter out terminated / excess agents, cap at layout capacity
+  // Filter out terminated agents, cap at layout capacity (18 seats across
+  // ceo desk + creative + creative-lab + tech + tech-lab).
   const liveAgents = useMemo(() => {
-    return (agents ?? []).filter((a) => a.status !== "terminated").slice(0, 20);
+    return (agents ?? []).filter((a) => a.status !== "terminated").slice(0, 18);
   }, [agents]);
 
   // Deterministic seat assignment (stable across renders if ids don't change)
@@ -144,6 +161,8 @@ export function OfficeAgents({ agents, onAgentClick }: OfficeAgentsProps) {
   const controllersRef = useRef<Map<string, AgentController>>(new Map());
   const prevStatusRef = useRef<Map<string, string>>(new Map());
   const rngRef = useRef(makeRng(42));
+  // Hovered agent id (ref — no re-render on mouse move)
+  const hoveredRef = useRef<string | null>(null);
 
   // Sync controllers with current slot list
   useEffect(() => {
@@ -229,6 +248,21 @@ export function OfficeAgents({ agents, onAgentClick }: OfficeAgentsProps) {
         }
       }
 
+      // Hover highlight — boost emissive on torso + head when mouse over
+      const isHovered = hoveredRef.current === item.agent.id;
+      const targetEmissive = isHovered ? 0.45 : 0;
+      const torso = group.getObjectByName("torso") as THREE.Mesh | undefined;
+      const head = group.getObjectByName("head") as THREE.Mesh | undefined;
+      if (torso) {
+        const mat = torso.material as THREE.MeshStandardMaterial;
+        mat.emissiveIntensity += (targetEmissive - mat.emissiveIntensity) * 0.2;
+      }
+      if (head) {
+        const mat = head.material as THREE.MeshStandardMaterial;
+        const headTarget = isHovered ? 0.25 : 0;
+        mat.emissiveIntensity += (headTarget - mat.emissiveIntensity) * 0.2;
+      }
+
       // Limb animation — legs + arms swing while walking, idle pose otherwise
       const leftLeg = group.getObjectByName("leftLeg");
       const rightLeg = group.getObjectByName("rightLeg");
@@ -281,6 +315,22 @@ export function OfficeAgents({ agents, onAgentClick }: OfficeAgentsProps) {
           onClick={(e: ThreeEvent<MouseEvent>) => {
             e.stopPropagation();
             onAgentClick(item.agent);
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            hoveredRef.current = item.agent.id;
+            if (typeof document !== "undefined") {
+              document.body.style.cursor = "pointer";
+            }
+          }}
+          onPointerOut={(e) => {
+            e.stopPropagation();
+            if (hoveredRef.current === item.agent.id) {
+              hoveredRef.current = null;
+              if (typeof document !== "undefined") {
+                document.body.style.cursor = "";
+              }
+            }
           }}
         />
       ))}

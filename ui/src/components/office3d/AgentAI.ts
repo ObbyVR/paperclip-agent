@@ -10,7 +10,7 @@
  */
 import * as THREE from "three";
 import type { Vec3 } from "./officeLayout";
-import { SEAT_Y, STAND_Y, RELAX, computePath } from "./officeLayout";
+import { SEAT_Y, STAND_Y, RELAX, ROOM_CENTER, computePath } from "./officeLayout";
 
 export type AgentBehaviorState =
   | "seated_working"
@@ -155,11 +155,21 @@ export class AgentController {
         if (stateAge >= this.stateDuration) {
           // Roll dice for next behavior
           const r = rng();
-          if (!this.isPaused && r < 0.3 && this.role !== "ceo") {
+          if (this.role === "ceo") {
+            // CEO does periodic ambient walk-arounds toward the room center
+            // (20% probability) — unlike other agents, never to the coffee
+            // area. The remaining 80% keeps the CEO at their desk.
+            if (!this.isPaused && r < 0.2) {
+              this.transitionTo("standing_up", now, 0.6);
+              this.pendingAfterStandUp = "panoramic";
+            } else {
+              this.transitionTo("seated_idle", now, 6 + rng() * 8);
+            }
+          } else if (!this.isPaused && r < 0.3) {
             // Go to coffee
             this.transitionTo("standing_up", now, 0.6);
             this.pendingAfterStandUp = "coffee";
-          } else if (!this.isPaused && r < 0.5 && this.role !== "ceo") {
+          } else if (!this.isPaused && r < 0.5) {
             // Chat with a random peer
             this.transitionTo("standing_up", now, 0.6);
             this.pendingAfterStandUp = "peer";
@@ -194,6 +204,17 @@ export class AgentController {
           if (pending === "coffee") {
             const dest = new THREE.Vector3(...RELAX.standSpot);
             this.setDestination(dest);
+            this.transitionTo("walking_to_coffee", now, 999);
+          } else if (pending === "panoramic") {
+            // CEO ambient walk: pick a spot in the central room area and go
+            // stand there for a moment before walking back home.
+            const cx = ROOM_CENTER[0] + (rng() - 0.5) * 3;
+            const cz = ROOM_CENTER[2] + (rng() - 0.5) * 2.5;
+            const dest = new THREE.Vector3(cx, STAND_Y, cz);
+            this.setDestination(dest);
+            // Reuse walking_to_coffee since it routes to a standing spot and
+            // then transitions to a pause (at_coffee) before returning home.
+            // Semantically this is a CEO "walk around" rather than coffee.
             this.transitionTo("walking_to_coffee", now, 999);
           } else if (pending === "peer") {
             const peer = this.pickRandomPeer(allControllers, rng);
@@ -239,8 +260,10 @@ export class AgentController {
             this.transitionTo("reporting", now, 3 + rng() * 1.5);
           } else if (this.state === "walking_to_coffee") {
             this.transitionTo("at_coffee", now, 4 + rng() * 3);
-            // Snap to seat or stand at coffee table
-            if (rng() < 0.5 && RELAX.seats.length > 0) {
+            // Snap to seat or stand at coffee table — non-CEO only.
+            // The CEO reuses this state for panoramic walks and should
+            // remain standing at the destination (no coffee seat).
+            if (this.role !== "ceo" && rng() < 0.5 && RELAX.seats.length > 0) {
               const seatIdx = Math.floor(rng() * RELAX.seats.length);
               this.currentPos.set(...RELAX.seats[seatIdx]);
               this.bodyScaleY = 0.75;
@@ -271,7 +294,15 @@ export class AgentController {
       }
 
       case "at_coffee": {
-        this.bodyScaleY = 0.75 + Math.sin(now * 1.2 + this.bobPhase) * 0.02;
+        // CEO panoramic walks reuse this state but should stay standing —
+        // bob a tiny bit in place rather than "seated" scale.
+        if (this.role === "ceo") {
+          this.bodyScaleY = 1.0 + Math.sin(now * 1.1 + this.bobPhase) * 0.015;
+          // Slow head sway to feel present
+          this.rotation += Math.sin(now * 0.6 + this.bobPhase) * 0.003;
+        } else {
+          this.bodyScaleY = 0.75 + Math.sin(now * 1.2 + this.bobPhase) * 0.02;
+        }
         if (this.isPaused) {
           // Paused agents stay here indefinitely
           break;
@@ -320,7 +351,7 @@ export class AgentController {
     this.rotation += wrapped * Math.min(1, ROT_SPEED * delta);
   }
 
-  private pendingAfterStandUp?: "coffee" | "peer";
+  private pendingAfterStandUp?: "coffee" | "peer" | "panoramic";
 
   /**
    * Move along the waypoint queue by WALK_SPEED*delta.

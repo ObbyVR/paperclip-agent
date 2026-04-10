@@ -2,6 +2,7 @@
  * OfficeFurniture — all the low-poly desks, couch, CEO lamp, coffee table.
  * Stub for Gate 1 (room-only screenshot). Filled in Step 4.
  */
+import * as THREE from "three";
 import {
   DESKS,
   RELAX,
@@ -29,12 +30,14 @@ export function OfficeFurniture() {
       <CoffeeTable />
       <CEOLamp />
       <RelaxCarpet />
-      <PottedPlant position={[-7, 0, -5.5]} />
-      <PottedPlant position={[6.5, 0, -5.5]} scale={0.85} />
-      <WallArt position={[-5, 2, -5.88]} size={[1.6, 1.1]} tone="#8a4a2c" />
-      <WallArt position={[0, 2.2, -5.88]} size={[1.4, 1.4]} tone="#4a6a8a" />
-      <WallArt position={[3.5, 2, -5.88]} size={[1.2, 0.9]} tone="#a86a3a" />
-      <Bookshelf position={[-7.88, 0, 2]} />
+      <PottedPlant position={[-10, 0, -5.5]} />
+      <PottedPlant position={[-2.5, 0, -5.5]} scale={0.85} />
+      <PottedPlant position={[9, 0, -5.5]} scale={0.9} />
+      <WallArt position={[-7, 2, -5.88]} size={[1.6, 1.1]} tone="#8a4a2c" />
+      <WallArt position={[-2, 2.2, -5.88]} size={[1.4, 1.4]} tone="#4a6a8a" />
+      <WallArt position={[3, 2, -5.88]} size={[1.2, 0.9]} tone="#a86a3a" />
+      <WallArt position={[7.5, 2.1, -5.88]} size={[1.5, 1.0]} tone="#5a8a6a" />
+      <Bookshelf position={[-10.88, 0, 2]} />
     </group>
   );
 }
@@ -248,38 +251,227 @@ function SharedDesk({ desk }: { desk: typeof DESKS[number] }) {
         const dist = Math.hypot(dirX, dirZ) || 1;
         const nx = dirX / dist;
         const nz = dirZ / dist;
+        // Perpendicular (lateral) direction — right of the seat's forward vector
+        const perpX = -nz;
+        const perpZ = nx;
         // Place monitor 0.8 units from seat toward desk center (on desk top)
         const mx = slx + nx * 0.8;
         const mz = slz + nz * 0.8;
         const angle = Math.atan2(-nx, -nz); // monitor screen faces the seat
         return (
-          <group
-            key={`m${i}`}
-            position={[mx, topY + 0.04, mz]}
-            rotation={[0, angle, 0]}
-          >
-            {/* Stand */}
-            <mesh position={[0, 0.1, 0]} castShadow>
-              <boxGeometry args={[0.1, 0.2, 0.1]} />
-              <meshStandardMaterial color="#1a1a1a" />
-            </mesh>
-            {/* Screen — glows with the department color */}
-            <mesh position={[0, 0.4, 0]} castShadow>
-              <boxGeometry args={[0.55, 0.35, 0.04]} />
-              <meshStandardMaterial
-                color="#0a0a0a"
-                emissive={deptColor}
-                emissiveIntensity={0.6}
-              />
-            </mesh>
-            {/* Thin bezel around the screen for a bit of detail */}
-            <mesh position={[0, 0.4, 0.021]}>
-              <boxGeometry args={[0.58, 0.38, 0.005]} />
-              <meshStandardMaterial color="#1a1a1a" roughness={0.6} />
-            </mesh>
+          <group key={`m${i}`}>
+            <group
+              position={[mx, topY + 0.04, mz]}
+              rotation={[0, angle, 0]}
+            >
+              {/* Stand */}
+              <mesh position={[0, 0.1, 0]} castShadow>
+                <boxGeometry args={[0.1, 0.2, 0.1]} />
+                <meshStandardMaterial color="#1a1a1a" />
+              </mesh>
+              {/* Screen — glows with the department color */}
+              <mesh position={[0, 0.4, 0]} castShadow>
+                <boxGeometry args={[0.55, 0.35, 0.04]} />
+                <meshStandardMaterial
+                  color="#0a0a0a"
+                  emissive={deptColor}
+                  emissiveIntensity={0.6}
+                />
+              </mesh>
+              {/* Thin bezel around the screen for a bit of detail */}
+              <mesh position={[0, 0.4, 0.021]}>
+                <boxGeometry args={[0.58, 0.38, 0.005]} />
+                <meshStandardMaterial color="#1a1a1a" roughness={0.6} />
+              </mesh>
+            </group>
+            {/* Clutter: deterministic 2-object selection placed laterally on
+                either side of the monitor, within the desk top. */}
+            <DeskClutter
+              seed={`${desk.id}:${i}`}
+              deskTopY={topY + 0.04}
+              seatLocal={[slx, slz]}
+              forward={[nx, nz]}
+              perp={[perpX, perpZ]}
+            />
           </group>
         );
       })}
+    </group>
+  );
+}
+
+/**
+ * Deterministic 0-1 hash from a seed string.
+ * Stable per seed, different per seed → different clutter per seat.
+ */
+function seedHash(s: string, salt: number): number {
+  let h = salt | 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return ((h >>> 0) % 1000) / 1000;
+}
+
+const MUG_COLORS = ["#f5f5f5", "#ddd", "#4a6a8a", "#8a4a4a", "#3a5a3a"];
+const FOLDER_COLORS = ["#c8a878", "#a86848", "#888", "#6a8a9a", "#9a6a8a"];
+
+/** A few small props cluttering a desk: mug, laptop, folder stack, post-it. */
+function DeskClutter({
+  seed,
+  deskTopY,
+  seatLocal,
+  forward,
+  perp,
+}: {
+  seed: string;
+  deskTopY: number;
+  seatLocal: [number, number];
+  forward: [number, number];
+  perp: [number, number];
+}) {
+  // Pick 2 object slots out of the 4 positions (left-near, right-near, left-far, right-far)
+  const choice = Math.floor(seedHash(seed, 1) * 6); // 6 combinations of 2/4
+  // Two objects per seat — choose 2 out of {mug, laptop, folders, postit}
+  const objChoice = Math.floor(seedHash(seed, 7) * 6); // 6 combinations of 2/4
+  const slotPairs: [number, number][] = [
+    [0, 1],
+    [0, 2],
+    [0, 3],
+    [1, 2],
+    [1, 3],
+    [2, 3],
+  ];
+  const objPairs: Array<[string, string]> = [
+    ["mug", "laptop"],
+    ["mug", "folders"],
+    ["mug", "postit"],
+    ["laptop", "folders"],
+    ["laptop", "postit"],
+    ["folders", "postit"],
+  ];
+  const [sA, sB] = slotPairs[choice];
+  const [oA, oB] = objPairs[objChoice];
+
+  // Slot positions (local to the seat→desk forward/perp frame)
+  //   slot 0: forward 0.6, perp -0.45  (left-near)
+  //   slot 1: forward 0.6, perp +0.45  (right-near)
+  //   slot 2: forward 1.05, perp -0.45 (left-far)
+  //   slot 3: forward 1.05, perp +0.45 (right-far)
+  const slots = [
+    { f: 0.6, p: -0.45 },
+    { f: 0.6, p: 0.45 },
+    { f: 1.05, p: -0.45 },
+    { f: 1.05, p: 0.45 },
+  ];
+  const [slx, slz] = seatLocal;
+  const [fx, fz] = forward;
+  const [px, pz] = perp;
+
+  const toWorld = (f: number, p: number): [number, number, number] => [
+    slx + fx * f + px * p,
+    deskTopY,
+    slz + fz * f + pz * p,
+  ];
+
+  const rotA = seedHash(seed, 17) * Math.PI * 2;
+  const rotB = seedHash(seed, 29) * Math.PI * 2;
+
+  return (
+    <group>
+      <ClutterObject type={oA} pos={toWorld(slots[sA].f, slots[sA].p)} rotY={rotA} seed={seed + "A"} />
+      <ClutterObject type={oB} pos={toWorld(slots[sB].f, slots[sB].p)} rotY={rotB} seed={seed + "B"} />
+    </group>
+  );
+}
+
+function ClutterObject({
+  type,
+  pos,
+  rotY,
+  seed,
+}: {
+  type: string;
+  pos: [number, number, number];
+  rotY: number;
+  seed: string;
+}) {
+  if (type === "mug") {
+    const color = MUG_COLORS[Math.floor(seedHash(seed, 3) * MUG_COLORS.length)];
+    return (
+      <group position={pos} rotation={[0, rotY, 0]}>
+        {/* Mug body */}
+        <mesh position={[0, 0.055, 0]} castShadow>
+          <cylinderGeometry args={[0.045, 0.04, 0.11, 14]} />
+          <meshStandardMaterial color={color} roughness={0.4} />
+        </mesh>
+        {/* Coffee surface */}
+        <mesh position={[0, 0.108, 0]}>
+          <cylinderGeometry args={[0.038, 0.038, 0.002, 14]} />
+          <meshStandardMaterial color="#2a1408" roughness={0.7} />
+        </mesh>
+        {/* Handle — small torus on the side */}
+        <mesh position={[0.048, 0.055, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.028, 0.008, 6, 10, Math.PI]} />
+          <meshStandardMaterial color={color} roughness={0.4} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (type === "laptop") {
+    return (
+      <group position={pos} rotation={[0, rotY, 0]}>
+        {/* Closed laptop — flat box with rounded edge look */}
+        <mesh position={[0, 0.015, 0]} castShadow>
+          <boxGeometry args={[0.46, 0.025, 0.32]} />
+          <meshStandardMaterial color="#2a2a2e" roughness={0.35} metalness={0.5} />
+        </mesh>
+        {/* Apple-logo-ish inset (subtle lighter box) */}
+        <mesh position={[0, 0.028, 0]}>
+          <boxGeometry args={[0.08, 0.002, 0.08]} />
+          <meshStandardMaterial color="#6a6a70" roughness={0.25} metalness={0.7} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (type === "folders") {
+    const c0 = FOLDER_COLORS[Math.floor(seedHash(seed, 5) * FOLDER_COLORS.length)];
+    const c1 = FOLDER_COLORS[Math.floor(seedHash(seed, 11) * FOLDER_COLORS.length)];
+    const c2 = FOLDER_COLORS[Math.floor(seedHash(seed, 13) * FOLDER_COLORS.length)];
+    return (
+      <group position={pos} rotation={[0, rotY, 0]}>
+        {/* Stack of 3 folders, each slightly rotated for a 'loose pile' feel */}
+        <mesh position={[0, 0.012, 0]} rotation={[0, 0.08, 0]} castShadow>
+          <boxGeometry args={[0.28, 0.018, 0.22]} />
+          <meshStandardMaterial color={c0} roughness={0.85} />
+        </mesh>
+        <mesh position={[0.015, 0.031, -0.008]} rotation={[0, -0.05, 0]} castShadow>
+          <boxGeometry args={[0.28, 0.018, 0.22]} />
+          <meshStandardMaterial color={c1} roughness={0.85} />
+        </mesh>
+        <mesh position={[-0.01, 0.05, 0.012]} rotation={[0, 0.12, 0]} castShadow>
+          <boxGeometry args={[0.28, 0.018, 0.22]} />
+          <meshStandardMaterial color={c2} roughness={0.85} />
+        </mesh>
+      </group>
+    );
+  }
+
+  // post-it
+  const postitColors = ["#fff196", "#ffd1e0", "#b0e8ff", "#d0f5c0"];
+  const col = postitColors[Math.floor(seedHash(seed, 19) * postitColors.length)];
+  return (
+    <group position={pos} rotation={[0, rotY, 0]}>
+      {/* Paper square lying flat on the desk */}
+      <mesh position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[0.1, 0.1]} />
+        <meshStandardMaterial
+          color={col}
+          roughness={0.95}
+          emissive={col}
+          emissiveIntensity={0.12}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
     </group>
   );
 }

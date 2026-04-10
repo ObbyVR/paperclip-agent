@@ -23,6 +23,8 @@ export interface Agent3DProps {
   isLeader?: boolean;
   isCEO?: boolean;
   onClick?: (e: ThreeEvent<MouseEvent>) => void;
+  onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
+  onPointerOut?: (e: ThreeEvent<PointerEvent>) => void;
 }
 
 /** Shared CanvasTexture for the "..." speech bubble — generated once. */
@@ -109,12 +111,26 @@ export function hashToHairTone(id: string): string {
 
 export const Agent3D = forwardRef<THREE.Group, Agent3DProps>(
   function Agent3D(
-    { color, accent, skinTone = "#f4d4b8", isLeader, isCEO, onClick },
+    {
+      color,
+      accent,
+      skinTone = "#f4d4b8",
+      isLeader,
+      isCEO,
+      onClick,
+      onPointerOver,
+      onPointerOut,
+    },
     ref,
   ) {
     const bubbleTexture = useMemo(() => getBubbleTexture(), []);
     return (
-      <group ref={ref} onClick={onClick}>
+      <group
+        ref={ref}
+        onClick={onClick}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      >
         {/* Speech bubble — hidden by default, OfficeAgents toggles visible
             based on FSM state (reporting / chatting_with_peer) */}
         <sprite
@@ -154,9 +170,14 @@ export const Agent3D = forwardRef<THREE.Group, Agent3DProps>(
         </group>
 
         {/* ── TORSO ── */}
-        <mesh position={[0, 0.65, 0]} castShadow receiveShadow>
+        <mesh name="torso" position={[0, 0.65, 0]} castShadow receiveShadow>
           <capsuleGeometry args={[0.2, 0.45, 4, 12]} />
-          <meshStandardMaterial color={color} roughness={0.55} />
+          <meshStandardMaterial
+            color={color}
+            roughness={0.55}
+            emissive={color}
+            emissiveIntensity={0}
+          />
         </mesh>
 
         {/* ── ARMS ── sub-groups pivoted at the shoulder for walking swing */}
@@ -188,9 +209,14 @@ export const Agent3D = forwardRef<THREE.Group, Agent3DProps>(
         </mesh>
 
         {/* ── HEAD ── */}
-        <mesh position={[0, 1.12, 0]} castShadow>
+        <mesh name="head" position={[0, 1.12, 0]} castShadow>
           <sphereGeometry args={[0.17, 16, 16]} />
-          <meshStandardMaterial color={skinTone} roughness={0.55} />
+          <meshStandardMaterial
+            color={skinTone}
+            roughness={0.55}
+            emissive={skinTone}
+            emissiveIntensity={0}
+          />
         </mesh>
 
         {/* ── EYES ── small dark discs to give direction */}
