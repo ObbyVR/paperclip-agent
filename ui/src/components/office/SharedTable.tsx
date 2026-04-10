@@ -44,11 +44,11 @@ export function SharedTable({
 
   return (
     <div className="relative flex flex-col items-center">
-      {/* Floating zone label — hanging sign above the table */}
-      <div className="mb-2 flex items-center gap-1.5 px-3 py-1 rounded-full border bg-white/90 backdrop-blur-sm"
+      {/* Floating zone label — wooden hanging sign */}
+      <div className="mb-2 flex items-center gap-1.5 px-3 py-1 rounded-full border-2 bg-amber-50/95 backdrop-blur-sm"
         style={{
-          borderColor: accent + "80",
-          boxShadow: `0 2px 8px rgba(0,0,0,0.08), 0 0 0 1px ${accent}30`,
+          borderColor: accent + "aa",
+          boxShadow: `0 4px 12px rgba(28,14,4,0.5), 0 0 0 1px ${accent}40, inset 0 1px 0 rgba(255,255,255,0.6)`,
         }}>
         <span className="text-[11px]">{icon}</span>
         <span className="text-[10px] font-bold tracking-wider" style={{ color: accent }}>
@@ -56,9 +56,12 @@ export function SharedTable({
         </span>
       </div>
 
-      {/* Optional subtle zone floor tint (rectangular carpet) */}
+      {/* Subtle zone rug — warm tint with soft edges */}
       <div className="absolute top-10 left-0 right-0 bottom-0 rounded-lg pointer-events-none -z-10"
-        style={{ backgroundColor: accent + "10" }} />
+        style={{
+          backgroundColor: accent + "15",
+          boxShadow: `0 2px 16px ${accent}20`,
+        }} />
 
       {/* Seated agents — side by side at the shared table */}
       <div className="flex items-end justify-center gap-1 flex-wrap">
@@ -107,9 +110,9 @@ export function SharedTable({
                   <div className="group-hover:brightness-110 transition-all">
                     <PixelAgent agentId={agent.id} status={standingStatus} scale={1.1} />
                   </div>
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/90 border border-slate-300 shadow-sm">
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50/95 border border-amber-900/40 shadow-md">
                     <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#6b7280" }} />
-                    <span className="text-[8px] text-slate-700 font-medium truncate max-w-[50px]">{firstName}</span>
+                    <span className="text-[8px] text-stone-800 font-medium truncate max-w-[50px]">{firstName}</span>
                   </div>
                 </button>
               </AgentHoverCard>

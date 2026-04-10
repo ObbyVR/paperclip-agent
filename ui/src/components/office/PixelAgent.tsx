@@ -658,6 +658,21 @@ function drawCharacter(ctx: CanvasRenderingContext2D, status: string, time: numb
 
   ctx.clearRect(0, 0, CW, CH);
 
+  // Drop shadow beneath agent — grounds them in the scene
+  ctx.save();
+  const isStanding = status === "walking" || status === "standing-chat" || status === "standing-coffee";
+  const shadowY = isStanding ? CH - 3 : CH - 4;
+  const shadowW = isStanding ? 13 : 16;
+  const shadowGrad = ctx.createRadialGradient(CW / 2, shadowY, 1, CW / 2, shadowY, shadowW);
+  shadowGrad.addColorStop(0, "rgba(40,25,12,0.55)");
+  shadowGrad.addColorStop(0.7, "rgba(40,25,12,0.25)");
+  shadowGrad.addColorStop(1, "rgba(40,25,12,0)");
+  ctx.fillStyle = shadowGrad;
+  ctx.beginPath();
+  ctx.ellipse(CW / 2, shadowY, shadowW, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
   switch (status) {
     case "active":
     case "running":

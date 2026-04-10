@@ -28,18 +28,22 @@ export function RelaxZone({ agents, onAgentClick }: RelaxZoneProps) {
 
   return (
     <div className="relative flex flex-col items-center gap-2 py-6">
-      {/* Floating label — subtle, not a header bar */}
-      <div className="flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-amber-500/60 bg-white/90 shadow-sm">
+      {/* Floating label — wooden sign */}
+      <div className="flex items-center gap-1.5 px-3 py-0.5 rounded-full border-2 border-amber-600/70 bg-amber-50/95 shadow-lg"
+        style={{ boxShadow: "0 4px 12px rgba(28,14,4,0.5), inset 0 1px 0 rgba(255,255,255,0.6)" }}>
         <span className="text-[10px]">☕</span>
-        <span className="text-[9px] font-bold tracking-wider text-amber-700">AREA RELAX</span>
-        <span className="text-[9px] text-amber-600">· {agents.length}</span>
+        <span className="text-[9px] font-bold tracking-wider text-amber-800">AREA RELAX</span>
+        <span className="text-[9px] text-amber-700">· {agents.length}</span>
       </div>
 
       {/* Background: couch sprites, coffee machine, plants — integrated not card */}
       <div className="relative w-full max-w-[700px] h-[180px]">
-        {/* Floor tint (subtle amber carpet) */}
+        {/* Warm rug — amber carpet with soft glow */}
         <div className="absolute inset-0 rounded-lg pointer-events-none"
-          style={{ backgroundColor: "rgba(245,158,11,0.08)" }} />
+          style={{
+            backgroundColor: "rgba(217,119,6,0.18)",
+            boxShadow: "0 0 40px rgba(217,119,6,0.15), inset 0 0 30px rgba(120,53,15,0.2)",
+          }} />
 
         {/* Decorative background: couches + coffee machine */}
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between px-8 opacity-70 pointer-events-none">
@@ -79,9 +83,9 @@ export function RelaxZone({ agents, onAgentClick }: RelaxZoneProps) {
                   <div className="group-hover:brightness-110 transition-all">
                     <PixelAgent agentId={agent.id} status={pose} scale={1.2} />
                   </div>
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/95 border border-amber-500/60 shadow-sm">
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50/95 border border-amber-800/50 shadow-md">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    <span className="text-[9px] text-amber-800 font-medium">{firstName}</span>
+                    <span className="text-[9px] text-stone-900 font-medium">{firstName}</span>
                   </div>
                 </button>
               </AgentHoverCard>

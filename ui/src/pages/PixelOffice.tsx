@@ -36,9 +36,9 @@ function inferDeptMeta(agent: { name: string; role: string }): { icon: string; l
   return { icon: "🏢", label: "TEAM", role: agent.role };
 }
 
-/* ── Day mode (forced bright) ── */
+/* ── Natural atmosphere (golden hour) ── */
 function useDayNightBg(): string {
-  return "#f5f3ef"; // warm daylight beige/white
+  return "#2a1f16"; // warm dark brown — header bar
 }
 
 export function PixelOffice() {
@@ -215,7 +215,7 @@ export function PixelOffice() {
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setFocusedIdx(-1); }}
             placeholder="Cerca..."
-            className="w-20 sm:w-32 px-2 py-0.5 rounded text-[10px] bg-white/70 border border-slate-300 text-slate-800 placeholder:text-slate-400 focus:border-violet-500/60 focus:outline-none transition-colors"
+            className="w-20 sm:w-32 px-2 py-0.5 rounded text-[10px] bg-stone-900/50 border border-amber-800/40 text-amber-100 placeholder:text-amber-700/50 focus:border-violet-400/60 focus:outline-none transition-colors"
           />
         </div>
         <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-[11px]">
@@ -246,10 +246,31 @@ export function PixelOffice() {
         </div>
       </div>
 
-      {/* Content — continuous open-space floor */}
-      <div className="relative flex-1 overflow-auto p-4" style={{ minHeight: 0, backgroundColor: bgColor, backgroundImage: `linear-gradient(180deg, ${bgColor}00 0%, ${bgColor} 100%), url(/sprites/office/floor-tile.png)`, backgroundSize: "100% 100%, 50px 50px", backgroundBlendMode: "normal, soft-light", backgroundRepeat: "no-repeat, repeat" }}>
-        {/* Vignette overlay — soft daylight */}
-        <div className="pointer-events-none fixed inset-0 z-50" style={{ background: "radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.06) 100%)" }} />
+      {/* Content — natural atmosphere: golden hour + parquet floor */}
+      <div
+        className="relative flex-1 overflow-auto p-4"
+        style={{
+          minHeight: 0,
+          backgroundColor: "#3a2e24",
+          backgroundImage: [
+            // Wall gradient (upper half): warm golden light from top
+            "linear-gradient(180deg, #f3e5c5 0%, #e8cfa0 20%, #d4b896 40%, transparent 55%)",
+            // Directional light from right (window CEO side)
+            "radial-gradient(ellipse at 90% 30%, rgba(253,224,71,0.15) 0%, transparent 50%)",
+            // Parquet floor: diagonal plank pattern (lower half)
+            "repeating-linear-gradient(90deg, #6b4226 0px, #6b4226 60px, #7a4a2c 60px, #7a4a2c 62px, #6b4226 62px, #6b4226 120px, #5a381f 120px, #5a381f 122px)",
+            // Parquet depth shading
+            "linear-gradient(180deg, transparent 0%, transparent 50%, rgba(58,46,36,0.3) 100%)",
+          ].join(", "),
+          backgroundSize: "100% 100%, 100% 100%, 120px 30px, 100% 100%",
+          backgroundRepeat: "no-repeat, no-repeat, repeat, no-repeat",
+          boxShadow: "inset 0 0 80px rgba(58,46,36,0.5), inset 0 -20px 40px rgba(58,46,36,0.4)",
+        }}
+      >
+        {/* Vignette overlay — warm edges */}
+        <div className="pointer-events-none fixed inset-0 z-50" style={{ background: "radial-gradient(ellipse at center, transparent 50%, rgba(58,23,8,0.25) 100%)" }} />
+        {/* Side light rays from right window */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/3 z-10" style={{ background: "linear-gradient(270deg, rgba(253,224,71,0.08) 0%, transparent 60%)" }} />
         {/* Document flow particles */}
         <DocumentFlow pendingCount={approvalQueue.length} />
 
@@ -320,7 +341,7 @@ export function PixelOffice() {
           <RelaxZone agents={breakAgents} onAgentClick={setChatAgent} />
 
           <div className="text-center py-4">
-            <span className="text-[10px] text-slate-900/[0.08] font-bold tracking-widest">PAPERCLIP AI</span>
+            <span className="text-[10px] text-amber-200/30 font-bold tracking-widest">PAPERCLIP AI</span>
           </div>
         </div>
       </div>

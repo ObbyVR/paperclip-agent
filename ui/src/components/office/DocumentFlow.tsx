@@ -56,7 +56,8 @@ export function DocumentFlow({ pendingCount }: DocumentFlowProps) {
             bottom: "20%",
             width: p.size,
             height: p.size,
-            backgroundColor: "rgba(167,139,250,0.15)",
+            backgroundColor: "rgba(253,224,71,0.4)",
+            boxShadow: "0 0 3px rgba(253,224,71,0.3)",
             animation: `dust-drift ${p.duration}s ease-in-out ${p.delay}s infinite`,
           }}
         />
