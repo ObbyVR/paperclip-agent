@@ -1,45 +1,24 @@
 /**
- * PixelOffice v7 — HTML/CSS layout with mini Canvas characters.
+ * PixelOffice v11 — Three.js 3D low-poly rebuild.
  *
- * Features: department cards, agent search, day/night cycle, fullscreen,
- * confetti, keyboard navigation, ambient sounds, stagger animations.
+ * Single WebGL canvas for the entire office (floor, walls, window, furniture,
+ * agents, lighting, shadows, dust particles). Header bar with search & stats
+ * is preserved. Old CSS+canvas compositing is gone (see D117).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { agentsApi } from "../api/agents";
-import { approvalsApi } from "../api/approvals";
-import { activityApi } from "../api/activity";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { AgentChatSheet } from "../components/AgentChatSheet";
-import { buildDepartmentGroups } from "../lib/departmentGroups";
-import { DeskUnit, WallClock } from "../components/office";
-import { Confetti } from "../components/office/Confetti";
+import { WallClock } from "../components/office";
 import { AmbientSound } from "../components/office/AmbientSound";
-import { RelaxZone } from "../components/office/RelaxZone";
-import { CEOCorner } from "../components/office/CEOCorner";
-import { SharedTable } from "../components/office/SharedTable";
-import { DocumentFlow } from "../components/office/DocumentFlow";
-import { getDeptTheme, flattenDepartment } from "../lib/departmentGroups";
-import type { Agent, Approval, ActivityEvent } from "@paperclipai/shared";
+import { OfficeScene } from "../components/office3d/OfficeScene";
+import type { Agent } from "@paperclipai/shared";
 
-/** Infer department type from leader name for icon/label */
-function inferDeptMeta(agent: { name: string; role: string }): { icon: string; label: string; role: string } {
-  const n = agent.name.toLowerCase();
-  if (n.includes("creativ") || n.includes("design") || n.includes("art")) return { icon: "🎨", label: "CREATIVE", role: "designer" };
-  if (n.includes("ecommerce") || n.includes("e-commerce")) return { icon: "🛒", label: "ECOMMERCE", role: "ecommerce" };
-  if (n.includes("ricerca") || n.includes("research") || n.includes("intelligence")) return { icon: "🔬", label: "RICERCA", role: "researcher" };
-  if (n.includes("finanz") || n.includes("finance") || n.includes("cfo")) return { icon: "💰", label: "FINANCE", role: "cfo" };
-  if (n.includes("marketing") || n.includes("growth")) return { icon: "📊", label: "MARKETING", role: "cmo" };
-  if (n.includes("tech") || agent.role === "cto" || agent.role === "engineer") return { icon: "💻", label: "TECH", role: "engineer" };
-  return { icon: "🏢", label: "TEAM", role: agent.role };
-}
-
-/* ── Natural atmosphere (golden hour) ── */
-function useDayNightBg(): string {
-  return "#2a1f16"; // warm dark brown — header bar
-}
+/* ── Header bar color: warm dark brown to match 3D scene ── */
+const HEADER_BG = "#1a1008";
 
 export function PixelOffice() {
   const { selectedCompanyId } = useCompany();
@@ -47,10 +26,15 @@ export function PixelOffice() {
   const [chatAgent, setChatAgent] = useState<Agent | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [focusedIdx, setFocusedIdx] = useState(-1);
+  const [sceneReady, setSceneReady] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const bgColor = useDayNightBg();
+
+  // Fallback: force loading overlay off after 3s even if the Canvas never
+  // fires its onCreated callback (e.g. WebGL context lost, slow GPU).
+  useEffect(() => {
+    const t = setTimeout(() => setSceneReady(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => { setBreadcrumbs([{ label: "Ufficio" }]); }, [setBreadcrumbs]);
 
@@ -74,59 +58,11 @@ export function PixelOffice() {
     enabled: !!selectedCompanyId,
     refetchInterval: 15000,
   });
-  const { data: allApprovals } = useQuery({
-    queryKey: queryKeys.approvals.list(selectedCompanyId!),
-    queryFn: () => approvalsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
-  const { data: activity } = useQuery({
-    queryKey: queryKeys.activity(selectedCompanyId!),
-    queryFn: () => activityApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
 
   const activeAgents = useMemo(
     () => (agents ?? []).filter((a) => a.status !== "terminated"),
     [agents],
   );
-
-  const pendingApprovalsByAgent = useMemo(() => {
-    const map = new Map<string, Approval[]>();
-    for (const a of allApprovals ?? []) {
-      if (a.status !== "pending" && a.status !== "revision_requested") continue;
-      const agentId = a.requestedByAgentId;
-      if (!agentId) continue;
-      if (!map.has(agentId)) map.set(agentId, []);
-      map.get(agentId)!.push(a);
-    }
-    return map;
-  }, [allApprovals]);
-
-  const lastCommentByAgent = useMemo(() => {
-    const map = new Map<string, ActivityEvent>();
-    for (const ev of activity ?? []) {
-      if (ev.action !== "issue.comment_added" && ev.action !== "issue.commented") continue;
-      const agentId = ev.agentId ?? ev.actorId;
-      if (!agentId || ev.actorType !== "agent") continue;
-      if (!map.has(agentId)) map.set(agentId, ev);
-    }
-    return map;
-  }, [activity]);
-
-  const deptData = useMemo(() => buildDepartmentGroups(activeAgents), [activeAgents]);
-
-  const approvalQueue = useMemo(() => {
-    const queue: Array<{ agent: Agent; text: string; count: number }> = [];
-    for (const agent of activeAgents) {
-      const pending = pendingApprovalsByAgent.get(agent.id);
-      if (pending && pending.length > 0) {
-        const text = (pending[0].payload as Record<string, unknown> | null)?.stepTitle as string ??
-          pending[0].type.replaceAll("_", " ");
-        queue.push({ agent, text, count: pending.length });
-      }
-    }
-    return queue;
-  }, [activeAgents, pendingApprovalsByAgent]);
 
   const statusCounts = useMemo(() => {
     const c = { active: 0, idle: 0, paused: 0, error: 0 };
@@ -139,71 +75,40 @@ export function PixelOffice() {
     return c;
   }, [activeAgents]);
 
-  /* ── Break area: paused agents go to the lounge ── */
-  const breakAgents = useMemo(
-    () => activeAgents.filter((a) => a.status === "paused"),
-    [activeAgents],
-  );
-
-  /* ── Search ── */
+  /* ── Search filter (name/role substring) ── */
   const searchLower = searchQuery.toLowerCase();
-  const filteredDepts = useMemo(() => {
-    if (!searchLower) return deptData.departments;
-    return deptData.departments.filter((dept) => {
-      const all = [dept.leader, ...dept.members];
-      for (const sub of dept.subDepartments) all.push(sub.leader, ...sub.members);
-      return all.some((a) => a.name.toLowerCase().includes(searchLower) || (a.role ?? "").toLowerCase().includes(searchLower));
-    });
-  }, [deptData.departments, searchLower]);
+  const filteredAgents = useMemo(() => {
+    if (!searchLower) return activeAgents;
+    return activeAgents.filter(
+      (a) =>
+        a.name.toLowerCase().includes(searchLower) ||
+        (a.role ?? "").toLowerCase().includes(searchLower),
+    );
+  }, [activeAgents, searchLower]);
 
-  const filteredStandalone = useMemo(() => {
-    if (!searchLower) return deptData.standalone;
-    return deptData.standalone.filter((a) => a.name.toLowerCase().includes(searchLower) || (a.role ?? "").toLowerCase().includes(searchLower));
-  }, [deptData.standalone, searchLower]);
-
-  const showCeo = !searchLower || (deptData.ceo?.name.toLowerCase().includes(searchLower) ?? false);
-
-  /* ── Keyboard nav ── */
-  const allVisibleAgents = useMemo(() => {
-    const list: Agent[] = [];
-    if (showCeo && deptData.ceo) list.push(deptData.ceo);
-    for (const dept of filteredDepts) {
-      list.push(dept.leader, ...dept.members);
-      for (const sub of dept.subDepartments) list.push(sub.leader, ...sub.members);
-    }
-    list.push(...filteredStandalone);
-    return list;
-  }, [showCeo, deptData.ceo, filteredDepts, filteredStandalone]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-      e.preventDefault(); setFocusedIdx((i) => Math.min(i + 1, allVisibleAgents.length - 1));
-    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-      e.preventDefault(); setFocusedIdx((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && focusedIdx >= 0 && focusedIdx < allVisibleAgents.length) {
-      e.preventDefault(); setChatAgent(allVisibleAgents[focusedIdx]);
-    } else if (e.key === "Escape") {
-      setChatAgent(null); setFocusedIdx(-1); setSearchQuery("");
-    }
-  }, [allVisibleAgents, focusedIdx]);
-
-  /* ── Confetti on approval resolution ── */
-  const prevApprovalCount = useRef(allApprovals?.length ?? 0);
+  /* ── Keyboard: Escape closes chat / clears search (on window listener) ── */
   useEffect(() => {
-    const current = allApprovals?.length ?? 0;
-    if (prevApprovalCount.current > 0 && current < prevApprovalCount.current) {
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 3000);
-    }
-    prevApprovalCount.current = current;
-  }, [allApprovals?.length]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setChatAgent(null);
+        setSearchQuery("");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
-    <div ref={containerRef} className="flex flex-col h-[calc(100vh-48px)] outline-none" style={{ backgroundColor: bgColor }} onKeyDown={handleKeyDown} tabIndex={0}>
-      <Confetti active={showConfetti} />
-
+    <div
+      ref={containerRef}
+      className="flex flex-col h-[calc(100vh-48px)] outline-none"
+      style={{ backgroundColor: HEADER_BG }}
+    >
       {/* Header — responsive: wraps on mobile */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2 border-b border-border" style={{ backgroundColor: bgColor }}>
+      <div
+        className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2 border-b border-border"
+        style={{ backgroundColor: HEADER_BG }}
+      >
         <div className="flex items-center gap-2 sm:gap-3">
           <span className="text-xs sm:text-sm font-semibold text-violet-400 tracking-wide">UFFICIO</span>
           <div className="flex items-center gap-1">
@@ -213,7 +118,7 @@ export function PixelOffice() {
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setFocusedIdx(-1); }}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cerca..."
             className="w-20 sm:w-32 px-2 py-0.5 rounded text-[10px] bg-stone-900/50 border border-amber-800/40 text-amber-100 placeholder:text-amber-700/50 focus:border-violet-400/60 focus:outline-none transition-colors"
           />
@@ -236,117 +141,82 @@ export function PixelOffice() {
             </span>
           )}
           <span className="hidden sm:inline text-muted-foreground">
-            {deptData.departments.length} reparti · {activeAgents.length} agenti
+            {activeAgents.length} agenti
           </span>
           <span className="hidden sm:block"><WallClock size={24} /></span>
           <AmbientSound />
-          <button type="button" onClick={toggleFullscreen} className="text-[10px] text-muted-foreground hover:text-white transition-colors px-1 hidden sm:block" title={isFullscreen ? "Esci da schermo intero" : "Schermo intero"}>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="text-[10px] text-muted-foreground hover:text-white transition-colors px-1 hidden sm:block"
+            title={isFullscreen ? "Esci da schermo intero" : "Schermo intero"}
+          >
             {isFullscreen ? "⊡" : "⛶"}
           </button>
         </div>
       </div>
 
-      {/* Content — natural atmosphere: golden hour + parquet floor */}
+      {/* 3D Office Scene — single WebGL canvas, Three.js + R3F */}
       <div
-        className="relative flex-1 overflow-auto p-4"
-        style={{
-          minHeight: 0,
-          backgroundColor: "#3a2e24",
-          backgroundImage: [
-            // Wall gradient (upper half): warm golden light from top
-            "linear-gradient(180deg, #f3e5c5 0%, #e8cfa0 20%, #d4b896 40%, transparent 55%)",
-            // Directional light from right (window CEO side)
-            "radial-gradient(ellipse at 90% 30%, rgba(253,224,71,0.15) 0%, transparent 50%)",
-            // Parquet floor: diagonal plank pattern (lower half)
-            "repeating-linear-gradient(90deg, #6b4226 0px, #6b4226 60px, #7a4a2c 60px, #7a4a2c 62px, #6b4226 62px, #6b4226 120px, #5a381f 120px, #5a381f 122px)",
-            // Parquet depth shading
-            "linear-gradient(180deg, transparent 0%, transparent 50%, rgba(58,46,36,0.3) 100%)",
-          ].join(", "),
-          backgroundSize: "100% 100%, 100% 100%, 120px 30px, 100% 100%",
-          backgroundRepeat: "no-repeat, no-repeat, repeat, no-repeat",
-          boxShadow: "inset 0 0 80px rgba(58,46,36,0.5), inset 0 -20px 40px rgba(58,46,36,0.4)",
-        }}
+        className="relative flex-1"
+        style={{ minHeight: 0, backgroundColor: "#e8cfa0" }}
       >
-        {/* Vignette overlay — warm edges */}
-        <div className="pointer-events-none fixed inset-0 z-50" style={{ background: "radial-gradient(ellipse at center, transparent 50%, rgba(58,23,8,0.25) 100%)" }} />
-        {/* Side light rays from right window */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/3 z-10" style={{ background: "linear-gradient(270deg, rgba(253,224,71,0.08) 0%, transparent 60%)" }} />
-        {/* Document flow particles */}
-        <DocumentFlow pendingCount={approvalQueue.length} />
+        <OfficeScene
+          agents={filteredAgents}
+          onAgentClick={setChatAgent}
+          onReady={() => setSceneReady(true)}
+        />
 
-        {/* Open-space layout: one continuous floor */}
-        <div className="max-w-[1400px] mx-auto">
-
-          {/* Top row: CEO corner + first departments */}
-          <div className="flex flex-wrap items-start justify-center gap-x-8 gap-y-6 py-4">
-            {/* CEO in corner, small */}
-            {showCeo && deptData.ceo && (
-              <CEOCorner
-                ceo={deptData.ceo}
-                pending={pendingApprovalsByAgent.get(deptData.ceo.id)}
-                lastComment={lastCommentByAgent.get(deptData.ceo.id)}
-                onClick={() => setChatAgent(deptData.ceo!)}
+        {/* Loading overlay — visible until the Canvas fires onCreated */}
+        {!sceneReady && (
+          <div
+            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
+            style={{
+              background:
+                "radial-gradient(ellipse at center, #d4b896 0%, #8a6a4a 70%, #2a1f16 100%)",
+            }}
+          >
+            <div className="flex flex-col items-center gap-4">
+              {/* Spinner */}
+              <div
+                className="w-12 h-12 rounded-full border-4"
+                style={{
+                  borderColor: "rgba(255, 234, 194, 0.2)",
+                  borderTopColor: "#ffeac2",
+                  animation: "spin 1s linear infinite",
+                }}
               />
-            )}
-
-            {/* Department shared tables */}
-            {filteredDepts.map((dept) => {
-              const allAgents = flattenDepartment(dept);
-              const members = allAgents.filter((a) => a.id !== dept.leader.id);
-              // Split: working/idle at table, some standing
-              const seated: typeof members = [];
-              const standing: typeof members = [];
-              for (const m of members) {
-                // Only active idle agents can be standing (not paused, not error)
-                const h = m.id.charCodeAt(0) + m.id.charCodeAt(m.id.length - 1);
-                const isStandingCandidate = m.status === "idle" && h % 10 < 3; // 30% of idle
-                if (isStandingCandidate) standing.push(m);
-                else seated.push(m);
-              }
-              const meta = inferDeptMeta(dept.leader);
-              const theme = getDeptTheme(meta.role);
-              return (
-                <SharedTable
-                  key={dept.leader.id}
-                  label={meta.label}
-                  icon={meta.icon}
-                  accent={theme.accent}
-                  leader={dept.leader}
-                  seated={seated}
-                  standing={standing}
-                  pendingApprovals={pendingApprovalsByAgent}
-                  lastComments={lastCommentByAgent}
-                  onAgentClick={setChatAgent}
-                />
-              );
-            })}
-
-            {/* Standalone CEO-direct agents — as loose desks in the space */}
-            {filteredStandalone.length > 0 && filteredStandalone.map((agent) => (
-              <DeskUnit
-                key={agent.id}
-                agent={agent}
-                pending={pendingApprovalsByAgent.get(agent.id)}
-                lastComment={lastCommentByAgent.get(agent.id)}
-                onClick={() => setChatAgent(agent)}
-              />
-            ))}
+              <div className="text-amber-100 text-xs tracking-wider uppercase font-semibold">
+                Preparazione ufficio 3D
+              </div>
+              <div className="text-amber-200/60 text-[10px]">
+                caricamento texture, lighting e scena…
+              </div>
+            </div>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
+        )}
 
-          {searchLower && filteredDepts.length === 0 && filteredStandalone.length === 0 && !showCeo && (
-            <div className="text-center py-8 text-slate-500 text-sm">Nessun agente trovato per "{searchQuery}"</div>
-          )}
-
-          {/* Relax zone — integrated, not a card */}
-          <RelaxZone agents={breakAgents} onAgentClick={setChatAgent} />
-
-          <div className="text-center py-4">
-            <span className="text-[10px] text-amber-200/30 font-bold tracking-widest">PAPERCLIP AI</span>
+        {/* Controls hint — bottom left */}
+        {sceneReady && (
+          <div className="pointer-events-none absolute bottom-3 left-3 text-[10px] text-amber-100/60 bg-black/30 backdrop-blur-sm px-2 py-1 rounded">
+            🖱️ Trascina per ruotare · rotella per zoom · tasto destro per pan
           </div>
+        )}
+
+        {/* Brand label bottom center */}
+        <div className="pointer-events-none absolute bottom-2 left-0 right-0 text-center">
+          <span className="text-[10px] text-amber-800/40 font-bold tracking-widest">
+            PAPERCLIP AI
+          </span>
         </div>
       </div>
 
-      <AgentChatSheet agent={chatAgent} open={chatAgent !== null} onOpenChange={(open) => { if (!open) setChatAgent(null); }} />
+      <AgentChatSheet
+        agent={chatAgent}
+        open={chatAgent !== null}
+        onOpenChange={(open) => { if (!open) setChatAgent(null); }}
+      />
     </div>
   );
 }
