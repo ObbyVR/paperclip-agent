@@ -29,24 +29,24 @@ export function RelaxZone({ agents, onAgentClick }: RelaxZoneProps) {
   return (
     <div className="relative flex flex-col items-center gap-2 py-6">
       {/* Floating label — subtle, not a header bar */}
-      <div className="flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-amber-600/30 bg-amber-950/20">
+      <div className="flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-amber-500/60 bg-white/90 shadow-sm">
         <span className="text-[10px]">☕</span>
-        <span className="text-[9px] font-bold tracking-wider text-amber-400/70">AREA RELAX</span>
-        <span className="text-[9px] text-amber-500/50">· {agents.length}</span>
+        <span className="text-[9px] font-bold tracking-wider text-amber-700">AREA RELAX</span>
+        <span className="text-[9px] text-amber-600">· {agents.length}</span>
       </div>
 
       {/* Background: couch sprites, coffee machine, plants — integrated not card */}
       <div className="relative w-full max-w-[700px] h-[180px]">
         {/* Floor tint (subtle amber carpet) */}
         <div className="absolute inset-0 rounded-lg pointer-events-none"
-          style={{ backgroundColor: "rgba(245,158,11,0.04)" }} />
+          style={{ backgroundColor: "rgba(245,158,11,0.08)" }} />
 
         {/* Decorative background: couches + coffee machine */}
-        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between px-8 opacity-50 pointer-events-none">
+        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between px-8 opacity-70 pointer-events-none">
           {/* Couch left */}
           <div className="flex items-end gap-0">
-            <div className="w-20 h-8 rounded-t bg-amber-900/60 border-t-2 border-x border-amber-700/40" />
-            <div className="w-4 h-10 rounded-t bg-amber-900/50 border-t border-x border-amber-700/30" />
+            <div className="w-20 h-8 rounded-t bg-amber-700/70 border-t-2 border-x border-amber-800/50" />
+            <div className="w-4 h-10 rounded-t bg-amber-700/60 border-t border-x border-amber-800/40" />
           </div>
           {/* Plant */}
           <img src="/sprites/office/plant.png" alt="" style={{ width: 32, height: 44, imageRendering: "pixelated" }} draggable={false} />
@@ -57,8 +57,8 @@ export function RelaxZone({ agents, onAgentClick }: RelaxZoneProps) {
           </div>
           {/* Couch right */}
           <div className="flex items-end gap-0">
-            <div className="w-4 h-10 rounded-t bg-amber-900/50 border-t border-x border-amber-700/30" />
-            <div className="w-20 h-8 rounded-t bg-amber-900/60 border-t-2 border-x border-amber-700/40" />
+            <div className="w-4 h-10 rounded-t bg-amber-700/60 border-t border-x border-amber-800/40" />
+            <div className="w-20 h-8 rounded-t bg-amber-700/70 border-t-2 border-x border-amber-800/50" />
           </div>
         </div>
 
@@ -79,9 +79,9 @@ export function RelaxZone({ agents, onAgentClick }: RelaxZoneProps) {
                   <div className="group-hover:brightness-110 transition-all">
                     <PixelAgent agentId={agent.id} status={pose} scale={1.2} />
                   </div>
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-700/30">
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/95 border border-amber-500/60 shadow-sm">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    <span className="text-[9px] text-amber-200/80 font-medium">{firstName}</span>
+                    <span className="text-[9px] text-amber-800 font-medium">{firstName}</span>
                   </div>
                 </button>
               </AgentHoverCard>

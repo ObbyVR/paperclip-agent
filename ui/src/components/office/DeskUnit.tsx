@@ -84,18 +84,18 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
   const roleName = agent.name.split("—")[1]?.trim() ?? agent.role ?? "";
   const tooltipText = `${agent.name}\n${roleName} · ${agent.status}`;
 
-  // Monitor glow color based on status — visible distinction at a glance
+  // Monitor glow color based on status — visible on light background
   const monitorGlow: Record<string, string> = {
-    active: "rgba(34,197,94,0.35)", running: "rgba(6,182,212,0.35)",
-    idle: "rgba(80,120,220,0.15)", paused: "rgba(245,158,11,0.12)",
-    error: "rgba(239,68,68,0.35)", terminated: "rgba(30,30,40,0.5)",
+    active: "rgba(34,197,94,0.55)", running: "rgba(6,182,212,0.55)",
+    idle: "rgba(80,120,220,0.35)", paused: "rgba(245,158,11,0.35)",
+    error: "rgba(239,68,68,0.55)", terminated: "rgba(30,30,40,0.5)",
   };
   const glowColor = monitorGlow[agent.status] ?? monitorGlow.idle;
   const isActive = agent.status === "active" || agent.status === "running";
 
   // Dynamic sub-label — show last activity when available
   let subLabel = "";
-  let subLabelColor = "text-slate-500";
+  let subLabelColor = "text-slate-600";
   const lastSnippet = lastComment
     ? ((lastComment.details as Record<string, unknown> | null)?.bodySnippet as string) ?? null
     : null;
@@ -112,10 +112,10 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
   } else if (lastSnippet) {
     // Show truncated last activity instead of generic "Disponibile"
     subLabel = lastSnippet.length > 28 ? lastSnippet.slice(0, 25) + "..." : lastSnippet;
-    subLabelColor = "text-slate-400/60";
+    subLabelColor = "text-slate-700/70";
   } else {
     subLabel = "Disponibile";
-    subLabelColor = "text-slate-500/60";
+    subLabelColor = "text-slate-600/80";
   }
 
   return (
@@ -128,7 +128,7 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
     >
       {/* Urgent badge — only for pending approvals (small, non-intrusive) */}
       {hasPending && (
-        <div className="absolute -top-1 right-0 z-10 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center border-2 border-slate-900">
+        <div className="absolute -top-1 right-0 z-10 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center border-2 border-white shadow-md">
           <span className="text-[8px] font-bold text-white">{pending!.length}</span>
         </div>
       )}
@@ -224,13 +224,13 @@ export function DeskUnit({ agent, pending, lastComment, onClick, variant = "norm
       </div>
 
       {/* Name tag */}
-      <div className="flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700/50 group-hover:border-violet-500/50 group-hover:bg-slate-800/90 group-focus-visible:border-violet-500/50 transition-colors">
+      <div className="flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded bg-white/95 border border-slate-300 shadow-sm group-hover:border-violet-500/60 group-hover:bg-white group-focus-visible:border-violet-500/60 transition-colors">
         {isLeader && <span className="text-[9px] shrink-0" title="Team Lead">👑</span>}
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
-        <span className="text-[10px] font-semibold text-slate-200 truncate max-w-[80px]">{firstName}</span>
+        <span className="text-[10px] font-semibold text-slate-800 truncate max-w-[80px]">{firstName}</span>
       </div>
       {isLeader && !isCeo && (
-        <span className="text-[7px] text-amber-500/50 font-bold uppercase tracking-wider mt-px">Team Lead</span>
+        <span className="text-[7px] text-amber-600/80 font-bold uppercase tracking-wider mt-px">Team Lead</span>
       )}
 
       {/* Sub-label: dynamic status text */}

@@ -36,23 +36,9 @@ function inferDeptMeta(agent: { name: string; role: string }): { icon: string; l
   return { icon: "🏢", label: "TEAM", role: agent.role };
 }
 
-/* ── Day/night cycle ── */
+/* ── Day mode (forced bright) ── */
 function useDayNightBg(): string {
-  const [bg, setBg] = useState(() => computeBg());
-  useEffect(() => {
-    const id = setInterval(() => setBg(computeBg()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-  return bg;
-}
-function computeBg(): string {
-  const h = new Date().getHours();
-  if (h >= 22 || h < 5) return "#08080f";
-  if (h >= 5 && h < 7) return "#0c0a10";
-  if (h >= 7 && h < 10) return "#0e0d14";
-  if (h >= 10 && h < 17) return "#0e0e16";
-  if (h >= 17 && h < 20) return "#100e14";
-  return "#0c0a12";
+  return "#f5f3ef"; // warm daylight beige/white
 }
 
 export function PixelOffice() {
@@ -229,7 +215,7 @@ export function PixelOffice() {
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setFocusedIdx(-1); }}
             placeholder="Cerca..."
-            className="w-20 sm:w-32 px-2 py-0.5 rounded text-[10px] bg-slate-800/60 border border-slate-700/50 text-slate-300 placeholder:text-slate-600 focus:border-violet-500/50 focus:outline-none transition-colors"
+            className="w-20 sm:w-32 px-2 py-0.5 rounded text-[10px] bg-white/70 border border-slate-300 text-slate-800 placeholder:text-slate-400 focus:border-violet-500/60 focus:outline-none transition-colors"
           />
         </div>
         <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-[11px]">
@@ -262,8 +248,8 @@ export function PixelOffice() {
 
       {/* Content — continuous open-space floor */}
       <div className="relative flex-1 overflow-auto p-4" style={{ minHeight: 0, backgroundColor: bgColor, backgroundImage: `linear-gradient(180deg, ${bgColor}00 0%, ${bgColor} 100%), url(/sprites/office/floor-tile.png)`, backgroundSize: "100% 100%, 50px 50px", backgroundBlendMode: "normal, soft-light", backgroundRepeat: "no-repeat, repeat" }}>
-        {/* Vignette overlay */}
-        <div className="pointer-events-none fixed inset-0 z-50" style={{ background: "radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%)" }} />
+        {/* Vignette overlay — soft daylight */}
+        <div className="pointer-events-none fixed inset-0 z-50" style={{ background: "radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.06) 100%)" }} />
         {/* Document flow particles */}
         <DocumentFlow pendingCount={approvalQueue.length} />
 
@@ -334,7 +320,7 @@ export function PixelOffice() {
           <RelaxZone agents={breakAgents} onAgentClick={setChatAgent} />
 
           <div className="text-center py-4">
-            <span className="text-[10px] text-white/[0.06] font-bold tracking-widest">PAPERCLIP AI</span>
+            <span className="text-[10px] text-slate-900/[0.08] font-bold tracking-widest">PAPERCLIP AI</span>
           </div>
         </div>
       </div>

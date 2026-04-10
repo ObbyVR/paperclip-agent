@@ -45,11 +45,10 @@ export function SharedTable({
   return (
     <div className="relative flex flex-col items-center">
       {/* Floating zone label — hanging sign above the table */}
-      <div className="mb-2 flex items-center gap-1.5 px-3 py-1 rounded-full border backdrop-blur-sm"
+      <div className="mb-2 flex items-center gap-1.5 px-3 py-1 rounded-full border bg-white/90 backdrop-blur-sm"
         style={{
-          borderColor: accent + "60",
-          backgroundColor: accent + "15",
-          boxShadow: `0 2px 8px ${accent}30`,
+          borderColor: accent + "80",
+          boxShadow: `0 2px 8px rgba(0,0,0,0.08), 0 0 0 1px ${accent}30`,
         }}>
         <span className="text-[11px]">{icon}</span>
         <span className="text-[10px] font-bold tracking-wider" style={{ color: accent }}>
@@ -59,7 +58,7 @@ export function SharedTable({
 
       {/* Optional subtle zone floor tint (rectangular carpet) */}
       <div className="absolute top-10 left-0 right-0 bottom-0 rounded-lg pointer-events-none -z-10"
-        style={{ backgroundColor: accent + "06" }} />
+        style={{ backgroundColor: accent + "10" }} />
 
       {/* Seated agents — side by side at the shared table */}
       <div className="flex items-end justify-center gap-1 flex-wrap">
@@ -108,9 +107,9 @@ export function SharedTable({
                   <div className="group-hover:brightness-110 transition-all">
                     <PixelAgent agentId={agent.id} status={standingStatus} scale={1.1} />
                   </div>
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/40">
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/90 border border-slate-300 shadow-sm">
                     <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#6b7280" }} />
-                    <span className="text-[8px] text-slate-300 font-medium truncate max-w-[50px]">{firstName}</span>
+                    <span className="text-[8px] text-slate-700 font-medium truncate max-w-[50px]">{firstName}</span>
                   </div>
                 </button>
               </AgentHoverCard>
