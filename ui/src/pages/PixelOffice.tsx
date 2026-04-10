@@ -14,12 +14,27 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { AgentChatSheet } from "../components/AgentChatSheet";
 import { buildDepartmentGroups } from "../lib/departmentGroups";
-import { CEOOffice, DepartmentRoom, DeskUnit, WallClock } from "../components/office";
+import { DeskUnit, WallClock } from "../components/office";
 import { Confetti } from "../components/office/Confetti";
 import { AmbientSound } from "../components/office/AmbientSound";
-import { BreakArea } from "../components/office/BreakArea";
+import { RelaxZone } from "../components/office/RelaxZone";
+import { CEOCorner } from "../components/office/CEOCorner";
+import { SharedTable } from "../components/office/SharedTable";
 import { DocumentFlow } from "../components/office/DocumentFlow";
+import { getDeptTheme, flattenDepartment } from "../lib/departmentGroups";
 import type { Agent, Approval, ActivityEvent } from "@paperclipai/shared";
+
+/** Infer department type from leader name for icon/label */
+function inferDeptMeta(agent: { name: string; role: string }): { icon: string; label: string; role: string } {
+  const n = agent.name.toLowerCase();
+  if (n.includes("creativ") || n.includes("design") || n.includes("art")) return { icon: "🎨", label: "CREATIVE", role: "designer" };
+  if (n.includes("ecommerce") || n.includes("e-commerce")) return { icon: "🛒", label: "ECOMMERCE", role: "ecommerce" };
+  if (n.includes("ricerca") || n.includes("research") || n.includes("intelligence")) return { icon: "🔬", label: "RICERCA", role: "researcher" };
+  if (n.includes("finanz") || n.includes("finance") || n.includes("cfo")) return { icon: "💰", label: "FINANCE", role: "cfo" };
+  if (n.includes("marketing") || n.includes("growth")) return { icon: "📊", label: "MARKETING", role: "cmo" };
+  if (n.includes("tech") || agent.role === "cto" || agent.role === "engineer") return { icon: "💻", label: "TECH", role: "engineer" };
+  return { icon: "🏢", label: "TEAM", role: agent.role };
+}
 
 /* ── Day/night cycle ── */
 function useDayNightBg(): string {
@@ -245,48 +260,78 @@ export function PixelOffice() {
         </div>
       </div>
 
-      {/* Content — gradient + floor tiles + vignette */}
+      {/* Content — continuous open-space floor */}
       <div className="relative flex-1 overflow-auto p-4" style={{ minHeight: 0, backgroundColor: bgColor, backgroundImage: `linear-gradient(180deg, ${bgColor}00 0%, ${bgColor} 100%), url(/sprites/office/floor-tile.png)`, backgroundSize: "100% 100%, 50px 50px", backgroundBlendMode: "normal, soft-light", backgroundRepeat: "no-repeat, repeat" }}>
         {/* Vignette overlay */}
         <div className="pointer-events-none fixed inset-0 z-50" style={{ background: "radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%)" }} />
         {/* Document flow particles */}
         <DocumentFlow pendingCount={approvalQueue.length} />
-        <div className="max-w-[1200px] mx-auto space-y-4">
-          {showCeo && deptData.ceo && (
-            <CEOOffice ceo={deptData.ceo} approvalQueue={approvalQueue} pendingApprovals={pendingApprovalsByAgent} lastComments={lastCommentByAgent} onAgentClick={setChatAgent} />
-          )}
 
-          <div className="flex items-end justify-center gap-8 py-2 opacity-50">
-            <img src="/sprites/office/coffee-machine.png" alt="" style={{ width: 28, height: 36, imageRendering: "pixelated" }} draggable={false} />
-            <img src="/sprites/office/watercooler.png" alt="" style={{ width: 22, height: 32, imageRendering: "pixelated" }} draggable={false} />
-            <img src="/sprites/office/old-printer.png" alt="" style={{ width: 30, height: 28, imageRendering: "pixelated" }} draggable={false} />
-          </div>
+        {/* Open-space layout: one continuous floor */}
+        <div className="max-w-[1400px] mx-auto">
 
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredDepts.map((dept) => (
-              <DepartmentRoom key={dept.leader.id} department={dept} pendingApprovals={pendingApprovalsByAgent} lastComments={lastCommentByAgent} onAgentClick={setChatAgent} />
-            ))}
-            {filteredStandalone.length > 0 && (
-              <div className="rounded-lg border border-gray-600/40 overflow-hidden" style={{ backgroundColor: "rgba(107,114,128,0.08)" }}>
-                <div className="flex items-center justify-between px-3 py-2" style={{ backgroundColor: "rgba(107,114,128,0.15)" }}>
-                  <span className="text-[11px] font-bold tracking-wide text-gray-400">STAFF DIRETTO CEO</span>
-                  <span className="text-[10px] text-gray-500">{filteredStandalone.length}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 p-3 place-items-center">
-                  {filteredStandalone.map((agent) => (
-                    <DeskUnit key={agent.id} agent={agent} pending={pendingApprovalsByAgent.get(agent.id)} lastComment={lastCommentByAgent.get(agent.id)} onClick={() => setChatAgent(agent)} />
-                  ))}
-                </div>
-              </div>
+          {/* Top row: CEO corner + first departments */}
+          <div className="flex flex-wrap items-start justify-center gap-x-8 gap-y-6 py-4">
+            {/* CEO in corner, small */}
+            {showCeo && deptData.ceo && (
+              <CEOCorner
+                ceo={deptData.ceo}
+                pending={pendingApprovalsByAgent.get(deptData.ceo.id)}
+                lastComment={lastCommentByAgent.get(deptData.ceo.id)}
+                onClick={() => setChatAgent(deptData.ceo!)}
+              />
             )}
+
+            {/* Department shared tables */}
+            {filteredDepts.map((dept) => {
+              const allAgents = flattenDepartment(dept);
+              const members = allAgents.filter((a) => a.id !== dept.leader.id);
+              // Split: working/idle at table, some standing
+              const seated: typeof members = [];
+              const standing: typeof members = [];
+              for (const m of members) {
+                // Only active idle agents can be standing (not paused, not error)
+                const h = m.id.charCodeAt(0) + m.id.charCodeAt(m.id.length - 1);
+                const isStandingCandidate = m.status === "idle" && h % 10 < 3; // 30% of idle
+                if (isStandingCandidate) standing.push(m);
+                else seated.push(m);
+              }
+              const meta = inferDeptMeta(dept.leader);
+              const theme = getDeptTheme(meta.role);
+              return (
+                <SharedTable
+                  key={dept.leader.id}
+                  label={meta.label}
+                  icon={meta.icon}
+                  accent={theme.accent}
+                  leader={dept.leader}
+                  seated={seated}
+                  standing={standing}
+                  pendingApprovals={pendingApprovalsByAgent}
+                  lastComments={lastCommentByAgent}
+                  onAgentClick={setChatAgent}
+                />
+              );
+            })}
+
+            {/* Standalone CEO-direct agents — as loose desks in the space */}
+            {filteredStandalone.length > 0 && filteredStandalone.map((agent) => (
+              <DeskUnit
+                key={agent.id}
+                agent={agent}
+                pending={pendingApprovalsByAgent.get(agent.id)}
+                lastComment={lastCommentByAgent.get(agent.id)}
+                onClick={() => setChatAgent(agent)}
+              />
+            ))}
           </div>
 
           {searchLower && filteredDepts.length === 0 && filteredStandalone.length === 0 && !showCeo && (
             <div className="text-center py-8 text-slate-500 text-sm">Nessun agente trovato per "{searchQuery}"</div>
           )}
 
-          {/* Break area — paused agents hanging out */}
-          <BreakArea agents={breakAgents} onAgentClick={setChatAgent} />
+          {/* Relax zone — integrated, not a card */}
+          <RelaxZone agents={breakAgents} onAgentClick={setChatAgent} />
 
           <div className="text-center py-4">
             <span className="text-[10px] text-white/[0.06] font-bold tracking-widest">PAPERCLIP AI</span>
