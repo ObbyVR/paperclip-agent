@@ -635,9 +635,11 @@ export function Activity() {
 
   // Counts PER BUCKET (independent of the selected bucket, so tabs
   // always show the accurate size of each time window).
+  const isReadMark = (ev: ActivityEvent) => ev.action === "issue.read_marked" || ev.action === "issue_read_marked";
   const bucketCounts = useMemo(() => {
     const counts: Record<TimeBucket, number> = { today: 0, yesterday: 0, week: 0, all: 0 };
     for (const ev of allEvents) {
+      if (isReadMark(ev)) continue;
       counts.all += 1;
       if (matchesBucket(ev, "today", now)) counts.today += 1;
       if (matchesBucket(ev, "yesterday", now)) counts.yesterday += 1;
@@ -663,9 +665,12 @@ export function Activity() {
   }, [bucketEvents]);
 
   // Full filter stack: bucket → category → search → agent → project.
+  // Hide read_marked from "all" — they're noise. Show only under "Sistema".
   const filteredEvents = useMemo(() => {
     let list = bucketEvents;
-    if (categoryFilter !== "all") {
+    if (categoryFilter === "all") {
+      list = list.filter((ev) => ev.action !== "issue.read_marked" && ev.action !== "issue_read_marked");
+    } else {
       list = list.filter((ev) => categorizeAction(ev.action) === categoryFilter);
     }
     if (agentFilter) {
@@ -765,7 +770,7 @@ export function Activity() {
               : "bg-muted text-muted-foreground hover:bg-accent",
           )}
         >
-          Tutto ({bucketEvents.length})
+          Tutto ({bucketEvents.filter((ev) => ev.action !== "issue.read_marked" && ev.action !== "issue_read_marked").length})
         </button>
         {(["comment", "execution", "decision", "system"] as ActivityCategory[]).map((cat) => {
           const Icon = CATEGORY_ICONS[cat];
