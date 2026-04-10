@@ -4,6 +4,7 @@
  * Agents here are "away from their desk": having coffee, chatting,
  * or resting. Visual cue that their chair at the desk is empty.
  */
+import { useEffect, useState } from "react";
 import type { Agent } from "@paperclipai/shared";
 import { PixelAgent } from "./PixelAgent";
 
@@ -12,7 +13,26 @@ interface BreakAreaProps {
   onAgentClick: (agent: Agent) => void;
 }
 
+/** Track which agents are still in their "walking in" entrance phase */
+function useWalkingAgents(agents: Agent[]): Set<string> {
+  const [walking, setWalking] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    // Mark new agents as walking
+    const newIds = agents.map((a) => a.id);
+    setWalking((prev) => {
+      const next = new Set(prev);
+      for (const id of newIds) if (!prev.has(id)) next.add(id);
+      return next;
+    });
+    // After 800ms, clear walking state for all
+    const timer = setTimeout(() => setWalking(new Set()), 800);
+    return () => clearTimeout(timer);
+  }, [agents.map((a) => a.id).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  return walking;
+}
+
 export function BreakArea({ agents, onAgentClick }: BreakAreaProps) {
+  const walkingIds = useWalkingAgents(agents);
   if (agents.length === 0) return null;
 
   return (
@@ -53,7 +73,7 @@ export function BreakArea({ agents, onAgentClick }: BreakAreaProps) {
                 style={{ animation: `walk-in 600ms ease-out ${idx * 150}ms both` }}
               >
                 <div className="group-hover:brightness-110 transition-all">
-                  <PixelAgent agentId={agent.id} status={agent.status} scale={1.2} />
+                  <PixelAgent agentId={agent.id} status={walkingIds.has(agent.id) ? "walking" : agent.status} scale={1.2} />
                 </div>
                 <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-700/30">
                   <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: agent.status === "paused" ? "#f59e0b" : "#6b7280" }} />

@@ -207,6 +207,50 @@ function drawWaiting(ctx: CanvasRenderingContext2D, t: number, h: number, skin: 
   ctx.textAlign = "center"; ctx.fillText("⏳", x, headY - 9);
 }
 
+/* ── POSE: Walking (standing, legs alternating, arms swinging) ── */
+function drawWalking(ctx: CanvasRenderingContext2D, t: number, h: number, skin: string, hair: string, shirt: string, pants: string) {
+  const x = CW / 2;
+  const stride = Math.sin(t * 6 + h) * 4; // leg stride cycle
+  const armSwing = Math.sin(t * 6 + h) * 3; // opposite to legs
+  const bob = Math.abs(Math.sin(t * 6 + h)) * 1.5; // up-down bounce
+
+  const feetY = CH - 6;
+  const torsoY = feetY - 32 - bob;
+  const headY = torsoY - 16;
+
+  // Legs (walking stride)
+  ctx.fillStyle = pants;
+  rr(ctx, x - 7, feetY - 18 - Math.max(0, stride), 6, 18, 2); ctx.fill();
+  rr(ctx, x + 1, feetY - 18 - Math.max(0, -stride), 6, 18, 2); ctx.fill();
+  // Shoes
+  ctx.fillStyle = "#1a1a26";
+  rr(ctx, x - 8 + stride * 0.3, feetY - 2 - Math.max(0, stride), 7, 4, 1); ctx.fill();
+  rr(ctx, x + 1 - stride * 0.3, feetY - 2 - Math.max(0, -stride), 7, 4, 1); ctx.fill();
+
+  // Torso (slight lean forward)
+  ctx.fillStyle = shirt;
+  ctx.save(); ctx.translate(x, torsoY + 9); ctx.rotate(2 * Math.PI / 180); ctx.translate(-x, -(torsoY + 9));
+  rr(ctx, x - 12, torsoY, 24, 18, 3); ctx.fill();
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.moveTo(x - 4, torsoY); ctx.lineTo(x, torsoY + 4); ctx.lineTo(x + 4, torsoY); ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // Arms (swinging opposite to legs)
+  ctx.fillStyle = shirt;
+  rr(ctx, x - 16, torsoY + 4 + armSwing, 5, 12, 2); ctx.fill();
+  rr(ctx, x + 11, torsoY + 4 - armSwing, 5, 12, 2); ctx.fill();
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(x - 14, torsoY + 17 + armSwing, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 14, torsoY + 17 - armSwing, 3, 0, Math.PI * 2); ctx.fill();
+
+  // Head (looking forward, slight bob)
+  drawHead(ctx, x, headY, skin, hair, h, "open", "smile", bob * 0.3);
+
+  // Status dot
+  ctx.fillStyle = STATUS_COLORS.idle; ctx.strokeStyle = "rgba(10,10,16,0.8)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x + 14, headY - 4, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+}
+
 /* ── POSE: Idle short (leaned back, arms crossed) ── */
 function drawIdleShort(ctx: CanvasRenderingContext2D, t: number, h: number, skin: string, hair: string, shirt: string, pants: string) {
   const x = CW / 2;
@@ -472,6 +516,9 @@ function drawCharacter(ctx: CanvasRenderingContext2D, status: string, time: numb
       break;
     case "paused":
       drawIdleLong(ctx, time, agentHash, skin, hair, shirt, pants);
+      break;
+    case "walking":
+      drawWalking(ctx, time, agentHash, skin, hair, shirt, pants);
       break;
     case "idle":
     default: {
