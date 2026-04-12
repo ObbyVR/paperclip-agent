@@ -213,6 +213,15 @@ function Lighting() {
         decay={2}
         color="#f0e4ff"
       />
+
+      {/* R&D Lab — warm amber to match the research identity */}
+      <pointLight
+        position={[-6, 3, 4]}
+        intensity={5}
+        distance={10}
+        decay={2}
+        color="#ffe8c0"
+      />
     </>
   );
 }

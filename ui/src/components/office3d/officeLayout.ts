@@ -177,17 +177,17 @@ export const DESKS: DeskLayout[] = [
   },
 ];
 
-/** Relax zone (couch + coffee table) — inside the Lounge room */
+/** Relax zone (couch + coffee table) — inside the Lounge room (x=[-15,-9]) */
 export const RELAX = {
-  couchPosition: [-9, 0, 5] as Vec3,
+  couchPosition: [-12, 0, 4] as Vec3,
   couchRotation: 0,
-  coffeeTablePosition: [-9, 0, 6.2] as Vec3,
+  coffeeTablePosition: [-12, 0, 5.5] as Vec3,
   seats: [
-    [-9.8, SEAT_Y, 5] as Vec3,
-    [-8.2, SEAT_Y, 5] as Vec3,
+    [-12.8, SEAT_Y, 4] as Vec3,
+    [-11.2, SEAT_Y, 4] as Vec3,
   ],
   /** Standing spot near coffee table (for agents that walk over) */
-  standSpot: [-9, STAND_Y, 6.5] as Vec3,
+  standSpot: [-12, STAND_Y, 6] as Vec3,
 } as const;
 
 /**

@@ -18,17 +18,15 @@ const CX = (ROOM.bounds.xMin + ROOM.bounds.xMax) / 2; // -9
 const CZ = (ROOM.bounds.zMin + ROOM.bounds.zMax) / 2; // 4
 
 export function Lounge() {
+  // Room is now x=[-15,-9], z=[-1,9] — 6×10 units
   return (
     <group>
-      <FoosballTable position={[CX + 3.5, 0, CZ + 2.5]} />
-      <WallTV position={[ROOM.bounds.xMin + 0.5, 2.2, CZ - 1.5]} />
-      <VendingCombo position={[CX + 3.5, 0, CZ - 3.5]} />
-      <TropicalPalm position={[CX - 4, 0, CZ + 3.5]} scale={1.1} />
-      <TropicalPalm position={[CX + 3, 0, CZ - 3.5]} scale={0.9} />
+      <FoosballTable position={[CX, 0, CZ + 2.5]} />
+      <WallTV position={[ROOM.bounds.xMin + 0.5, 2.2, CZ]} />
+      <VendingCombo position={[ROOM.bounds.xMax - 1.2, 0, CZ - 3.5]} />
+      <TropicalPalm position={[ROOM.bounds.xMin + 1, 0, CZ + 3.5]} scale={0.9} />
+      <TropicalPalm position={[ROOM.bounds.xMax - 1.2, 0, CZ + 3.5]} scale={0.8} />
       <ShaggyRug />
-
-      {/* R&D corner — props near the research desk (right side of Lounge) */}
-      <ResearchCorner />
       <CeilingFan />
       <WallClock position={[ROOM.bounds.xMin + 0.15, 2.5, CZ + 2]} />
     </group>
@@ -290,121 +288,25 @@ function TropicalPalm({
   );
 }
 
-/** Large cozy rug accent across the lounge floor */
+/** Cozy rug accent across the lounge floor (sized for the smaller room) */
 function ShaggyRug() {
   return (
     <group>
-      {/* Main rug */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[CX, 0.006, CZ + 1]}
+        position={[CX, 0.006, CZ]}
         receiveShadow
       >
-        <planeGeometry args={[7, 5]} />
+        <planeGeometry args={[4.5, 5]} />
         <meshStandardMaterial color="#7a5a3a" roughness={0.95} />
       </mesh>
-      {/* Inner lighter patch */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[CX, 0.007, CZ + 1]}
+        position={[CX, 0.007, CZ]}
         receiveShadow
       >
-        <planeGeometry args={[6, 4]} />
+        <planeGeometry args={[3.8, 4.2]} />
         <meshStandardMaterial color="#8a6a4a" roughness={0.95} />
-      </mesh>
-    </group>
-  );
-}
-
-/** R&D corner props — small bookshelf + microscope + stack of journals
- *  positioned near the R&D desk at [-6, 0, 2] */
-function ResearchCorner() {
-  const deskX = -6;
-  const deskZ = 2;
-  return (
-    <group>
-      {/* Small bookshelf along the top wall (z=-1) behind the R&D desk */}
-      <group position={[deskX + 1.5, 0, -0.65]}>
-        {/* Back panel */}
-        <mesh position={[0, 0.9, 0]} castShadow>
-          <boxGeometry args={[1.4, 1.8, 0.08]} />
-          <meshStandardMaterial color="#4a2c18" roughness={0.7} />
-        </mesh>
-        {/* Shelves */}
-        {[0.25, 0.7, 1.15, 1.6].map((y, i) => (
-          <mesh key={i} position={[0, y, 0.12]} castShadow receiveShadow>
-            <boxGeometry args={[1.3, 0.04, 0.28]} />
-            <meshStandardMaterial color="#5a3820" roughness={0.7} />
-          </mesh>
-        ))}
-        {/* Books */}
-        {[
-          { y: 0.45, c: "#fbbf24" },
-          { y: 0.45, c: "#3a5a8a", offset: 0.15 },
-          { y: 0.45, c: "#8a3a5a", offset: 0.3 },
-          { y: 0.9, c: "#4a8a3a" },
-          { y: 0.9, c: "#8a6a3a", offset: 0.18 },
-          { y: 1.35, c: "#5a3a8a" },
-          { y: 1.35, c: "#8a8a3a", offset: 0.16 },
-          { y: 1.35, c: "#3a8a8a", offset: 0.32 },
-        ].map((b, i) => (
-          <mesh
-            key={`b${i}`}
-            position={[-0.45 + (b.offset ?? 0), b.y, 0.12]}
-            castShadow
-          >
-            <boxGeometry args={[0.12, 0.3, 0.14]} />
-            <meshStandardMaterial color={b.c} roughness={0.6} />
-          </mesh>
-        ))}
-      </group>
-
-      {/* Microscope on the desk surface */}
-      <group position={[deskX - 0.8, 0.89, deskZ - 0.3]}>
-        {/* Base plate */}
-        <mesh position={[0, 0.02, 0]} castShadow>
-          <boxGeometry args={[0.18, 0.04, 0.14]} />
-          <meshStandardMaterial color="#2a2a30" roughness={0.4} metalness={0.5} />
-        </mesh>
-        {/* Arm/pillar */}
-        <mesh position={[0, 0.2, -0.04]} castShadow>
-          <boxGeometry args={[0.06, 0.36, 0.06]} />
-          <meshStandardMaterial color="#2a2a30" roughness={0.4} metalness={0.5} />
-        </mesh>
-        {/* Eyepiece tube */}
-        <mesh position={[0, 0.4, 0.02]} rotation={[Math.PI * 0.15, 0, 0]} castShadow>
-          <cylinderGeometry args={[0.025, 0.025, 0.18, 8]} />
-          <meshStandardMaterial color="#1a1a1e" roughness={0.3} metalness={0.6} />
-        </mesh>
-        {/* Stage */}
-        <mesh position={[0, 0.12, 0.03]}>
-          <boxGeometry args={[0.1, 0.02, 0.1]} />
-          <meshStandardMaterial color="#4a4a50" roughness={0.4} metalness={0.4} />
-        </mesh>
-      </group>
-
-      {/* Stack of journals/papers next to the desk */}
-      <group position={[deskX + 1.2, 0.89, deskZ + 0.5]}>
-        {[0, 0.02, 0.04, 0.06].map((dy, i) => (
-          <mesh key={i} position={[0, dy, 0]} rotation={[0, (i * 0.08) - 0.1, 0]} castShadow>
-            <boxGeometry args={[0.3, 0.015, 0.2]} />
-            <meshStandardMaterial
-              color={["#f4ede0", "#e8dcc8", "#fbbf24", "#d4e8ff"][i]}
-              roughness={0.8}
-            />
-          </mesh>
-        ))}
-      </group>
-
-      {/* R&D dept accent — amber floor strip near the desk */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[deskX, 0.004, deskZ]}>
-        <planeGeometry args={[5, 0.05]} />
-        <meshStandardMaterial
-          color="#fbbf24"
-          emissive="#fbbf24"
-          emissiveIntensity={0.3}
-          roughness={0.4}
-        />
       </mesh>
     </group>
   );

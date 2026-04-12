@@ -62,6 +62,7 @@ import { CreativeStudio } from "./roomFurniture/CreativeStudio";
 import { CreativeLab } from "./roomFurniture/CreativeLab";
 import { TechLab } from "./roomFurniture/TechLab";
 import { Lounge } from "./roomFurniture/Lounge";
+import { RDLab } from "./roomFurniture/RDLab";
 
 const SEAT_FACING: Record<string, number[]> = (() => {
   const map: Record<string, number[]> = {};
@@ -86,6 +87,7 @@ export function OfficeFurniture() {
       <CreativeLab />
       <TechLab />
       <Lounge />
+      <RDLab />
 
       {/* Lounge: couch + coffee table at the new RELAX positions */}
       <Couch />

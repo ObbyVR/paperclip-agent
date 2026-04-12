@@ -19,7 +19,8 @@ export type RoomId =
   | "creative-studio"
   | "creative-lab"
   | "tech-lab"
-  | "lounge";
+  | "lounge"
+  | "rd-lab";
 
 export type FloorMaterial =
   | "parquet-warm"
@@ -105,12 +106,22 @@ export const ROOMS: RoomDef[] = [
   {
     id: "lounge",
     label: "Lounge",
-    bounds: { xMin: -15, xMax: -3, zMin: -1, zMax: 9 },
+    bounds: { xMin: -15, xMax: -9, zMin: -1, zMax: 9 },
     floorMaterial: "carpet-gray",
     wallColor: "#3a2a20",
-    center: [-9, STAND_Y, 4],
-    // R&D desk on the right side — corridor weaves around both the couch and desk
-    corridors: [[-12, STAND_Y, 2], [-6, STAND_Y, 7]],
+    center: [-12, STAND_Y, 4],
+    // Open relax space — single corridor
+    corridors: [[-12, STAND_Y, 2]],
+  },
+  {
+    id: "rd-lab",
+    label: "R&D Lab",
+    bounds: { xMin: -9, xMax: -3, zMin: -1, zMax: 9 },
+    floorMaterial: "concrete",
+    wallColor: "#4a3a10",
+    center: [-6, STAND_Y, 4],
+    // Corridor front of desk
+    corridors: [[-6, STAND_Y, 7], [-6, STAND_Y, 0.5]],
   },
   {
     id: "tech-lab",
@@ -146,12 +157,13 @@ export const PORTALS: PortalDef[] = [
   { rooms: ["ceo-office", "creative-studio"], axis: "x", wallAt: -7, openCenter: -5, openWidth: 1.8 },
   { rooms: ["creative-studio", "creative-lab"], axis: "x", wallAt: 5, openCenter: -5, openWidth: 1.8 },
   // Top → bottom row (along the z=-1 boundary)
-  { rooms: ["ceo-office", "lounge"], axis: "z", wallAt: -1, openCenter: -11, openWidth: 1.8 },
-  { rooms: ["creative-studio", "lounge"], axis: "z", wallAt: -1, openCenter: -5, openWidth: 1.8 },
+  { rooms: ["ceo-office", "lounge"], axis: "z", wallAt: -1, openCenter: -12, openWidth: 1.8 },
+  { rooms: ["creative-studio", "rd-lab"], axis: "z", wallAt: -1, openCenter: -5, openWidth: 1.8 },
   { rooms: ["creative-studio", "tech-lab"], axis: "z", wallAt: -1, openCenter: 1, openWidth: 1.8 },
   { rooms: ["creative-lab", "tech-lab"], axis: "z", wallAt: -1, openCenter: 10, openWidth: 1.8 },
-  // Bottom row internal divider
-  { rooms: ["lounge", "tech-lab"], axis: "x", wallAt: -3, openCenter: 4, openWidth: 1.8 },
+  // Bottom row internal dividers
+  { rooms: ["lounge", "rd-lab"], axis: "x", wallAt: -9, openCenter: 4, openWidth: 1.8 },
+  { rooms: ["rd-lab", "tech-lab"], axis: "x", wallAt: -3, openCenter: 4, openWidth: 1.8 },
 ];
 
 /**
@@ -163,7 +175,7 @@ export const PORTALS: PortalDef[] = [
  * to reason about overlapping room boundaries. Renderer just renders these.
  */
 export const INTERNAL_WALLS: InternalWallDef[] = [
-  // Vertical walls (constant X)
+  // Vertical walls (constant X) — top row
   {
     axis: "x",
     at: -7,
@@ -175,6 +187,13 @@ export const INTERNAL_WALLS: InternalWallDef[] = [
     at: 5,
     range: [-9, -1],
     openings: [{ center: -5, width: 1.8 }],
+  },
+  // Vertical walls — bottom row
+  {
+    axis: "x",
+    at: -9,
+    range: [-1, 9],
+    openings: [{ center: 4, width: 1.8 }],
   },
   {
     axis: "x",
@@ -188,7 +207,7 @@ export const INTERNAL_WALLS: InternalWallDef[] = [
     at: -1,
     range: [-15, 15],
     openings: [
-      { center: -11, width: 1.8 },
+      { center: -12, width: 1.8 },
       { center: -5, width: 1.8 },
       { center: 1, width: 1.8 },
       { center: 10, width: 1.8 },
