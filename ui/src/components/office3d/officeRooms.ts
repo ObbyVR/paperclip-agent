@@ -37,6 +37,12 @@ export interface RoomDef {
   wallColor: string;
   /** Center used as default destination for "walk to room" */
   center: Vec3;
+  /**
+   * Corridor waypoint(s) inside this room that agents route through to
+   * avoid walking straight through desk clusters. When an intra-room path
+   * is longer than ~2 units, the agent walks via these points.
+   */
+  corridors: Vec3[];
 }
 
 export interface PortalDef {
@@ -73,6 +79,8 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "parquet-warm",
     wallColor: "#3a2a1e",
     center: [-11, STAND_Y, -5],
+    // Corridor runs along the front of the desk (z=-3.5) and left wall
+    corridors: [[-13, STAND_Y, -3], [-9, STAND_Y, -3]],
   },
   {
     id: "creative-studio",
@@ -81,6 +89,8 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "parquet-warm",
     wallColor: "#4a3460",
     center: [-1, STAND_Y, -5],
+    // Corridor along the front of the desk cluster (z=-2)
+    corridors: [[-5, STAND_Y, -2], [3, STAND_Y, -2]],
   },
   {
     id: "creative-lab",
@@ -89,6 +99,8 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "concrete",
     wallColor: "#2a3340",
     center: [10, STAND_Y, -5],
+    // Corridor front of desk (z=-2) and along the left side
+    corridors: [[ 7, STAND_Y, -2], [13, STAND_Y, -2]],
   },
   {
     id: "lounge",
@@ -97,6 +109,8 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "carpet-gray",
     wallColor: "#3a2a20",
     center: [-9, STAND_Y, 4],
+    // Open space — single central waypoint is enough
+    corridors: [[-9, STAND_Y, 2]],
   },
   {
     id: "tech-lab",
@@ -105,6 +119,8 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "epoxy-blue",
     wallColor: "#1a2838",
     center: [6, STAND_Y, 4],
+    // Corridor between the two desk clusters (x=5.5) and along back/front
+    corridors: [[5.5, STAND_Y, 1], [5.5, STAND_Y, 7]],
   },
 ];
 
@@ -264,16 +280,32 @@ export function portalWaypoints(portal: PortalDef, fromRoom: RoomId): [Vec3, Vec
 }
 
 /**
+ * Find the nearest corridor waypoint in a room to a given position.
+ */
+function nearestCorridor(room: RoomDef, pos: Vec3): Vec3 | null {
+  if (room.corridors.length === 0) return null;
+  let best = room.corridors[0];
+  let bestDist = Math.hypot(pos[0] - best[0], pos[2] - best[2]);
+  for (let i = 1; i < room.corridors.length; i++) {
+    const c = room.corridors[i];
+    const d = Math.hypot(pos[0] - c[0], pos[2] - c[2]);
+    if (d < bestDist) {
+      best = c;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+/**
  * Multi-room walking path from start to end.
  *   1. Find start/end rooms (pointInRoom)
  *   2. BFS the room graph for the room sequence
  *   3. For each adjacent transition, insert the portal entry/exit waypoints
  *   4. Final waypoint = end position
  *
- * Assumptions: paths within a single room are straight lines (rooms are
- * small enough that desk-avoidance isn't critical for v12). If start or end
- * sits outside any room (shouldn't normally happen), falls back to a direct
- * line so the agent doesn't get stuck.
+ * Same-room paths route via the nearest corridor waypoint to avoid walking
+ * through desk clusters. Short paths (<2 units) go direct.
  */
 export function computeRoomPath(start: Vec3, end: Vec3): Vec3[] {
   const startRoom = pointInRoom(start);
@@ -282,7 +314,17 @@ export function computeRoomPath(start: Vec3, end: Vec3): Vec3[] {
     return [end];
   }
   if (startRoom === endRoom) {
-    return [end];
+    const dist = Math.hypot(start[0] - end[0], start[2] - end[2]);
+    if (dist < 2) return [end];
+    // Route via corridor waypoints to avoid desks
+    const room = getRoom(startRoom);
+    const path: Vec3[] = [];
+    const corridorStart = nearestCorridor(room, start);
+    const corridorEnd = nearestCorridor(room, end);
+    if (corridorStart) path.push(corridorStart);
+    if (corridorEnd && corridorEnd !== corridorStart) path.push(corridorEnd);
+    path.push(end);
+    return path;
   }
   const sequence = findRoomSequence(startRoom, endRoom);
   if (sequence.length === 0) {

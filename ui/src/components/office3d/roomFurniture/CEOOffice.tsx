@@ -86,7 +86,7 @@ function PersianRug() {
 /** Tall bookshelf flush against the back wall (z=-9) */
 function BookshelfBack() {
   const baseX = CX + 2.6; // toward the right side of the office
-  const baseZ = -8.85;
+  const baseZ = -8.65;
   return (
     <group position={[baseX, 0, baseZ]}>
       {/* Back panel */}

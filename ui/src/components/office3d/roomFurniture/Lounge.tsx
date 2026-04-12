@@ -21,8 +21,8 @@ export function Lounge() {
   return (
     <group>
       <FoosballTable position={[CX + 3.5, 0, CZ + 2.5]} />
-      <WallTV position={[ROOM.bounds.xMin + 0.12, 2.2, CZ - 1.5]} />
-      <VendingCombo position={[CX + 4.5, 0, CZ - 3.5]} />
+      <WallTV position={[ROOM.bounds.xMin + 0.5, 2.2, CZ - 1.5]} />
+      <VendingCombo position={[CX + 3.5, 0, CZ - 3.5]} />
       <TropicalPalm position={[CX - 4, 0, CZ + 3.5]} scale={1.1} />
       <TropicalPalm position={[CX + 3, 0, CZ - 3.5]} scale={0.9} />
       <ShaggyRug />
@@ -106,10 +106,11 @@ function FoosballTable({ position }: { position: [number, number, number] }) {
   );
 }
 
-/** Wall-mounted TV showing soft-glow "news" content */
+/** Wall-mounted TV showing soft-glow "news" content — faces +X (into the
+ *  room) from the left (−X) outer wall. */
 function WallTV({ position }: { position: [number, number, number] }) {
   return (
-    <group position={position} rotation={[0, Math.PI / 2, 0]}>
+    <group position={position} rotation={[0, -Math.PI / 2, 0]}>
       {/* Bezel */}
       <mesh castShadow>
         <boxGeometry args={[2.0, 1.2, 0.06]} />

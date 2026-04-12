@@ -22,7 +22,7 @@ export function CreativeLab() {
     <group>
       <Workbench position={[CX + 3.5, 0, CZ - 2.5]} />
       <Printer3D position={[CX + 3.5, 0, CZ + 0.5]} />
-      <ComponentRack position={[CX + 4.7, 0, CZ + 2.5]} />
+      <ComponentRack position={[CX + 4.2, 0, CZ + 2.5]} />
       <CeilingProjector />
       <TallStool position={[CX + 2.2, 0, CZ - 2.5]} />
       <TallStool position={[CX + 2.2, 0, CZ - 1.3]} />
@@ -140,7 +140,8 @@ function Printer3D({ position }: { position: [number, number, number] }) {
   );
 }
 
-/** Wall-mounted component rack — 4×3 grid of coloured bins */
+/** Wall-mounted component rack — 4×3 grid of coloured bins.
+ *  Rotated 180° to face INTO the room from the +X outer wall. */
 function ComponentRack({ position }: { position: [number, number, number] }) {
   const binColors = [
     "#e83a78", "#fbbf24", "#3ad4d4", "#c084fc",
@@ -148,8 +149,8 @@ function ComponentRack({ position }: { position: [number, number, number] }) {
     "#fbbf24", "#3ad4d4", "#e83a78", "#60a5fa",
   ];
   return (
-    <group position={position}>
-      {/* Back panel */}
+    <group position={position} rotation={[0, Math.PI, 0]}>
+      {/* Back panel — flush against the +X outer wall */}
       <mesh position={[0, 1.2, 0]} castShadow>
         <boxGeometry args={[0.12, 1.8, 1.4]} />
         <meshStandardMaterial color="#4a4a50" roughness={0.5} metalness={0.4} />

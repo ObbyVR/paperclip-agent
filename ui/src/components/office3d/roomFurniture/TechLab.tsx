@@ -22,7 +22,7 @@ export function TechLab() {
       <Whiteboard />
       <KanbanBoard />
       <ServerRack position={[ROOM.bounds.xMax - 1, 0, ROOM.bounds.zMax - 1.2]} />
-      <DashboardTV position={[CX - 3, 2.2, ROOM.bounds.zMax - 0.12]} />
+      <DashboardTV position={[CX - 3, 2.2, ROOM.bounds.zMax - 0.5]} />
       <FloorAccentStrip />
     </group>
   );
@@ -32,7 +32,7 @@ export function TechLab() {
 function Whiteboard() {
   const x = CX + 3;
   const y = 2.0;
-  const z = -0.88;
+  const z = -0.7;
   return (
     <group position={[x, y, z]}>
       {/* Frame */}
@@ -87,7 +87,7 @@ function Whiteboard() {
 function KanbanBoard() {
   const x = CX - 4;
   const y = 2.0;
-  const z = -0.88;
+  const z = -0.7;
   const colW = 1.1;
 
   const columns = [
@@ -189,10 +189,11 @@ function ServerRack({ position }: { position: [number, number, number] }) {
   );
 }
 
-/** Wall-mounted flat TV showing a dashboard-like glow */
+/** Wall-mounted flat TV showing a dashboard-like glow — rotated 180° to
+ *  face INTO the room from the front (z=+9) wall. */
 function DashboardTV({ position }: { position: [number, number, number] }) {
   return (
-    <group position={position}>
+    <group position={position} rotation={[0, Math.PI, 0]}>
       {/* Bezel */}
       <mesh castShadow>
         <boxGeometry args={[2.4, 1.4, 0.06]} />
