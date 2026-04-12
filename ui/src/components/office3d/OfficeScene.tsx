@@ -175,6 +175,37 @@ function Lighting() {
 
       {/* Hemisphere top-light for soft warm sky bounce */}
       <hemisphereLight args={["#fff2d4", "#d4a878", 0.9]} />
+
+      {/* ── Per-room fill lights (v12) ── prevent rooms far from the sun
+          direction from being too dark. Each is a soft point light inside
+          the room with limited distance so it doesn't bleed. */}
+
+      {/* Lounge — warm cozy fill */}
+      <pointLight
+        position={[-9, 3, 4]}
+        intensity={6}
+        distance={12}
+        decay={2}
+        color="#ffe4c0"
+      />
+
+      {/* Tech Lab — cool blue fill to match the epoxy floor */}
+      <pointLight
+        position={[6, 3, 4]}
+        intensity={5}
+        distance={14}
+        decay={2}
+        color="#d4e8ff"
+      />
+
+      {/* Creative Studio — slightly purple to match the plum wall */}
+      <pointLight
+        position={[-1, 3, -5]}
+        intensity={4}
+        distance={10}
+        decay={2}
+        color="#f0e4ff"
+      />
     </>
   );
 }

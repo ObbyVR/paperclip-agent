@@ -22,9 +22,70 @@ export interface Agent3DProps {
   skinTone?: string;
   isLeader?: boolean;
   isCEO?: boolean;
+  /** Agent status for the floating status ring color */
+  agentStatus?: string;
+  /** Agent display name shown as floating label */
+  agentName?: string;
+  /** Number of pending approvals — shows red badge if > 0 */
+  pendingApprovals?: number;
   onClick?: (e: ThreeEvent<MouseEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOut?: (e: ThreeEvent<PointerEvent>) => void;
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  active: "#22c55e",
+  running: "#06b6d4",
+  idle: "#6b7280",
+  paused: "#f59e0b",
+  error: "#ef4444",
+};
+
+/** Create a CanvasTexture with the agent's name for a floating label sprite */
+const nameLabelCache = new Map<string, THREE.CanvasTexture>();
+function getNameLabelTexture(name: string): THREE.CanvasTexture {
+  const cached = nameLabelCache.get(name);
+  if (cached) return cached;
+  const w = 256;
+  const h = 48;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, w, h);
+  // Dark pill background
+  ctx.fillStyle = "rgba(20, 12, 8, 0.75)";
+  ctx.beginPath();
+  ctx.moveTo(12, 4);
+  ctx.lineTo(w - 12, 4);
+  ctx.quadraticCurveTo(w - 4, 4, w - 4, 12);
+  ctx.lineTo(w - 4, h - 12);
+  ctx.quadraticCurveTo(w - 4, h - 4, w - 12, h - 4);
+  ctx.lineTo(12, h - 4);
+  ctx.quadraticCurveTo(4, h - 4, 4, h - 12);
+  ctx.lineTo(4, 12);
+  ctx.quadraticCurveTo(4, 4, 12, 4);
+  ctx.closePath();
+  ctx.fill();
+  // Text
+  ctx.fillStyle = "#ffeac2";
+  ctx.font = "bold 20px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  // Truncate long names
+  let display = name;
+  if (ctx.measureText(display).width > w - 32) {
+    while (display.length > 3 && ctx.measureText(display + "…").width > w - 32) {
+      display = display.slice(0, -1);
+    }
+    display += "…";
+  }
+  ctx.fillText(display, w / 2, h / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.premultiplyAlpha = true;
+  nameLabelCache.set(name, tex);
+  return tex;
 }
 
 /** Shared CanvasTexture for the "..." speech bubble — generated once. */
@@ -117,6 +178,9 @@ export const Agent3D = forwardRef<THREE.Group, Agent3DProps>(
       skinTone = "#f4d4b8",
       isLeader,
       isCEO,
+      agentStatus,
+      agentName,
+      pendingApprovals = 0,
       onClick,
       onPointerOver,
       onPointerOut,
@@ -124,6 +188,13 @@ export const Agent3D = forwardRef<THREE.Group, Agent3DProps>(
     ref,
   ) {
     const bubbleTexture = useMemo(() => getBubbleTexture(), []);
+    const nameLabelTexture = useMemo(
+      () => (agentName ? getNameLabelTexture(agentName) : null),
+      [agentName],
+    );
+    const statusColor = STATUS_COLORS[agentStatus ?? "idle"] ?? STATUS_COLORS.idle;
+    const isActive = agentStatus === "active" || agentStatus === "running";
+
     return (
       <group
         ref={ref}
@@ -145,6 +216,59 @@ export const Agent3D = forwardRef<THREE.Group, Agent3DProps>(
             depthWrite={false}
           />
         </sprite>
+
+        {/* ── Status ring — colored torus above head indicating active/idle/paused/error ── */}
+        <mesh name="statusRing" position={[0, 1.38, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.1, 0.015, 6, 16]} />
+          <meshStandardMaterial
+            color={statusColor}
+            emissive={statusColor}
+            emissiveIntensity={isActive ? 1.2 : 0.4}
+            roughness={0.3}
+            metalness={0.5}
+          />
+        </mesh>
+
+        {/* ── Working indicator — small animated gear-like dot above the status ring ── */}
+        {isActive && (
+          <mesh name="workDot" position={[0, 1.5, 0]}>
+            <sphereGeometry args={[0.04, 8, 8]} />
+            <meshStandardMaterial
+              color={statusColor}
+              emissive={statusColor}
+              emissiveIntensity={2.0}
+              roughness={0.2}
+            />
+          </mesh>
+        )}
+
+        {/* ── Pending approval badge — red pulsing dot on the shoulder ── */}
+        {pendingApprovals > 0 && (
+          <mesh name="approvalBadge" position={[-0.22, 1.0, 0.15]}>
+            <sphereGeometry args={[0.05, 8, 8]} />
+            <meshStandardMaterial
+              color="#ef4444"
+              emissive="#ef4444"
+              emissiveIntensity={1.5}
+              roughness={0.2}
+            />
+          </mesh>
+        )}
+
+        {/* ── Name label — floating sprite below feet ── */}
+        {nameLabelTexture && (
+          <sprite
+            name="nameLabel"
+            position={[0, -0.25, 0]}
+            scale={[1.2, 0.22, 1]}
+          >
+            <spriteMaterial
+              map={nameLabelTexture}
+              transparent
+              depthWrite={false}
+            />
+          </sprite>
+        )}
 
         {/* ── LEGS ── each leg is a sub-group pivoted at the hip joint so
             rotation.x produces a natural walking swing. */}

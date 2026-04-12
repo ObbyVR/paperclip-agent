@@ -248,6 +248,17 @@ export function OfficeAgents({ agents, onAgentClick }: OfficeAgentsProps) {
         }
       }
 
+      // Animate work dot (bounce up/down) and approval badge (pulse scale)
+      const workDot = group.getObjectByName("workDot") as THREE.Mesh | undefined;
+      if (workDot) {
+        workDot.position.y = 1.5 + Math.sin(now * 3 + ctrl.bobPhase) * 0.06;
+      }
+      const badge = group.getObjectByName("approvalBadge") as THREE.Mesh | undefined;
+      if (badge) {
+        const pulse = 1 + Math.sin(now * 4 + ctrl.bobPhase) * 0.25;
+        badge.scale.set(pulse, pulse, pulse);
+      }
+
       // Hover highlight — boost emissive on torso + head when mouse over
       const isHovered = hoveredRef.current === item.agent.id;
       const targetEmissive = isHovered ? 0.45 : 0;
@@ -312,6 +323,8 @@ export function OfficeAgents({ agents, onAgentClick }: OfficeAgentsProps) {
           accent={item.accent}
           isLeader={item.slot.isLeader && !item.slot.isCEO}
           isCEO={item.slot.isCEO}
+          agentStatus={item.agent.status}
+          agentName={item.agent.name}
           onClick={(e: ThreeEvent<MouseEvent>) => {
             e.stopPropagation();
             onAgentClick(item.agent);
