@@ -401,6 +401,21 @@ export function computeRoomPath(start: Vec3, end: Vec3): Vec3[] {
     return [end];
   }
   const path: Vec3[] = [];
+
+  // In the START room: route from start → corridor ring → first portal entry
+  const firstPortal = findPortal(sequence[0], sequence[1]);
+  if (firstPortal) {
+    const [firstEntry] = portalWaypoints(firstPortal, sequence[0]);
+    const startRoomDef = getRoom(startRoom);
+    if (startRoomDef.corridors.length > 0) {
+      const idxS = nearestCorridorIdx(startRoomDef.corridors, start);
+      const idxP = nearestCorridorIdx(startRoomDef.corridors, firstEntry);
+      path.push(startRoomDef.corridors[idxS]);
+      path.push(...corridorSlice(startRoomDef.corridors, idxS, idxP));
+    }
+  }
+
+  // Portal waypoints for each room transition
   for (let i = 0; i < sequence.length - 1; i++) {
     const a = sequence[i];
     const b = sequence[i + 1];
@@ -410,6 +425,21 @@ export function computeRoomPath(start: Vec3, end: Vec3): Vec3[] {
     path.push(enter);
     path.push(exit);
   }
+
+  // In the END room: route from last portal exit → corridor ring → end
+  const lastPortal = findPortal(sequence[sequence.length - 2], sequence[sequence.length - 1]);
+  if (lastPortal) {
+    const [, lastExit] = portalWaypoints(lastPortal, sequence[sequence.length - 2]);
+    const endRoomDef = getRoom(endRoom);
+    if (endRoomDef.corridors.length > 0) {
+      const idxP = nearestCorridorIdx(endRoomDef.corridors, lastExit);
+      const idxE = nearestCorridorIdx(endRoomDef.corridors, end);
+      if (idxP !== idxE) {
+        path.push(...corridorSlice(endRoomDef.corridors, idxP, idxE));
+      }
+    }
+  }
+
   path.push(end);
   return path;
 }

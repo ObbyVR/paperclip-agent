@@ -219,12 +219,10 @@ export class AgentController {
           } else if (pending === "peer") {
             const peer = this.pickRandomPeer(allControllers, rng);
             if (peer) {
-              const dir = new THREE.Vector3()
-                .subVectors(peer.currentPos, this.currentPos)
-                .normalize();
-              const dest = peer.currentPos
-                .clone()
-                .sub(dir.multiplyScalar(0.9));
+              // Walk to the peer's report spot (in front of their desk,
+              // guaranteed to be in open space) instead of raw position
+              // offset which can land inside a desk.
+              const dest = peer.reportSpot.clone();
               dest.y = STAND_Y;
               this.setDestination(dest);
               this.transitionTo("walking_to_peer", now, 999);
