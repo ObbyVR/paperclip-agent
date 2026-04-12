@@ -159,6 +159,22 @@ export const DESKS: DeskLayout[] = [
     leaderSeat: 0,
     reportSpot: [8.7, STAND_Y, 1.4],
   },
+  // R&D desk inside the Lounge room (right side, away from couch)
+  // Lounge bounds: xMin=-15, xMax=-3, zMin=-1, zMax=9
+  {
+    id: "research",
+    label: "R&D",
+    position: [-6, 0, 2],
+    rotation: 0,
+    seats: [
+      [-7.3, SEAT_Y, 0.4],  // front-left (leader)
+      [-4.7, SEAT_Y, 0.4],  // front-right
+      [-7.3, SEAT_Y, 3.6],  // back-left
+      [-4.7, SEAT_Y, 3.6],  // back-right
+    ],
+    leaderSeat: 0,
+    reportSpot: [-7.3, STAND_Y, -0.6],
+  },
 ];
 
 /** Relax zone (couch + coffee table) — inside the Lounge room */

@@ -39,7 +39,10 @@ function inferDeptId(a: Agent): string {
   if (n.includes("tech") || role === "cto" || role === "engineer") return "tech";
   if (n.includes("finanz") || n.includes("finance") || n.includes("cfo")) return "finance";
   if (n.includes("marketing") || n.includes("growth")) return "marketing";
-  if (n.includes("ricerca") || n.includes("research")) return "research";
+  if (n.includes("ricerca") || n.includes("research") || n.includes("r&d") || role === "researcher") return "research";
+  if (role === "qa") return "tech";
+  if (role === "pm") return "creative";
+  if (role === "devops") return "tech";
   return "default";
 }
 
@@ -48,6 +51,7 @@ function deskIdToDept(deskId: string): string {
   if (deskId === "ceo") return "ceo";
   if (deskId.startsWith("creative")) return "creative";
   if (deskId.startsWith("tech")) return "tech";
+  if (deskId === "research") return "research";
   return deskId;
 }
 
@@ -139,7 +143,7 @@ export function OfficeAgents({ agents, onAgentClick }: OfficeAgentsProps) {
   // Filter out terminated agents, cap at layout capacity (18 seats across
   // ceo desk + creative + creative-lab + tech + tech-lab).
   const liveAgents = useMemo(() => {
-    return (agents ?? []).filter((a) => a.status !== "terminated").slice(0, 18);
+    return (agents ?? []).filter((a) => a.status !== "terminated").slice(0, 22);
   }, [agents]);
 
   // Deterministic seat assignment (stable across renders if ids don't change)

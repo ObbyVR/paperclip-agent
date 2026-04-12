@@ -109,8 +109,8 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "carpet-gray",
     wallColor: "#3a2a20",
     center: [-9, STAND_Y, 4],
-    // Open space — single central waypoint is enough
-    corridors: [[-9, STAND_Y, 2]],
+    // R&D desk on the right side — corridor weaves around both the couch and desk
+    corridors: [[-12, STAND_Y, 2], [-6, STAND_Y, 7]],
   },
   {
     id: "tech-lab",
