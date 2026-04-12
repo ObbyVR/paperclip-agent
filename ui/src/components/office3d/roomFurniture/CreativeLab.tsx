@@ -26,6 +26,8 @@ export function CreativeLab() {
       <CeilingProjector />
       <TallStool position={[CX + 2.2, 0, CZ - 2.5]} />
       <TallStool position={[CX + 2.2, 0, CZ - 1.3]} />
+      <WaterCooler position={[CX - 3.5, 0, CZ + 2.8]} />
+      <WindowSillPlants />
       {/* Concrete floor accent — control joint cross */}
       <FloorJointCross />
     </group>
@@ -250,6 +252,63 @@ function TallStool({ position }: { position: [number, number, number] }) {
         <cylinderGeometry args={[0.22, 0.22, 0.04, 12]} />
         <meshStandardMaterial color="#3a3a3e" roughness={0.5} metalness={0.4} />
       </mesh>
+    </group>
+  );
+}
+
+/** Water cooler — tall blue-top dispenser */
+function WaterCooler({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      {/* Body */}
+      <mesh position={[0, 0.55, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.35, 1.1, 0.35]} />
+        <meshStandardMaterial color="#e8e8ec" roughness={0.45} metalness={0.1} />
+      </mesh>
+      {/* Water jug on top */}
+      <mesh position={[0, 1.25, 0]} castShadow>
+        <cylinderGeometry args={[0.13, 0.11, 0.35, 10]} />
+        <meshStandardMaterial color="#a0d4f0" roughness={0.2} transparent opacity={0.7} />
+      </mesh>
+      {/* Tap */}
+      <mesh position={[0.18, 0.65, 0]}>
+        <boxGeometry args={[0.04, 0.06, 0.04]} />
+        <meshStandardMaterial color="#c0c0c4" roughness={0.3} metalness={0.6} />
+      </mesh>
+      {/* Drip tray */}
+      <mesh position={[0.18, 0.35, 0]} receiveShadow>
+        <boxGeometry args={[0.12, 0.02, 0.1]} />
+        <meshStandardMaterial color="#4a4a50" roughness={0.5} metalness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+/** 3 small succulent pots on the window sill (right wall, near the window) */
+function WindowSillPlants() {
+  // Window is on the +X wall at x=15, z centered around -5
+  const sillX = 14.7;
+  const sillY = 1.0; // just below the window
+  return (
+    <group>
+      {[
+        { z: -6.5, c: "#3d7a3c", s: 0.8 },
+        { z: -5.0, c: "#4a8a48", s: 0.7 },
+        { z: -3.5, c: "#336633", s: 0.75 },
+      ].map((p, i) => (
+        <group key={i} position={[sillX, sillY, p.z]} scale={p.s}>
+          {/* Tiny pot */}
+          <mesh position={[0, 0.06, 0]} castShadow>
+            <cylinderGeometry args={[0.08, 0.06, 0.12, 8]} />
+            <meshStandardMaterial color="#a04020" roughness={0.8} />
+          </mesh>
+          {/* Plant ball */}
+          <mesh position={[0, 0.18, 0]} castShadow>
+            <sphereGeometry args={[0.1, 8, 6]} />
+            <meshStandardMaterial color={p.c} roughness={0.85} />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }

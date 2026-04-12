@@ -29,6 +29,8 @@ export function Lounge() {
 
       {/* R&D corner — props near the research desk (right side of Lounge) */}
       <ResearchCorner />
+      <CeilingFan />
+      <WallClock position={[ROOM.bounds.xMin + 0.15, 2.5, CZ + 2]} />
     </group>
   );
 }
@@ -403,6 +405,80 @@ function ResearchCorner() {
           emissiveIntensity={0.3}
           roughness={0.4}
         />
+      </mesh>
+    </group>
+  );
+}
+
+/** Ceiling fan with 4 blades — static, adds life to the room */
+function CeilingFan() {
+  const fanY = 3.65;
+  return (
+    <group position={[CX - 2, fanY, CZ + 2]}>
+      {/* Motor housing */}
+      <mesh castShadow>
+        <cylinderGeometry args={[0.12, 0.12, 0.15, 12]} />
+        <meshStandardMaterial color="#c0c0c4" roughness={0.4} metalness={0.4} />
+      </mesh>
+      {/* Rod to ceiling */}
+      <mesh position={[0, 0.15, 0]}>
+        <cylinderGeometry args={[0.025, 0.025, 0.2, 6]} />
+        <meshStandardMaterial color="#c0c0c4" roughness={0.4} metalness={0.4} />
+      </mesh>
+      {/* 4 blades */}
+      {[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((angle, i) => (
+        <mesh
+          key={i}
+          position={[Math.sin(angle) * 0.55, -0.04, Math.cos(angle) * 0.55]}
+          rotation={[0, -angle, 0]}
+          castShadow
+        >
+          <boxGeometry args={[0.9, 0.02, 0.18]} />
+          <meshStandardMaterial color="#5a3820" roughness={0.7} />
+        </mesh>
+      ))}
+      {/* Light bulb under the fan */}
+      <mesh position={[0, -0.12, 0]}>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshStandardMaterial
+          color="#fff4d6"
+          emissive="#fff4d6"
+          emissiveIntensity={0.6}
+          roughness={0.2}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/** Simple wall clock */
+function WallClock({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position} rotation={[0, Math.PI / 2, 0]}>
+      <mesh>
+        <torusGeometry args={[0.22, 0.02, 6, 20]} />
+        <meshStandardMaterial color="#2a2a2e" roughness={0.4} metalness={0.4} />
+      </mesh>
+      <mesh position={[0, 0, 0.008]}>
+        <circleGeometry args={[0.21, 20]} />
+        <meshStandardMaterial color="#f8f4e8" roughness={0.6} />
+      </mesh>
+      {Array.from({ length: 12 }).map((_, i) => {
+        const a = (Math.PI * 2 * i) / 12 - Math.PI / 2;
+        return (
+          <mesh key={i} position={[Math.cos(a) * 0.17, Math.sin(a) * 0.17, 0.012]}>
+            <sphereGeometry args={[0.01, 4, 4]} />
+            <meshStandardMaterial color="#2a2a2e" roughness={0.5} />
+          </mesh>
+        );
+      })}
+      <mesh position={[0.02, 0.03, 0.015]} rotation={[0, 0, -Math.PI * 0.3]}>
+        <boxGeometry args={[0.1, 0.014, 0.005]} />
+        <meshStandardMaterial color="#2a2a2e" />
+      </mesh>
+      <mesh position={[-0.01, 0.04, 0.018]} rotation={[0, 0, Math.PI * 0.2]}>
+        <boxGeometry args={[0.14, 0.01, 0.004]} />
+        <meshStandardMaterial color="#2a2a2e" />
       </mesh>
     </group>
   );

@@ -28,6 +28,8 @@ export function TechLab() {
       <CeilingStripLights />
       <PottedPlant position={[ROOM.bounds.xMax - 1.5, 0, ROOM.bounds.zMin + 1]} />
       <PottedPlant position={[ROOM.bounds.xMin + 1, 0, ROOM.bounds.zMax - 1]} scale={0.85} />
+      <TrashBin position={[CX + 5, 0, ROOM.bounds.zMax - 0.8]} />
+      <TrashBin position={[CX - 2, 0, ROOM.bounds.zMax - 0.8]} />
     </group>
   );
 }
@@ -321,6 +323,23 @@ function PottedPlant({
       <mesh position={[0.12, 0.72, 0.08]} castShadow>
         <sphereGeometry args={[0.18, 10, 8]} />
         <meshStandardMaterial color="#4a8a48" roughness={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Small cylindrical trash bin */
+function TrashBin({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh position={[0, 0.2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.14, 0.12, 0.4, 10]} />
+        <meshStandardMaterial color="#4a4a50" roughness={0.5} metalness={0.3} />
+      </mesh>
+      {/* Rim */}
+      <mesh position={[0, 0.4, 0]}>
+        <torusGeometry args={[0.14, 0.012, 6, 12]} />
+        <meshStandardMaterial color="#6a6a70" roughness={0.4} metalness={0.4} />
       </mesh>
     </group>
   );

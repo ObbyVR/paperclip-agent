@@ -29,6 +29,8 @@ export function CreativeStudio() {
       <LoungeChair position={[CX + 4.3, 0, CZ + 2.4]} color="#3ad4d4" rotationY={-Math.PI * 0.25} />
       <Monstera position={[CX - 5.4, 0, CZ - 3]} scale={1.1} />
       <Monstera position={[CX + 5.4, 0, CZ - 2.5]} scale={0.95} />
+      <FireExtinguisher position={[ROOM.bounds.xMin + 0.5, 0, CZ + 2.5]} />
+      <PaintSupplyTable position={[CX - 3, 0, CZ + 2]} />
     </group>
   );
 }
@@ -355,6 +357,83 @@ function Monstera({
         <sphereGeometry args={[0.32, 12, 10]} />
         <meshStandardMaterial color="#336633" roughness={0.85} />
       </mesh>
+    </group>
+  );
+}
+
+/** Red fire extinguisher on the wall */
+function FireExtinguisher({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      {/* Body */}
+      <mesh position={[0, 0.45, 0]} castShadow>
+        <cylinderGeometry args={[0.08, 0.08, 0.5, 10]} />
+        <meshStandardMaterial color="#cc2222" roughness={0.5} />
+      </mesh>
+      {/* Top valve */}
+      <mesh position={[0, 0.72, 0]} castShadow>
+        <cylinderGeometry args={[0.035, 0.045, 0.06, 8]} />
+        <meshStandardMaterial color="#2a2a2e" roughness={0.4} metalness={0.5} />
+      </mesh>
+      {/* Handle */}
+      <mesh position={[0.05, 0.76, 0]} rotation={[0, 0, -Math.PI * 0.2]}>
+        <boxGeometry args={[0.08, 0.02, 0.03]} />
+        <meshStandardMaterial color="#1a1a1e" roughness={0.4} metalness={0.4} />
+      </mesh>
+      {/* Hose nozzle */}
+      <mesh position={[0.06, 0.65, 0]} rotation={[0, 0, -Math.PI * 0.4]} castShadow>
+        <cylinderGeometry args={[0.012, 0.012, 0.15, 6]} />
+        <meshStandardMaterial color="#1a1a1e" roughness={0.5} />
+      </mesh>
+      {/* Label strip */}
+      <mesh position={[0, 0.45, 0.082]}>
+        <boxGeometry args={[0.08, 0.12, 0.003]} />
+        <meshStandardMaterial color="#f4f4e8" roughness={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Small side table with paint tubes and brushes */
+function PaintSupplyTable({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      {/* Table top */}
+      <mesh position={[0, 0.55, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.7, 0.04, 0.5]} />
+        <meshStandardMaterial color="#f4ede0" roughness={0.6} />
+      </mesh>
+      {/* 4 legs */}
+      {[[-0.3, 0.27, -0.2], [0.3, 0.27, -0.2], [-0.3, 0.27, 0.2], [0.3, 0.27, 0.2]].map((p, i) => (
+        <mesh key={i} position={p as [number, number, number]} castShadow>
+          <boxGeometry args={[0.04, 0.54, 0.04]} />
+          <meshStandardMaterial color="#f4ede0" roughness={0.6} />
+        </mesh>
+      ))}
+      {/* Paint tubes — colorful cylinders lying flat */}
+      {[
+        { x: -0.2, c: "#e83a78" },
+        { x: -0.08, c: "#fbbf24" },
+        { x: 0.04, c: "#3ad4d4" },
+        { x: 0.16, c: "#c084fc" },
+      ].map((t, i) => (
+        <mesh key={i} position={[t.x, 0.59, 0]} rotation={[Math.PI / 2, 0, (i * 0.15) - 0.2]} castShadow>
+          <cylinderGeometry args={[0.018, 0.012, 0.12, 6]} />
+          <meshStandardMaterial color={t.c} roughness={0.4} />
+        </mesh>
+      ))}
+      {/* Brush jar */}
+      <mesh position={[0.25, 0.62, 0.05]} castShadow>
+        <cylinderGeometry args={[0.04, 0.035, 0.1, 8]} />
+        <meshStandardMaterial color="#f5f5f5" roughness={0.4} />
+      </mesh>
+      {/* Brushes sticking out */}
+      {[-0.02, 0, 0.02].map((dx, i) => (
+        <mesh key={`br${i}`} position={[0.25 + dx, 0.72, 0.05]} rotation={[0.1 * (i - 1), 0, 0.05 * (i - 1)]}>
+          <cylinderGeometry args={[0.005, 0.005, 0.12, 4]} />
+          <meshStandardMaterial color="#5a3820" roughness={0.7} />
+        </mesh>
+      ))}
     </group>
   );
 }

@@ -29,6 +29,8 @@ export function CEOOffice() {
       <Chesterfield position={[CX + 1.5, 0, CZ + 1.4]} rotationY={-Math.PI * 0.6} />
       <WallClock3D position={[ROOM.bounds.xMin + 0.15, 2.8, CZ]} />
       <CeoPottedPlant position={[ROOM.bounds.xMin + 1, 0, ROOM.bounds.zMax - 1.5]} />
+      <CoatRack position={[ROOM.bounds.xMax - 1, 0, ROOM.bounds.zMax - 0.8]} />
+      <DeskLamp position={[-10.2, 0.89, -5.5]} />
     </group>
   );
 }
@@ -370,6 +372,66 @@ function CeoPottedPlant({ position }: { position: [number, number, number] }) {
       <mesh position={[-0.1, 0.8, -0.08]} castShadow>
         <sphereGeometry args={[0.17, 10, 8]} />
         <meshStandardMaterial color="#336633" roughness={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Wooden coat rack near the door */
+function CoatRack({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      {/* Base */}
+      <mesh position={[0, 0.03, 0]} castShadow>
+        <cylinderGeometry args={[0.25, 0.25, 0.04, 12]} />
+        <meshStandardMaterial color="#3a2010" roughness={0.7} />
+      </mesh>
+      {/* Pole */}
+      <mesh position={[0, 0.9, 0]} castShadow>
+        <cylinderGeometry args={[0.03, 0.035, 1.8, 8]} />
+        <meshStandardMaterial color="#5a3820" roughness={0.7} />
+      </mesh>
+      {/* 4 hooks */}
+      {[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((a, i) => (
+        <mesh key={i} position={[Math.sin(a) * 0.15, 1.7, Math.cos(a) * 0.15]} castShadow>
+          <sphereGeometry args={[0.035, 6, 6]} />
+          <meshStandardMaterial color="#b8923a" roughness={0.3} metalness={0.7} />
+        </mesh>
+      ))}
+      {/* A hanging jacket (just a draped box shape) */}
+      <mesh position={[0.15, 1.35, 0]} castShadow>
+        <boxGeometry args={[0.25, 0.55, 0.12]} />
+        <meshStandardMaterial color="#2a3340" roughness={0.7} />
+      </mesh>
+      {/* Top knob */}
+      <mesh position={[0, 1.82, 0]}>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshStandardMaterial color="#5a3820" roughness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Small brass desk lamp — emissive warm glow */
+function DeskLamp({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh position={[0, 0.03, 0]} castShadow>
+        <cylinderGeometry args={[0.06, 0.07, 0.04, 10]} />
+        <meshStandardMaterial color="#b8923a" roughness={0.3} metalness={0.7} />
+      </mesh>
+      <mesh position={[0, 0.18, 0]} castShadow>
+        <cylinderGeometry args={[0.015, 0.015, 0.3, 6]} />
+        <meshStandardMaterial color="#b8923a" roughness={0.3} metalness={0.7} />
+      </mesh>
+      <mesh position={[0, 0.35, 0]} castShadow>
+        <coneGeometry args={[0.1, 0.12, 12, 1, true]} />
+        <meshStandardMaterial
+          color="#d4a877"
+          emissive="#fff4d6"
+          emissiveIntensity={0.8}
+          side={2}
+        />
       </mesh>
     </group>
   );
