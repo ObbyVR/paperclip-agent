@@ -39,9 +39,10 @@ export interface RoomDef {
   /** Center used as default destination for "walk to room" */
   center: Vec3;
   /**
-   * Corridor waypoint(s) inside this room that agents route through to
-   * avoid walking straight through desk clusters. When an intra-room path
-   * is longer than ~2 units, the agent walks via these points.
+   * Corridor waypoints forming a walkable ring around desk clusters.
+   * Agents route: seat → nearest corridor point → walk along ring →
+   * nearest corridor point to destination → destination.
+   * Points should be ordered sequentially around the room perimeter.
    */
   corridors: Vec3[];
 }
@@ -80,8 +81,11 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "parquet-warm",
     wallColor: "#3a2a1e",
     center: [-11, STAND_Y, -5],
-    // Corridor runs along the front of the desk (z=-3.5) and left wall
-    corridors: [[-13, STAND_Y, -3], [-9, STAND_Y, -3]],
+    // Ring around CEO desk: left wall → front of desk → right wall → back wall
+    corridors: [
+      [-14, STAND_Y, -8], [-14, STAND_Y, -3], [-9, STAND_Y, -3],
+      [-9, STAND_Y, -8], [-8, STAND_Y, -5],
+    ],
   },
   {
     id: "creative-studio",
@@ -90,8 +94,11 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "parquet-warm",
     wallColor: "#4a3460",
     center: [-1, STAND_Y, -5],
-    // Corridor along the front of the desk cluster (z=-2)
-    corridors: [[-5, STAND_Y, -2], [3, STAND_Y, -2]],
+    // Ring around creative desk
+    corridors: [
+      [-6, STAND_Y, -8], [-6, STAND_Y, -2], [4, STAND_Y, -2],
+      [4, STAND_Y, -8],
+    ],
   },
   {
     id: "creative-lab",
@@ -100,8 +107,11 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "concrete",
     wallColor: "#2a3340",
     center: [10, STAND_Y, -5],
-    // Corridor front of desk (z=-2) and along the left side
-    corridors: [[ 7, STAND_Y, -2], [13, STAND_Y, -2]],
+    // Ring around creative-lab desk
+    corridors: [
+      [6, STAND_Y, -8], [6, STAND_Y, -2], [14, STAND_Y, -2],
+      [14, STAND_Y, -8],
+    ],
   },
   {
     id: "lounge",
@@ -110,8 +120,11 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "carpet-gray",
     wallColor: "#3a2a20",
     center: [-12, STAND_Y, 4],
-    // Open relax space — single corridor
-    corridors: [[-12, STAND_Y, 2]],
+    // Ring around couch/foosball
+    corridors: [
+      [-14, STAND_Y, 0], [-14, STAND_Y, 8], [-10, STAND_Y, 8],
+      [-10, STAND_Y, 0],
+    ],
   },
   {
     id: "rd-lab",
@@ -120,8 +133,11 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "concrete",
     wallColor: "#4a3a10",
     center: [-6, STAND_Y, 4],
-    // Corridor front of desk
-    corridors: [[-6, STAND_Y, 7], [-6, STAND_Y, 0.5]],
+    // Ring around R&D desk
+    corridors: [
+      [-8, STAND_Y, 0], [-8, STAND_Y, 5], [-4, STAND_Y, 5],
+      [-4, STAND_Y, 0],
+    ],
   },
   {
     id: "tech-lab",
@@ -130,8 +146,11 @@ export const ROOMS: RoomDef[] = [
     floorMaterial: "epoxy-blue",
     wallColor: "#1a2838",
     center: [6, STAND_Y, 4],
-    // Corridor between the two desk clusters (x=5.5) and along back/front
-    corridors: [[5.5, STAND_Y, 1], [5.5, STAND_Y, 7]],
+    // Ring between and around both tech desks
+    corridors: [
+      [-2, STAND_Y, 0], [-2, STAND_Y, 7], [5.5, STAND_Y, 7],
+      [5.5, STAND_Y, 0], [14, STAND_Y, 0], [14, STAND_Y, 7],
+    ],
   },
 ];
 
@@ -299,21 +318,47 @@ export function portalWaypoints(portal: PortalDef, fromRoom: RoomId): [Vec3, Vec
 }
 
 /**
- * Find the nearest corridor waypoint in a room to a given position.
+ * Find the index of the nearest corridor waypoint in a room to a position.
  */
-function nearestCorridor(room: RoomDef, pos: Vec3): Vec3 | null {
-  if (room.corridors.length === 0) return null;
-  let best = room.corridors[0];
-  let bestDist = Math.hypot(pos[0] - best[0], pos[2] - best[2]);
-  for (let i = 1; i < room.corridors.length; i++) {
-    const c = room.corridors[i];
+function nearestCorridorIdx(corridors: Vec3[], pos: Vec3): number {
+  let bestIdx = 0;
+  let bestDist = Math.hypot(pos[0] - corridors[0][0], pos[2] - corridors[0][2]);
+  for (let i = 1; i < corridors.length; i++) {
+    const c = corridors[i];
     const d = Math.hypot(pos[0] - c[0], pos[2] - c[2]);
     if (d < bestDist) {
-      best = c;
+      bestIdx = i;
       bestDist = d;
     }
   }
-  return best;
+  return bestIdx;
+}
+
+/**
+ * Walk along corridor ring from index `from` to index `to`, picking the
+ * shorter direction (clockwise or counter-clockwise). Returns the sequence
+ * of corridor points to visit (excluding `from`, including `to`).
+ */
+function corridorSlice(corridors: Vec3[], from: number, to: number): Vec3[] {
+  if (from === to) return [];
+  const n = corridors.length;
+  // Forward distance (from → to going up in index, wrapping)
+  const fwd = (to - from + n) % n;
+  // Backward distance
+  const bwd = (from - to + n) % n;
+  const result: Vec3[] = [];
+  if (fwd <= bwd) {
+    // Walk forward
+    for (let step = 1; step <= fwd; step++) {
+      result.push(corridors[(from + step) % n]);
+    }
+  } else {
+    // Walk backward
+    for (let step = 1; step <= bwd; step++) {
+      result.push(corridors[(from - step + n) % n]);
+    }
+  }
+  return result;
 }
 
 /**
@@ -323,8 +368,10 @@ function nearestCorridor(room: RoomDef, pos: Vec3): Vec3 | null {
  *   3. For each adjacent transition, insert the portal entry/exit waypoints
  *   4. Final waypoint = end position
  *
- * Same-room paths route via the nearest corridor waypoint to avoid walking
- * through desk clusters. Short paths (<2 units) go direct.
+ * Same-room paths route via the corridor ring: agent walks to the nearest
+ * ring point, follows the ring (shortest direction) to the ring point
+ * nearest the destination, then walks to the destination. This avoids
+ * cutting straight through desk clusters.
  */
 export function computeRoomPath(start: Vec3, end: Vec3): Vec3[] {
   const startRoom = pointInRoom(start);
@@ -334,14 +381,18 @@ export function computeRoomPath(start: Vec3, end: Vec3): Vec3[] {
   }
   if (startRoom === endRoom) {
     const dist = Math.hypot(start[0] - end[0], start[2] - end[2]);
-    if (dist < 2) return [end];
-    // Route via corridor waypoints to avoid desks
+    if (dist < 1.5) return [end];
     const room = getRoom(startRoom);
+    if (room.corridors.length === 0) return [end];
+    const idxStart = nearestCorridorIdx(room.corridors, start);
+    const idxEnd = nearestCorridorIdx(room.corridors, end);
     const path: Vec3[] = [];
-    const corridorStart = nearestCorridor(room, start);
-    const corridorEnd = nearestCorridor(room, end);
-    if (corridorStart) path.push(corridorStart);
-    if (corridorEnd && corridorEnd !== corridorStart) path.push(corridorEnd);
+    // Go to nearest corridor point
+    path.push(room.corridors[idxStart]);
+    // Walk along the ring to the end corridor point
+    const slice = corridorSlice(room.corridors, idxStart, idxEnd);
+    path.push(...slice);
+    // Final destination
     path.push(end);
     return path;
   }
