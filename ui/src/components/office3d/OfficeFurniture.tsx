@@ -19,6 +19,9 @@ import {
 } from "./officeLayout";
 import { CEOOffice } from "./roomFurniture/CEOOffice";
 import { CreativeStudio } from "./roomFurniture/CreativeStudio";
+import { CreativeLab } from "./roomFurniture/CreativeLab";
+import { TechLab } from "./roomFurniture/TechLab";
+import { Lounge } from "./roomFurniture/Lounge";
 
 const SEAT_FACING: Record<string, number[]> = (() => {
   const map: Record<string, number[]> = {};
@@ -37,9 +40,12 @@ export function OfficeFurniture() {
         <SharedDesk key={d.id} desk={d} />
       ))}
 
-      {/* Per-room dressing — S68a delivers CEO Office + Creative Studio */}
+      {/* Per-room dressing — all 5 rooms */}
       <CEOOffice />
       <CreativeStudio />
+      <CreativeLab />
+      <TechLab />
+      <Lounge />
 
       {/* Lounge: couch + coffee table at the new RELAX positions */}
       <Couch />
