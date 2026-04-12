@@ -2069,8 +2069,17 @@ export function heartbeatService(db: Db) {
       legacyUseProjectWorkspace: issueAssigneeOverrides?.useProjectWorkspace ?? null,
     });
     // Priority: issue override > global AI tier > agent default config
+    // Skip global tier override when the agent has an explicit model in its
+    // adapterConfig (e.g. "auto:free" for free-tier R&D agents) — the agent's
+    // own model choice takes precedence over the global intelligence dial.
     const globalAiTier = (await instanceSettings.getGeneral()).globalAiTier;
-    const globalTierFallback = globalAiTier ? tierToAdapterConfig(globalAiTier) : null;
+    const agentHasExplicitModel =
+      workspaceManagedConfig.model &&
+      workspaceManagedConfig.model !== "auto";
+    const globalTierFallback =
+      globalAiTier && !agentHasExplicitModel
+        ? tierToAdapterConfig(globalAiTier)
+        : null;
     const mergedConfig = {
       ...workspaceManagedConfig,
       ...(globalTierFallback ?? {}),

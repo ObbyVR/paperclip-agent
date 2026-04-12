@@ -12,7 +12,10 @@ export const label = "Direct LLM (API routing)";
  * - premium: Top-tier models for planning, coding, review ($5-15/M tokens)
  */
 export const models = [
-  // Free tier
+  // Free tier — direct providers (no OpenRouter overhead)
+  { id: "groq/llama-3.3-70b-versatile", label: "Llama 3.3 70B (Groq, free)" },
+  { id: "google/gemini-2.5-flash-direct", label: "Gemini 2.5 Flash (Direct, free)" },
+  // Free tier — auto
   { id: "auto:free", label: "Auto (Free tier)" },
   // Cheap tier
   { id: "auto:cheap", label: "Auto (Cheap tier)" },
@@ -57,10 +60,11 @@ Core fields:
 - provider (string, optional): Force specific provider (openrouter|anthropic|openai|google)
 
 Environment variables (set on agent or server):
-- OPENROUTER_API_KEY: Required for multi-provider routing
+- GROQ_API_KEY: Optional, for direct Groq calls (free, 30 RPM, 300 tok/s)
+- GOOGLE_API_KEY: Optional, for direct Gemini calls (free, 1500 RPD, 1M context)
+- OPENROUTER_API_KEY: Required for multi-provider routing (free models available)
 - ANTHROPIC_API_KEY: Optional, for direct Anthropic calls
 - OPENAI_API_KEY: Optional, for direct OpenAI calls
-- GOOGLE_API_KEY: Optional, for direct Google calls
 
 Cost tiers (approximate per 1M tokens):
 - free: $0 (Groq, free OpenRouter models)

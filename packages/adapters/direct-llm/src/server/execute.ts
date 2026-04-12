@@ -231,6 +231,104 @@ async function callOpenAIDirect(
 }
 
 // ---------------------------------------------------------------------------
+// Groq direct API caller (OpenAI-compatible, free tier)
+// ---------------------------------------------------------------------------
+
+async function callGroqDirect(
+  model: ModelSpec,
+  messages: LLMMessage[],
+  config: {
+    apiKey: string;
+    maxTokens: number;
+    temperature: number;
+    timeoutMs: number;
+  },
+): Promise<{ response: LLMResponse; rawBody: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: model.nativeModelId ?? model.id,
+        messages,
+        max_tokens: Math.min(config.maxTokens, model.maxOutput),
+        temperature: config.temperature,
+      }),
+      signal: controller.signal,
+    });
+
+    const rawBody = await res.text();
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        markRateLimited(model.provider);
+      }
+      throw new Error(`Groq ${res.status}: ${rawBody.slice(0, 500)}`);
+    }
+
+    const response = JSON.parse(rawBody) as LLMResponse;
+    return { response, rawBody };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gemini direct API caller (OpenAI-compatible endpoint)
+// ---------------------------------------------------------------------------
+
+async function callGeminiDirect(
+  model: ModelSpec,
+  messages: LLMMessage[],
+  config: {
+    apiKey: string;
+    maxTokens: number;
+    temperature: number;
+    timeoutMs: number;
+  },
+): Promise<{ response: LLMResponse; rawBody: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+
+  try {
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: model.nativeModelId ?? model.id,
+        messages,
+        max_tokens: Math.min(config.maxTokens, model.maxOutput),
+        temperature: config.temperature,
+      }),
+      signal: controller.signal,
+    });
+
+    const rawBody = await res.text();
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        markRateLimited(model.provider);
+      }
+      throw new Error(`Gemini ${res.status}: ${rawBody.slice(0, 500)}`);
+    }
+
+    const response = JSON.parse(rawBody) as LLMResponse;
+    return { response, rawBody };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Config helpers
 // ---------------------------------------------------------------------------
 
@@ -290,13 +388,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const openrouterKey = envConfig.OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY ?? "";
   const anthropicKey = envConfig.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? "";
   const openaiKey = envConfig.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+  const groqKey = envConfig.GROQ_API_KEY ?? process.env.GROQ_API_KEY ?? "";
+  const googleKey = envConfig.GOOGLE_API_KEY ?? process.env.GOOGLE_API_KEY ?? "";
 
-  if (!openrouterKey && !anthropicKey && !openaiKey) {
+  if (!openrouterKey && !anthropicKey && !openaiKey && !groqKey && !googleKey) {
     return {
       exitCode: 1,
       signal: null,
       timedOut: false,
-      errorMessage: "No API key found. Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY in agent env.",
+      errorMessage: "No API key found. Set at least one of: OPENROUTER_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, GOOGLE_API_KEY in agent env.",
       errorCode: "missing_api_key",
     };
   }
@@ -423,9 +523,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // Helper: pick the best caller for a model given available keys
   // ---------------------------------------------------------------------------
   function resolveCallerAndKey(model: ModelSpec): {
-    caller: "anthropic" | "openai" | "openrouter";
+    caller: "groq" | "gemini" | "anthropic" | "openai" | "openrouter";
     key: string;
   } {
+    if (model.nativeProvider === "groq" && groqKey) {
+      return { caller: "groq", key: groqKey };
+    }
+    if (model.nativeProvider === "gemini" && googleKey) {
+      return { caller: "gemini", key: googleKey };
+    }
     if (model.nativeProvider === "anthropic" && anthropicKey) {
       return { caller: "anthropic", key: anthropicKey };
     }
@@ -435,10 +541,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (openrouterKey) {
       return { caller: "openrouter", key: openrouterKey };
     }
-    // No valid key found for this model path
     throw new Error(
       `No API key available for model ${model.id}. ` +
-      `Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY.`,
+      `Set GROQ_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY.`,
     );
   }
 
@@ -469,7 +574,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       };
 
       let response: LLMResponse;
-      if (caller === "anthropic") {
+      if (caller === "groq") {
+        ({ response } = await callGroqDirect(currentModel, messages, callConfig));
+      } else if (caller === "gemini") {
+        ({ response } = await callGeminiDirect(currentModel, messages, callConfig));
+      } else if (caller === "anthropic") {
         ({ response } = await callAnthropicDirect(currentModel, messages, callConfig));
       } else if (caller === "openai") {
         ({ response } = await callOpenAIDirect(currentModel, messages, callConfig));
@@ -582,16 +691,24 @@ export async function testEnvironment(
   const openrouterKey = envConfig.OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY ?? "";
   const anthropicKey = envConfig.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? "";
   const openaiKey = envConfig.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
-  const hasAnyKey = openrouterKey || anthropicKey || openaiKey;
+  const groqKey = envConfig.GROQ_API_KEY ?? process.env.GROQ_API_KEY ?? "";
+  const googleKey = envConfig.GOOGLE_API_KEY ?? process.env.GOOGLE_API_KEY ?? "";
+  const hasAnyKey = openrouterKey || anthropicKey || openaiKey || groqKey || googleKey;
 
   if (!hasAnyKey) {
     checks.push({
       code: "api_keys",
       level: "error",
       message: "No API key configured",
-      hint: "Set at least one of: OPENROUTER_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY",
+      hint: "Set at least one of: GROQ_API_KEY, GOOGLE_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY",
     });
   } else {
+    if (groqKey) {
+      checks.push({ code: "groq_api_key", level: "info", message: "GROQ_API_KEY is configured (direct, free, 300 tok/s)" });
+    }
+    if (googleKey) {
+      checks.push({ code: "google_api_key", level: "info", message: "GOOGLE_API_KEY is configured (Gemini direct, free, 1M context)" });
+    }
     if (openrouterKey) {
       checks.push({ code: "openrouter_api_key", level: "info", message: "OPENROUTER_API_KEY is configured (multi-provider fallback)" });
     }

@@ -4,6 +4,7 @@
  */
 
 export type Tier = "free" | "cheap" | "medium" | "premium";
+export type NativeProvider = "anthropic" | "openai" | "groq" | "gemini";
 
 export interface ModelSpec {
   id: string; // OpenRouter model ID (e.g. "anthropic/claude-sonnet-4-6")
@@ -14,7 +15,7 @@ export interface ModelSpec {
   maxContext: number;
   maxOutput: number;
   /** Direct API provider, enables bypass of OpenRouter when the native key is set */
-  nativeProvider?: "anthropic" | "openai";
+  nativeProvider?: NativeProvider;
   /** Model ID for the native provider API (differs from OpenRouter ID) */
   nativeModelId?: string;
 }
@@ -29,7 +30,31 @@ export interface TierCascade {
 // ---------------------------------------------------------------------------
 
 const MODELS: Record<string, ModelSpec> = {
-  // Free tier — verified against OpenRouter /api/v1/models 2026-03-27
+  // Free tier — direct provider (no OpenRouter overhead)
+  "groq/llama-3.3-70b-versatile": {
+    id: "groq/llama-3.3-70b-versatile",
+    provider: "groq",
+    label: "Llama 3.3 70B (Groq)",
+    inputCostPer1M: 0,
+    outputCostPer1M: 0,
+    maxContext: 131072,
+    maxOutput: 8192,
+    nativeProvider: "groq",
+    nativeModelId: "llama-3.3-70b-versatile",
+  },
+  "google/gemini-2.5-flash-direct": {
+    id: "google/gemini-2.5-flash-direct",
+    provider: "google-direct",
+    label: "Gemini 2.5 Flash (Direct)",
+    inputCostPer1M: 0,
+    outputCostPer1M: 0,
+    maxContext: 1048576,
+    maxOutput: 65536,
+    nativeProvider: "gemini",
+    nativeModelId: "gemini-2.5-flash",
+  },
+
+  // Free tier — via OpenRouter
   "meta-llama/llama-3.3-70b-instruct:free": {
     id: "meta-llama/llama-3.3-70b-instruct:free",
     provider: "meta-llama",
@@ -164,9 +189,11 @@ const MODELS: Record<string, ModelSpec> = {
 
 export const TIER_CASCADE: Record<Tier, TierCascade> = {
   free: {
-    primary: MODELS["meta-llama/llama-3.3-70b-instruct:free"]!,
+    primary: MODELS["groq/llama-3.3-70b-versatile"]!,              // Direct, 300 tok/s, 30 RPM
     fallbacks: [
-      MODELS["google/gemma-3-27b-it:free"]!,
+      MODELS["google/gemini-2.5-flash-direct"]!,                   // Direct, 1M context, 1500 RPD
+      MODELS["meta-llama/llama-3.3-70b-instruct:free"]!,           // OpenRouter fallback
+      MODELS["google/gemma-3-27b-it:free"]!,                       // Last resort
       MODELS["mistralai/mistral-small-3.1-24b-instruct:free"]!,
     ],
   },
