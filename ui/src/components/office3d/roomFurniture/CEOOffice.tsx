@@ -27,6 +27,8 @@ export function CEOOffice() {
       <BigWallArt />
       <Chesterfield position={[CX - 2.5, 0, CZ + 1.4]} rotationY={Math.PI * 0.6} />
       <Chesterfield position={[CX + 1.5, 0, CZ + 1.4]} rotationY={-Math.PI * 0.6} />
+      <WallClock3D position={[ROOM.bounds.xMin + 0.15, 2.8, CZ]} />
+      <CeoPottedPlant position={[ROOM.bounds.xMin + 1, 0, ROOM.bounds.zMax - 1.5]} />
     </group>
   );
 }
@@ -281,7 +283,7 @@ function Chesterfield({
         <cylinderGeometry args={[0.09, 0.09, 0.85, 8]} />
         <meshStandardMaterial color={leather} roughness={0.55} />
       </mesh>
-      {/* Short turned legs */}
+      {/* Short legs */}
       {[
         [-0.4, 0.1, -0.35],
         [0.4, 0.1, -0.35],
@@ -293,6 +295,82 @@ function Chesterfield({
           <meshStandardMaterial color="#1a0e06" roughness={0.7} />
         </mesh>
       ))}
+    </group>
+  );
+}
+
+/** 3D wall clock — brass rim + white face, mounted on left wall facing +X */
+function WallClock3D({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position} rotation={[0, Math.PI / 2, 0]}>
+      {/* Rim */}
+      <mesh>
+        <torusGeometry args={[0.28, 0.025, 8, 24]} />
+        <meshStandardMaterial color="#b8923a" roughness={0.3} metalness={0.85} />
+      </mesh>
+      {/* Face */}
+      <mesh position={[0, 0, 0.01]}>
+        <circleGeometry args={[0.27, 24]} />
+        <meshStandardMaterial color="#f8f4e8" roughness={0.6} />
+      </mesh>
+      {/* Hour markers — 12 small dots */}
+      {Array.from({ length: 12 }).map((_, i) => {
+        const angle = (Math.PI * 2 * i) / 12 - Math.PI / 2;
+        const r = 0.22;
+        return (
+          <mesh key={i} position={[Math.cos(angle) * r, Math.sin(angle) * r, 0.02]}>
+            <sphereGeometry args={[0.015, 4, 4]} />
+            <meshStandardMaterial color="#2a1810" roughness={0.5} />
+          </mesh>
+        );
+      })}
+      {/* Hour hand */}
+      <mesh position={[0.04, 0.04, 0.02]} rotation={[0, 0, -Math.PI * 0.35]}>
+        <boxGeometry args={[0.12, 0.018, 0.008]} />
+        <meshStandardMaterial color="#2a1810" roughness={0.5} />
+      </mesh>
+      {/* Minute hand */}
+      <mesh position={[0, 0.06, 0.025]} rotation={[0, 0, Math.PI * 0.15]}>
+        <boxGeometry args={[0.17, 0.012, 0.006]} />
+        <meshStandardMaterial color="#2a1810" roughness={0.5} />
+      </mesh>
+      {/* Center pin */}
+      <mesh position={[0, 0, 0.03]}>
+        <sphereGeometry args={[0.018, 6, 6]} />
+        <meshStandardMaterial color="#b8923a" roughness={0.3} metalness={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Small elegant potted plant for the CEO office */
+function CeoPottedPlant({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh position={[0, 0.22, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.24, 0.2, 0.44, 10]} />
+        <meshStandardMaterial color="#a04020" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.44, 0]}>
+        <cylinderGeometry args={[0.23, 0.23, 0.02, 10]} />
+        <meshStandardMaterial color="#3a1f0e" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.6, 0]} castShadow>
+        <cylinderGeometry args={[0.03, 0.04, 0.3, 6]} />
+        <meshStandardMaterial color="#3a1810" />
+      </mesh>
+      <mesh position={[0, 0.85, 0]} castShadow>
+        <sphereGeometry args={[0.3, 10, 8]} />
+        <meshStandardMaterial color="#3d7a3c" roughness={0.85} />
+      </mesh>
+      <mesh position={[0.15, 0.78, 0.1]} castShadow>
+        <sphereGeometry args={[0.2, 10, 8]} />
+        <meshStandardMaterial color="#4a8a48" roughness={0.85} />
+      </mesh>
+      <mesh position={[-0.1, 0.8, -0.08]} castShadow>
+        <sphereGeometry args={[0.17, 10, 8]} />
+        <meshStandardMaterial color="#336633" roughness={0.85} />
+      </mesh>
     </group>
   );
 }

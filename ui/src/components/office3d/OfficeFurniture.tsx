@@ -9,6 +9,7 @@
  * Per-room dressing for Creative Lab, Tech Lab, and Lounge will be added
  * in S68b (v12 plan B.3-B.5).
  */
+import { useMemo } from "react";
 import * as THREE from "three";
 import {
   DESKS,
@@ -17,6 +18,45 @@ import {
   buildSeatSlots,
   DEPT_COLORS,
 } from "./officeLayout";
+
+/** Desk label texture cache — small badge showing the desk name */
+const deskLabelCache = new Map<string, THREE.CanvasTexture>();
+function getDeskLabelTexture(label: string): THREE.CanvasTexture {
+  const cached = deskLabelCache.get(label);
+  if (cached) return cached;
+  const w = 192;
+  const h = 40;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, w, h);
+  // Dark rounded pill
+  ctx.fillStyle = "rgba(42, 24, 16, 0.85)";
+  const r = 8;
+  ctx.beginPath();
+  ctx.moveTo(r, 2); ctx.lineTo(w - r, 2);
+  ctx.quadraticCurveTo(w - 2, 2, w - 2, r + 2);
+  ctx.lineTo(w - 2, h - r - 2);
+  ctx.quadraticCurveTo(w - 2, h - 2, w - r, h - 2);
+  ctx.lineTo(r, h - 2);
+  ctx.quadraticCurveTo(2, h - 2, 2, h - r - 2);
+  ctx.lineTo(2, r + 2);
+  ctx.quadraticCurveTo(2, 2, r, 2);
+  ctx.closePath();
+  ctx.fill();
+  // Text
+  ctx.fillStyle = "#ffeac2";
+  ctx.font = "bold 18px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, w / 2, h / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.premultiplyAlpha = true;
+  deskLabelCache.set(label, tex);
+  return tex;
+}
 import { CEOOffice } from "./roomFurniture/CEOOffice";
 import { CreativeStudio } from "./roomFurniture/CreativeStudio";
 import { CreativeLab } from "./roomFurniture/CreativeLab";
@@ -80,9 +120,15 @@ function SharedDesk({ desk }: { desk: typeof DESKS[number] }) {
   const topH = 0.08;
   const topY = 0.85;
   const legH = topY;
+  const labelTex = useMemo(() => getDeskLabelTexture(desk.label), [desk.label]);
 
   return (
     <group position={desk.position} rotation={[0, desk.rotation, 0]}>
+      {/* Desk label badge — floating above the desk */}
+      <sprite position={[0, topY + 0.7, 0]} scale={[1.1, 0.22, 1]}>
+        <spriteMaterial map={labelTex} transparent depthWrite={false} opacity={0.8} />
+      </sprite>
+
       {/* Top */}
       <mesh position={[0, topY, 0]} castShadow receiveShadow>
         <boxGeometry args={[topW, topH, topD]} />
@@ -347,33 +393,70 @@ function ClutterObject({
   );
 }
 
+/** Curved couch — 5-segment arc approximation for a modern lounge feel */
 function Couch() {
+  const leather = "#7a4a3a";
+  const cushion = "#8b5a4a";
+  const segCount = 5;
+  const arcRadius = 1.4;
+  const arcSpan = Math.PI * 0.55; // ~100° arc
+  const segW = 0.52;
+  const segD = 0.9;
+
   return (
     <group position={RELAX.couchPosition} rotation={[0, RELAX.couchRotation, 0]}>
-      <mesh position={[0, 0.3, 0]} castShadow receiveShadow>
-        <boxGeometry args={[2.2, 0.35, 0.9]} />
-        <meshStandardMaterial color="#7a4a3a" roughness={0.85} />
-      </mesh>
-      <mesh position={[0, 0.7, -0.35]} castShadow>
-        <boxGeometry args={[2.2, 0.6, 0.2]} />
-        <meshStandardMaterial color="#7a4a3a" roughness={0.85} />
-      </mesh>
-      <mesh position={[-1.1, 0.55, 0]} castShadow>
-        <boxGeometry args={[0.2, 0.4, 0.9]} />
-        <meshStandardMaterial color="#6a3d2e" roughness={0.85} />
-      </mesh>
-      <mesh position={[1.1, 0.55, 0]} castShadow>
-        <boxGeometry args={[0.2, 0.4, 0.9]} />
-        <meshStandardMaterial color="#6a3d2e" roughness={0.85} />
-      </mesh>
-      <mesh position={[-0.55, 0.5, 0]} castShadow>
-        <boxGeometry args={[1, 0.12, 0.8]} />
-        <meshStandardMaterial color="#8b5a4a" roughness={0.85} />
-      </mesh>
-      <mesh position={[0.55, 0.5, 0]} castShadow>
-        <boxGeometry args={[1, 0.12, 0.8]} />
-        <meshStandardMaterial color="#8b5a4a" roughness={0.85} />
-      </mesh>
+      {Array.from({ length: segCount }).map((_, i) => {
+        const angle = -arcSpan / 2 + (arcSpan / (segCount - 1)) * i;
+        const sx = Math.sin(angle) * arcRadius;
+        const sz = Math.cos(angle) * arcRadius - arcRadius;
+        return (
+          <group key={i} position={[sx, 0, sz]} rotation={[0, -angle, 0]}>
+            {/* Seat base */}
+            <mesh position={[0, 0.3, 0]} castShadow receiveShadow>
+              <boxGeometry args={[segW, 0.3, segD]} />
+              <meshStandardMaterial color={leather} roughness={0.85} />
+            </mesh>
+            {/* Cushion */}
+            <mesh position={[0, 0.48, 0]} castShadow>
+              <boxGeometry args={[segW - 0.04, 0.1, segD - 0.1]} />
+              <meshStandardMaterial color={cushion} roughness={0.85} />
+            </mesh>
+            {/* Backrest */}
+            <mesh position={[0, 0.68, -0.35]} castShadow>
+              <boxGeometry args={[segW, 0.5, 0.18]} />
+              <meshStandardMaterial color={leather} roughness={0.85} />
+            </mesh>
+          </group>
+        );
+      })}
+      {/* Left armrest */}
+      <group>
+        {(() => {
+          const a = -arcSpan / 2;
+          const sx = Math.sin(a) * arcRadius;
+          const sz = Math.cos(a) * arcRadius - arcRadius;
+          return (
+            <mesh position={[sx - 0.3, 0.55, sz]} rotation={[0, -a, 0]} castShadow>
+              <boxGeometry args={[0.18, 0.4, segD]} />
+              <meshStandardMaterial color="#6a3d2e" roughness={0.85} />
+            </mesh>
+          );
+        })()}
+      </group>
+      {/* Right armrest */}
+      <group>
+        {(() => {
+          const a = arcSpan / 2;
+          const sx = Math.sin(a) * arcRadius;
+          const sz = Math.cos(a) * arcRadius - arcRadius;
+          return (
+            <mesh position={[sx + 0.3, 0.55, sz]} rotation={[0, -a, 0]} castShadow>
+              <boxGeometry args={[0.18, 0.4, segD]} />
+              <meshStandardMaterial color="#6a3d2e" roughness={0.85} />
+            </mesh>
+          );
+        })()}
+      </group>
     </group>
   );
 }

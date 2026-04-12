@@ -11,6 +11,7 @@
  */
 import * as THREE from "three";
 import { getRoom } from "../officeRooms";
+import { ROOM as ROOM_DIMS } from "../officeLayout";
 
 const ROOM = getRoom("tech-lab");
 const CX = (ROOM.bounds.xMin + ROOM.bounds.xMax) / 2; // 6
@@ -24,6 +25,9 @@ export function TechLab() {
       <ServerRack position={[ROOM.bounds.xMax - 1, 0, ROOM.bounds.zMax - 1.2]} />
       <DashboardTV position={[CX - 3, 2.2, ROOM.bounds.zMax - 0.5]} />
       <FloorAccentStrip />
+      <CeilingStripLights />
+      <PottedPlant position={[ROOM.bounds.xMax - 1.5, 0, ROOM.bounds.zMin + 1]} />
+      <PottedPlant position={[ROOM.bounds.xMin + 1, 0, ROOM.bounds.zMax - 1]} scale={0.85} />
     </group>
   );
 }
@@ -256,5 +260,68 @@ function FloorAccentStrip() {
         roughness={0.3}
       />
     </mesh>
+  );
+}
+
+/** Ceiling-mounted LED strip lights — 2 parallel neon tubes running along the room */
+function CeilingStripLights() {
+  const y = ROOM_DIMS.height - 0.15;
+  const roomW = ROOM.bounds.xMax - ROOM.bounds.xMin;
+  return (
+    <group>
+      {[-2, 2].map((zOff, i) => (
+        <group key={i}>
+          {/* Light housing */}
+          <mesh position={[CX, y, CZ + zOff]}>
+            <boxGeometry args={[roomW - 2, 0.06, 0.15]} />
+            <meshStandardMaterial color="#2a2a30" roughness={0.5} metalness={0.4} />
+          </mesh>
+          {/* Emissive tube */}
+          <mesh position={[CX, y - 0.04, CZ + zOff]}>
+            <boxGeometry args={[roomW - 2.5, 0.02, 0.08]} />
+            <meshStandardMaterial
+              color="#d4e8ff"
+              emissive="#d4e8ff"
+              emissiveIntensity={0.8}
+              roughness={0.2}
+            />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** Small potted plant for corners */
+function PottedPlant({
+  position,
+  scale = 1,
+}: {
+  position: [number, number, number];
+  scale?: number;
+}) {
+  return (
+    <group position={position} scale={scale}>
+      <mesh position={[0, 0.2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.22, 0.18, 0.4, 10]} />
+        <meshStandardMaterial color="#a04020" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.4, 0]}>
+        <cylinderGeometry args={[0.21, 0.21, 0.02, 10]} />
+        <meshStandardMaterial color="#3a1f0e" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.55, 0]} castShadow>
+        <cylinderGeometry args={[0.03, 0.04, 0.3, 6]} />
+        <meshStandardMaterial color="#3a1810" />
+      </mesh>
+      <mesh position={[0, 0.8, 0]} castShadow>
+        <sphereGeometry args={[0.28, 10, 8]} />
+        <meshStandardMaterial color="#3d7a3c" roughness={0.85} />
+      </mesh>
+      <mesh position={[0.12, 0.72, 0.08]} castShadow>
+        <sphereGeometry args={[0.18, 10, 8]} />
+        <meshStandardMaterial color="#4a8a48" roughness={0.85} />
+      </mesh>
+    </group>
   );
 }

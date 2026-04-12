@@ -305,6 +305,12 @@ export function OfficeRoom() {
 
       {/* INTERIOR walls between rooms, with portal cutouts */}
       <InternalWalls wallTexture={wall} />
+
+      {/* Floating room labels — visible from the isometric camera */}
+      <RoomLabels />
+
+      {/* Wall accent color strips along the back wall of each room */}
+      <WallAccentStrips />
     </group>
   );
 }
@@ -534,6 +540,85 @@ function WindowFrame({ skyTexture }: { skyTexture: THREE.Texture }) {
         <planeGeometry args={[winW, winH]} />
         <meshBasicMaterial map={skyTexture} side={THREE.DoubleSide} />
       </mesh>
+    </group>
+  );
+}
+
+/** Floating room name labels — CanvasTexture sprites positioned above each room center */
+const roomLabelCache = new Map<string, THREE.CanvasTexture>();
+function makeRoomLabelTexture(text: string): THREE.CanvasTexture {
+  const cached = roomLabelCache.get(text);
+  if (cached) return cached;
+  const w = 512;
+  const h = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "rgba(255, 244, 220, 0.85)";
+  ctx.font = "bold 36px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.letterSpacing = "4px";
+  ctx.fillText(text.toUpperCase(), w / 2, h / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.premultiplyAlpha = true;
+  roomLabelCache.set(text, tex);
+  return tex;
+}
+
+function RoomLabels() {
+  return (
+    <group>
+      {ROOMS.map((room) => {
+        const cx = (room.bounds.xMin + room.bounds.xMax) / 2;
+        const cz = (room.bounds.zMin + room.bounds.zMax) / 2;
+        const tex = makeRoomLabelTexture(room.label);
+        return (
+          <sprite
+            key={room.id}
+            position={[cx, 3.7, cz]}
+            scale={[3.5, 0.4, 1]}
+          >
+            <spriteMaterial
+              map={tex}
+              transparent
+              depthWrite={false}
+              opacity={0.6}
+            />
+          </sprite>
+        );
+      })}
+    </group>
+  );
+}
+
+/** Colored accent strip along the back wall of each room — a thin horizontal
+ *  band that gives each room a subtle color identity matching the design doc. */
+function WallAccentStrips() {
+  const stripH = 0.12;
+  const stripY = ROOM.height - 0.3;
+  return (
+    <group>
+      {ROOMS.map((room) => {
+        const cx = (room.bounds.xMin + room.bounds.xMax) / 2;
+        const w = room.bounds.xMax - room.bounds.xMin;
+        // Strip on the back (min-Z) wall of each room
+        const z = room.bounds.zMin + 0.06;
+        return (
+          <mesh key={room.id} position={[cx, stripY, z]}>
+            <boxGeometry args={[w - 0.4, stripH, 0.04]} />
+            <meshStandardMaterial
+              color={room.wallColor}
+              emissive={room.wallColor}
+              emissiveIntensity={0.4}
+              roughness={0.5}
+            />
+          </mesh>
+        );
+      })}
     </group>
   );
 }

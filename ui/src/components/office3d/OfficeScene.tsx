@@ -146,7 +146,8 @@ function Lighting() {
       {/* Strong ambient so materials are always visible even if directional fails */}
       <ambientLight intensity={1.5} color="#fff2d4" />
 
-      {/* Warm directional from the window direction — the hero golden hour light */}
+      {/* Warm directional from the window direction — the hero golden hour light.
+          Shadow camera frustum sized to cover the full 30×18 room. */}
       <directionalLight
         position={LIGHT_SUN_POS}
         intensity={4.0}
@@ -155,6 +156,12 @@ function Lighting() {
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
         shadow-bias={-0.0004}
+        shadow-camera-left={-18}
+        shadow-camera-right={18}
+        shadow-camera-top={12}
+        shadow-camera-bottom={-12}
+        shadow-camera-near={0.5}
+        shadow-camera-far={40}
       />
 
       {/* Fill from the opposite side — brighter so deep shadows still have detail */}
