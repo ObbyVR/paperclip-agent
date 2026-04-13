@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useOutletContext, useNavigate } from "@/lib/router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "@/context/CompanyContext";
@@ -38,6 +38,7 @@ export default function CortexIssues() {
   const [search, setSearch] = useState("");
   const [dragOrder, setDragOrder] = useState<string[] | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [statusDropdownId, setStatusDropdownId] = useState<string | null>(null);
   const dragSrcId = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -239,6 +240,25 @@ export default function CortexIssues() {
     }
   }, [selectedIssueId, selectedCompanyId, queryClient]);
 
+  // Close status dropdown on outside click
+  useEffect(() => {
+    if (!statusDropdownId) return;
+    const handler = () => setStatusDropdownId(null);
+    // Defer to avoid closing on the same click that opened it
+    const timer = setTimeout(() => window.addEventListener("click", handler), 0);
+    return () => { clearTimeout(timer); window.removeEventListener("click", handler); };
+  }, [statusDropdownId]);
+
+  const handleQuickStatus = useCallback(async (issueId: string, newStatus: string) => {
+    setStatusDropdownId(null);
+    try {
+      await issuesApi.update(issueId, { status: newStatus });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+    } catch (e) {
+      console.error("[Cortex] quickStatus failed:", e);
+    }
+  }, [selectedCompanyId, queryClient]);
+
   const handleCloseMask = useCallback(() => {
     setMaskOpen(false);
     if (selectedIssueId) issuesApi.markRead(selectedIssueId).catch(() => {});
@@ -338,14 +358,35 @@ export default function CortexIssues() {
                   <span className="text-[11px] text-white/35">—</span>
                 )}
               </div>
-              <div className="w-[80px] sm:w-[100px]">
-                <span className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[9px] font-medium sm:px-2.5 sm:text-[10px]",
-                  s.bg, s.text,
-                )}>
+              <div className="relative w-[80px] sm:w-[100px]">
+                <span
+                  onClick={(e) => { e.stopPropagation(); setStatusDropdownId(statusDropdownId === issue.id ? null : issue.id); }}
+                  className={cn(
+                    "inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2 py-1 text-[9px] font-medium transition-all hover:brightness-125 sm:px-2.5 sm:text-[10px]",
+                    s.bg, s.text,
+                  )}
+                >
                   <span className={cn("h-[5px] w-[5px] rounded-full", s.dot)} />
                   {STATUS_LABEL[issue.status] ?? issue.status}
                 </span>
+                {statusDropdownId === issue.id && (
+                  <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] overflow-hidden rounded-lg border border-white/[0.08] bg-[#161a27] py-1 shadow-[0_8px_32px_rgba(0,0,0,0.6)]" onClick={(e) => e.stopPropagation()}>
+                    {(["todo", "in_progress", "blocked", "in_review", "done", "cancelled"] as const).map((st) => {
+                      if (st === issue.status) return null;
+                      const stStyle = cortexStatusStyles[issueToV2Status(st, {})];
+                      return (
+                        <button
+                          key={st}
+                          onClick={(e) => { e.stopPropagation(); handleQuickStatus(issue.id, st); }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-white/70 transition-colors hover:bg-white/[0.06]"
+                        >
+                          <span className={cn("h-[5px] w-[5px] rounded-full", stStyle.dot)} />
+                          {STATUS_LABEL[st]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <span className="hidden w-[80px] text-right font-mono text-[10px] text-white/35 sm:block">
                 {relativeTime(issue.updatedAt)}

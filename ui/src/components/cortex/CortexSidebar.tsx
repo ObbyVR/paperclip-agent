@@ -64,6 +64,10 @@ export function CortexSidebar({ selectedProjectId, onSelectProject, mobileOpen, 
     return (issues ?? []).filter((i) => i.status === "blocked" || i.status === "in_review").length;
   }, [issues]);
 
+  const issuesActive = useMemo(() => {
+    return (issues ?? []).filter((i) => ["in_progress", "todo", "blocked", "in_review"].includes(i.status)).length;
+  }, [issues]);
+
   return (
     <>
     {/* Mobile backdrop */}
@@ -96,7 +100,7 @@ export function CortexSidebar({ selectedProjectId, onSelectProject, mobileOpen, 
         {[
           { to: "/cortex/dashboard", label: "Dashboard", Icon: Sun },
           { to: "/cortex/inbox", label: "Inbox", Icon: Inbox, badge: inboxUrgent > 0 ? inboxUrgent : undefined },
-          { to: "/cortex/issues", label: "Issues", Icon: CircleDot },
+          { to: "/cortex/issues", label: "Issues", Icon: CircleDot, count: issuesActive > 0 ? issuesActive : undefined },
           { to: "/cortex/office", label: "Pixel Office", Icon: Monitor },
           { to: "/cortex/costs", label: "Costs", Icon: DollarSign },
         ].map((item) => (
@@ -122,6 +126,9 @@ export function CortexSidebar({ selectedProjectId, onSelectProject, mobileOpen, 
               )}>
                 {item.badge}
               </span>
+            )}
+            {!collapsed && item.count != null && !item.badge && (
+              <span className="font-mono text-[10px] text-white/30">{item.count}</span>
             )}
           </NavLink>
         ))}

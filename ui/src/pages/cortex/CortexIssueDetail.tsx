@@ -164,6 +164,7 @@ export default function CortexIssueDetail() {
       <TopBar
         title={issue.identifier ?? "Issue"}
         chip={STATUS_LABEL[issue.status]}
+        breadcrumbs={[{ label: "Issues", onClick: () => navigate("../issues") }]}
         onBack={() => navigate("../issues")}
         onMenuOpen={onMobileMenuOpen}
         onSearchOpen={onSearchOpen}
