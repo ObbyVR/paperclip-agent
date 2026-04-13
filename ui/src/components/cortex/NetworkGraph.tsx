@@ -48,6 +48,8 @@ export function NetworkGraph({ agents, onAgentClick, className }: NetworkGraphPr
   const dims = useMemo(() => graphDimensions(agents.length), [agents.length]);
   const { w, h, cx, cy } = dims;
 
+  const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
+
   // Zoom / pan state
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -144,7 +146,16 @@ export function NetworkGraph({ agents, onAgentClick, className }: NetworkGraphPr
               ))}
             </defs>
             {positioned.map((a) => (
-              <line key={`l-${a.id}`} x1={cx} y1={cy} x2={a.x} y2={a.y} className={`stroke-1 ${LINE_CLS[a.status]}`} />
+              <line
+                key={`l-${a.id}`}
+                x1={cx} y1={cy} x2={a.x} y2={a.y}
+                className={cn(
+                  "transition-opacity duration-200",
+                  hoveredAgentId && hoveredAgentId !== a.id ? "opacity-[0.03] stroke-1" : `stroke-1 ${LINE_CLS[a.status]}`,
+                  hoveredAgentId === a.id && "stroke-2 opacity-60",
+                )}
+                style={hoveredAgentId === a.id ? { filter: "drop-shadow(0 0 6px rgba(129,140,248,0.4))" } : undefined}
+              />
             ))}
             {positioned
               .filter((a) => a.status === "working" || a.status === "needs-me")
@@ -172,6 +183,7 @@ export function NetworkGraph({ agents, onAgentClick, className }: NetworkGraphPr
               agent={agent}
               style={{ left: agent.x, top: agent.y - 28 }}
               onClick={() => onAgentClick?.(agent.id)}
+              onHover={setHoveredAgentId}
               animationDelay={`${i * 0.06}s`}
             />
           ))}

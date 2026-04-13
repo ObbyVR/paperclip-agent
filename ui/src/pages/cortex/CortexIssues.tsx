@@ -40,6 +40,8 @@ export default function CortexIssues() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [statusDropdownId, setStatusDropdownId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sortCol, setSortCol] = useState<"status" | "title" | "agent" | "updated">("status");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const dragSrcId = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -102,9 +104,22 @@ export default function CortexIssues() {
   }, [filtered, search, agentMap]);
 
   const defaultSorted = useMemo(() => {
-    const order: Record<string, number> = { blocked: 0, in_review: 1, in_progress: 2, todo: 3, backlog: 4, done: 5, cancelled: 6 };
-    return [...searched].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
-  }, [searched]);
+    const statusOrder: Record<string, number> = { blocked: 0, in_review: 1, in_progress: 2, todo: 3, backlog: 4, done: 5, cancelled: 6 };
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...searched].sort((a, b) => {
+      switch (sortCol) {
+        case "title": return dir * a.title.localeCompare(b.title);
+        case "agent": {
+          const nameA = (a.assigneeAgentId && agentMap.get(a.assigneeAgentId)?.name) ?? "";
+          const nameB = (b.assigneeAgentId && agentMap.get(b.assigneeAgentId)?.name) ?? "";
+          return dir * nameA.localeCompare(nameB);
+        }
+        case "updated": return dir * (new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        case "status":
+        default: return dir * ((statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+      }
+    });
+  }, [searched, sortCol, sortDir, agentMap]);
 
   // Apply manual drag order if present (only when no search active)
   const sorted = useMemo(() => {
@@ -241,6 +256,14 @@ export default function CortexIssues() {
     }
   }, [selectedIssueId, selectedCompanyId, queryClient]);
 
+  const toggleSort = useCallback((col: typeof sortCol) => {
+    if (sortCol === col) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("asc"); }
+    setDragOrder(null); // Reset manual order when sorting
+  }, [sortCol]);
+
+  const sortArrow = (col: typeof sortCol) => sortCol === col ? (sortDir === "asc" ? " ↑" : " ↓") : "";
+
   // Close status dropdown on outside click
   useEffect(() => {
     if (!statusDropdownId) return;
@@ -345,10 +368,10 @@ export default function CortexIssues() {
           className="mr-2 h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-white/20 bg-transparent accent-indigo-400"
         />
         <span className="hidden w-[60px] sm:block">ID</span>
-        <span className="flex-1">Titolo</span>
-        <span className="hidden w-[160px] md:block">Agente</span>
-        <span className="w-[80px] sm:w-[100px]">Stato</span>
-        <span className="hidden w-[80px] text-right sm:block">Aggiornato</span>
+        <button onClick={() => toggleSort("title")} className="flex-1 text-left hover:text-white/55">Titolo{sortArrow("title")}</button>
+        <button onClick={() => toggleSort("agent")} className="hidden w-[160px] text-left hover:text-white/55 md:block">Agente{sortArrow("agent")}</button>
+        <button onClick={() => toggleSort("status")} className="w-[80px] text-left hover:text-white/55 sm:w-[100px]">Stato{sortArrow("status")}</button>
+        <button onClick={() => toggleSort("updated")} className="hidden w-[80px] text-right hover:text-white/55 sm:block">Aggiornato{sortArrow("updated")}</button>
       </div>
 
       {/* Table rows */}

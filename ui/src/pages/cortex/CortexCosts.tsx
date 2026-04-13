@@ -24,6 +24,34 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
   );
 }
 
+function BudgetRing({ percent, label, value, sub }: { percent: number; label: string; value: string; sub?: string }) {
+  const r = 32;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (Math.min(percent, 100) / 100) * circ;
+  const color = percent > 90 ? "#fca5a5" : percent > 70 ? "#fcd34d" : "#818cf8";
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-white/[0.04] bg-[#161a27] px-4 py-3">
+      <svg width="72" height="72" viewBox="0 0 72 72" className="shrink-0">
+        <circle cx="36" cy="36" r={r} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="5" />
+        <circle
+          cx="36" cy="36" r={r} fill="none"
+          stroke={color} strokeWidth="5" strokeLinecap="round"
+          strokeDasharray={circ} strokeDashoffset={offset}
+          transform="rotate(-90 36 36)"
+          className="transition-[stroke-dashoffset] duration-700 ease-out"
+        />
+        <text x="36" y="38" textAnchor="middle" className="fill-white text-[13px] font-semibold">{percent.toFixed(0)}%</text>
+      </svg>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/35">{label}</span>
+        <span className="text-[18px] font-semibold text-white">{value}</span>
+        {sub && <span className="text-[11px] text-white/45">{sub}</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function CortexCosts() {
   const { onMobileMenuOpen, onSearchOpen } = useOutletContext<{ onMobileMenuOpen?: () => void; onSearchOpen?: () => void }>();
   const { selectedCompanyId } = useCompany();
@@ -69,10 +97,11 @@ export default function CortexCosts() {
       {/* Stat cards */}
       <div className="grid grid-cols-1 gap-2.5 px-4 pt-4 pb-2 sm:grid-cols-3 sm:gap-3 md:px-6 md:pt-5">
         <StatCard label="Spesa mese corrente" value={formatCents(totalSpend)} accent />
-        <StatCard
+        <BudgetRing
+          percent={utilization}
           label="Budget mensile"
           value={budget > 0 ? formatCents(budget) : "Aperto"}
-          sub={budget > 0 ? `${utilization.toFixed(0)}% utilizzato` : "Nessun cap configurato"}
+          sub={budget > 0 ? undefined : "Nessun cap configurato"}
         />
         <StatCard
           label="Agenti attivi"

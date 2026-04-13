@@ -22,6 +22,7 @@ interface AgentNodeProps {
   style?: React.CSSProperties;
   onClick?: () => void;
   animationDelay?: string;
+  onHover?: (id: string | null) => void;
 }
 
 const STATUS_LABEL: Record<CortexStatus, string> = {
@@ -61,17 +62,19 @@ function ProjectBadge({ name, color, status }: { name: string; color: string; st
   );
 }
 
-export function AgentNode({ agent, style, onClick, animationDelay }: AgentNodeProps) {
+export function AgentNode({ agent, style, onClick, animationDelay, onHover }: AgentNodeProps) {
   const [hovered, setHovered] = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const s = cortexStatusStyles[agent.status];
 
   const showTooltip = () => {
     hoverTimer.current = setTimeout(() => setHovered(true), 280);
+    onHover?.(agent.id);
   };
   const hideTooltip = () => {
     clearTimeout(hoverTimer.current);
     setHovered(false);
+    onHover?.(null);
   };
 
   return (
