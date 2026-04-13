@@ -53,6 +53,7 @@ import CortexInbox from "./pages/cortex/CortexInbox";
 import CortexIssues from "./pages/cortex/CortexIssues";
 import CortexCosts from "./pages/cortex/CortexCosts";
 import CortexSettings from "./pages/cortex/CortexSettings";
+import CortexIssueDetail from "./pages/cortex/CortexIssueDetail";
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
@@ -394,6 +395,7 @@ export function App() {
             <Route path="dashboard" element={<CortexDashboard />} />
             <Route path="inbox" element={<CortexInbox />} />
             <Route path="issues" element={<CortexIssues />} />
+            <Route path="issues/:issueId" element={<CortexIssueDetail />} />
             <Route path="office" element={<PixelOffice />} />
             <Route path="costs" element={<CortexCosts />} />
             <Route path="settings" element={<CortexSettings />} />

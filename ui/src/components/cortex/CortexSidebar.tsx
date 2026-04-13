@@ -20,9 +20,11 @@ import {
 interface CortexSidebarProps {
   selectedProjectId: string | null;
   onSelectProject: (id: string | null) => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export function CortexSidebar({ selectedProjectId, onSelectProject }: CortexSidebarProps) {
+export function CortexSidebar({ selectedProjectId, onSelectProject, mobileOpen, onMobileClose }: CortexSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(true);
   const { selectedCompanyId } = useCompany();
@@ -63,10 +65,20 @@ export function CortexSidebar({ selectedProjectId, onSelectProject }: CortexSide
   }, [issues]);
 
   return (
+    <>
+    {/* Mobile backdrop */}
+    {mobileOpen && (
+      <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={onMobileClose} />
+    )}
     <nav
       className={cn(
-        "flex flex-col border-r border-white/[0.06] bg-[#0b0d15] transition-[width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]",
-        collapsed ? "w-[52px]" : "w-[220px]",
+        "flex flex-col border-r border-white/[0.06] bg-[#0b0d15] transition-[width,transform] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]",
+        // Desktop: inline, collapsible
+        "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[260px] max-md:shadow-[4px_0_24px_rgba(0,0,0,0.6)]",
+        mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",
+        // Desktop widths
+        "md:relative",
+        collapsed ? "md:w-[52px]" : "md:w-[220px]",
       )}
     >
       {/* Brand */}
@@ -91,6 +103,7 @@ export function CortexSidebar({ selectedProjectId, onSelectProject }: CortexSide
           <NavLink
             key={item.to}
             to={item.to}
+            onClick={onMobileClose}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-2.5 border-l-2 border-transparent px-[18px] py-2 text-[13px] font-medium text-white/70 transition-all duration-100",
@@ -178,6 +191,7 @@ export function CortexSidebar({ selectedProjectId, onSelectProject }: CortexSide
         )}
         <NavLink
           to="/cortex/settings"
+          onClick={onMobileClose}
           className={({ isActive }) =>
             cn(
               "flex items-center gap-2.5 px-[18px] py-2 text-[13px] font-medium text-white/70 transition-all hover:bg-white/[0.04] hover:text-white",
@@ -203,5 +217,6 @@ export function CortexSidebar({ selectedProjectId, onSelectProject }: CortexSide
         {!collapsed && <span>Comprimi</span>}
       </button>
     </nav>
+    </>
   );
 }

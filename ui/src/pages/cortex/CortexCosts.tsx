@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useOutletContext } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { useCompany } from "@/context/CompanyContext";
 import { agentsApi } from "@/api/agents";
@@ -24,6 +25,7 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
 }
 
 export default function CortexCosts() {
+  const { onMobileMenuOpen } = useOutletContext<{ onMobileMenuOpen?: () => void }>();
   const { selectedCompanyId } = useCompany();
 
   const { data: summary, isLoading } = useQuery({
@@ -55,6 +57,7 @@ export default function CortexCosts() {
     <div className="flex h-full flex-col overflow-hidden bg-[#060810] text-white">
       <TopBar
         title="Costi"
+        onMenuOpen={onMobileMenuOpen}
         kpis={[
           { value: formatCents(totalSpend), label: "spesa mese" },
           { value: budget > 0 ? formatCents(budget) : "Illimitato", label: "budget" },
@@ -63,7 +66,7 @@ export default function CortexCosts() {
       />
 
       {/* Stat cards */}
-      <div className="grid grid-cols-3 gap-3 px-6 pt-5 pb-2">
+      <div className="grid grid-cols-1 gap-2.5 px-4 pt-4 pb-2 sm:grid-cols-3 sm:gap-3 md:px-6 md:pt-5">
         <StatCard label="Spesa mese corrente" value={formatCents(totalSpend)} accent />
         <StatCard
           label="Budget mensile"
@@ -78,22 +81,22 @@ export default function CortexCosts() {
       </div>
 
       {/* Agent cost breakdown */}
-      <div className="px-6 pt-5 pb-2">
+      <div className="px-4 pt-4 pb-2 md:px-6 md:pt-5">
         <h3 className="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/35">
           Spesa per agente
         </h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-8">
+      <div className="flex-1 overflow-y-auto px-4 pb-8 md:px-6">
         {agentCosts.length > 0 ? (
           <div className="space-y-1">
             {agentCosts.map((agent) => {
               const pct = totalSpend > 0 ? (agent.spentMonthlyCents / totalSpend) * 100 : 0;
               return (
-                <div key={agent.id} className="flex items-center gap-3 rounded-lg border border-white/[0.02] bg-[#161a27] px-4 py-3">
+                <div key={agent.id} className="flex items-center gap-2.5 rounded-lg border border-white/[0.02] bg-[#161a27] px-3 py-2.5 md:gap-3 md:px-4 md:py-3">
                   <AgentAvatar name={agent.name} status="working" size="sm" />
                   <div className="min-w-0 flex-1">
-                    <div className="text-[12.5px] font-medium">{agent.name}</div>
+                    <div className="text-[12px] font-medium md:text-[12.5px]">{agent.name}</div>
                     {/* Progress bar */}
                     <div className="mt-1.5 h-[3px] w-full rounded-full bg-white/[0.04]">
                       <div
@@ -103,7 +106,7 @@ export default function CortexCosts() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-mono text-[13px] font-semibold text-white">
+                    <div className="font-mono text-[12px] font-semibold text-white md:text-[13px]">
                       {formatCents(agent.spentMonthlyCents)}
                     </div>
                     <div className="font-mono text-[10px] text-white/35">{pct.toFixed(1)}%</div>

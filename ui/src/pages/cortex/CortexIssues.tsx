@@ -1,5 +1,5 @@
-import { useMemo, useState, useCallback } from "react";
-import { useOutletContext } from "@/lib/router";
+import { useMemo, useState, useCallback, useRef } from "react";
+import { useOutletContext, useNavigate } from "@/lib/router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "@/context/CompanyContext";
 import { issuesApi } from "@/api/issues";
@@ -32,11 +32,15 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function CortexIssues() {
   const { selectedCompanyId } = useCompany();
-  const { selectedProjectId } = useOutletContext<{ selectedProjectId: string | null }>();
+  const { selectedProjectId, onMobileMenuOpen } = useOutletContext<{ selectedProjectId: string | null; onMobileMenuOpen?: () => void }>();
   const [maskOpen, setMaskOpen] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [dragOrder, setDragOrder] = useState<string[] | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const dragSrcId = useRef<string | null>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: issues, isLoading } = useQuery({
     queryKey: queryKeys.issues.list(selectedCompanyId!),
@@ -95,10 +99,20 @@ export default function CortexIssues() {
     );
   }, [filtered, search, agentMap]);
 
-  const sorted = useMemo(() => {
+  const defaultSorted = useMemo(() => {
     const order: Record<string, number> = { blocked: 0, in_review: 1, in_progress: 2, todo: 3, backlog: 4, done: 5, cancelled: 6 };
     return [...searched].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
   }, [searched]);
+
+  // Apply manual drag order if present (only when no search active)
+  const sorted = useMemo(() => {
+    if (!dragOrder || search.trim()) return defaultSorted;
+    const map = new Map(defaultSorted.map((i) => [i.id, i]));
+    const ordered = dragOrder.map((id) => map.get(id)).filter(Boolean) as typeof defaultSorted;
+    // Append any new issues not in dragOrder
+    for (const i of defaultSorted) if (!dragOrder.includes(i.id)) ordered.push(i);
+    return ordered;
+  }, [defaultSorted, dragOrder, search]);
 
   const counts = useMemo(() => {
     const c = { active: 0, blocked: 0, done: 0 };
@@ -242,6 +256,7 @@ export default function CortexIssues() {
           { value: String(counts.active), label: "attivi" },
           { value: String(counts.done), label: "completati" },
         ]}
+        onMenuOpen={onMobileMenuOpen}
       />
 
       {/* Search */}
@@ -259,12 +274,12 @@ export default function CortexIssues() {
       </div>
 
       {/* Table header */}
-      <div className="flex items-center border-b border-white/[0.06] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/35">
-        <span className="w-[60px]">ID</span>
+      <div className="flex items-center border-b border-white/[0.06] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/35 md:px-5">
+        <span className="hidden w-[60px] sm:block">ID</span>
         <span className="flex-1">Titolo</span>
-        <span className="w-[160px]">Agente</span>
-        <span className="w-[100px]">Stato</span>
-        <span className="w-[80px] text-right">Aggiornato</span>
+        <span className="hidden w-[160px] md:block">Agente</span>
+        <span className="w-[80px] sm:w-[100px]">Stato</span>
+        <span className="hidden w-[80px] text-right sm:block">Aggiornato</span>
       </div>
 
       {/* Table rows */}
@@ -279,19 +294,40 @@ export default function CortexIssues() {
           return (
             <button
               key={issue.id}
+              draggable
+              onDragStart={() => { dragSrcId.current = issue.id; }}
+              onDragOver={(e) => { e.preventDefault(); setDragOverId(issue.id); }}
+              onDragLeave={() => { if (dragOverId === issue.id) setDragOverId(null); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverId(null);
+                const src = dragSrcId.current;
+                if (!src || src === issue.id) return;
+                const ids = sorted.map((i) => i.id);
+                const srcIdx = ids.indexOf(src);
+                const dstIdx = ids.indexOf(issue.id);
+                if (srcIdx < 0 || dstIdx < 0) return;
+                ids.splice(srcIdx, 1);
+                ids.splice(dstIdx, 0, src);
+                setDragOrder(ids);
+              }}
+              onDragEnd={() => { dragSrcId.current = null; setDragOverId(null); }}
               onClick={() => handleRowClick(issue.id)}
+              onDoubleClick={() => navigate(`${issue.id}`)}
               className={cn(
-                "flex w-full items-center border-b border-white/[0.02] px-5 py-2.5 text-left transition-colors hover:bg-white/[0.03]",
+                "flex w-full items-center border-b border-white/[0.02] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.03] md:px-5",
                 selectedIssueId === issue.id && maskOpen && "bg-white/[0.04]",
+                dragOverId === issue.id && "border-t-2 border-t-indigo-400",
               )}
             >
-              <span className="w-[60px] font-mono text-[11px] text-white/45">
+              <span className="mr-1 hidden w-4 cursor-grab text-center text-[10px] text-white/20 active:cursor-grabbing sm:block">⋮⋮</span>
+              <span className="hidden w-[60px] font-mono text-[11px] text-white/45 sm:block">
                 {issue.identifier ?? "—"}
               </span>
               <div className="flex min-w-0 flex-1 items-center gap-2.5 pr-3">
-                <span className="truncate text-[13px]">{issue.title}</span>
+                <span className="truncate text-[12px] md:text-[13px]">{issue.title}</span>
               </div>
-              <div className="flex w-[160px] items-center gap-2">
+              <div className="hidden w-[160px] items-center gap-2 md:flex">
                 {agent ? (
                   <>
                     <AgentAvatar name={agent.name} status={status} size="sm" />
@@ -301,16 +337,16 @@ export default function CortexIssues() {
                   <span className="text-[11px] text-white/35">—</span>
                 )}
               </div>
-              <div className="w-[100px]">
+              <div className="w-[80px] sm:w-[100px]">
                 <span className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium",
+                  "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[9px] font-medium sm:px-2.5 sm:text-[10px]",
                   s.bg, s.text,
                 )}>
                   <span className={cn("h-[5px] w-[5px] rounded-full", s.dot)} />
                   {STATUS_LABEL[issue.status] ?? issue.status}
                 </span>
               </div>
-              <span className="w-[80px] text-right font-mono text-[10px] text-white/35">
+              <span className="hidden w-[80px] text-right font-mono text-[10px] text-white/35 sm:block">
                 {relativeTime(issue.updatedAt)}
               </span>
             </button>

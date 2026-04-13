@@ -23,10 +23,11 @@ import type { IssueComment, IssueAttachment } from "@paperclipai/shared";
 interface CortexOutletContext {
   selectedProjectId: string | null;
   setSelectedProjectId: (id: string | null) => void;
+  onMobileMenuOpen?: () => void;
 }
 
 export default function CortexDashboard() {
-  const { selectedProjectId: projectId, setSelectedProjectId } = useOutletContext<CortexOutletContext>();
+  const { selectedProjectId: projectId, setSelectedProjectId, onMobileMenuOpen } = useOutletContext<CortexOutletContext>();
   const { selectedCompanyId } = useCompany();
   const [maskOpen, setMaskOpen] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
@@ -119,12 +120,18 @@ export default function CortexDashboard() {
 
         const activeCount = projIssues.filter((i) => i.status === "in_progress" || i.status === "todo" || i.status === "blocked" || i.status === "in_review").length;
 
+        const doneCount = projIssues.filter((i) => i.status === "done").length;
+        const tooltipExtra: string[] = [];
+        if (projIssues.length > 0) tooltipExtra.push(`${projIssues.length} issue totali`);
+        if (doneCount > 0) tooltipExtra.push(`${doneCount} completat${doneCount === 1 ? "o" : "i"}`);
+
         return {
           id: p.id,
           name: p.name,
           role: activeCount > 0 ? `${activeCount} task attiv${activeCount === 1 ? "o" : "i"}` : undefined,
           status,
           color: p.color ?? "#6366f1",
+          tooltipExtra,
         };
       });
     }
@@ -348,9 +355,24 @@ export default function CortexDashboard() {
           { value: formatCents(todayCost), label: "spesa mese" },
         ]}
         onBack={projectId ? () => setSelectedProjectId(null) : undefined}
+        onMenuOpen={onMobileMenuOpen}
       />
 
-      <NetworkGraph agents={graphNodes} onAgentClick={handleNodeClick} />
+      {graphNodes.length > 0 ? (
+        <NetworkGraph agents={graphNodes} onAgentClick={handleNodeClick} />
+      ) : (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-white/30">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-400/[0.06]">
+            <span className="text-[36px]">🌐</span>
+          </div>
+          <span className="text-[14px] font-medium text-white/45">
+            {projectId ? "Nessun task attivo in questo progetto" : "Nessun progetto attivo"}
+          </span>
+          <span className="text-[12px] text-white/30">
+            {projectId ? "Tutti i task sono completati o in backlog" : "Crea un progetto per iniziare"}
+          </span>
+        </div>
+      )}
 
       <InteractionMask
         open={maskOpen}
