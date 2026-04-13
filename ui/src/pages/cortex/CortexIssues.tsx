@@ -1,0 +1,339 @@
+import { useMemo, useState, useCallback } from "react";
+import { useOutletContext } from "@/lib/router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCompany } from "@/context/CompanyContext";
+import { issuesApi } from "@/api/issues";
+import { agentsApi } from "@/api/agents";
+import { heartbeatsApi } from "@/api/heartbeats";
+import { queryKeys } from "@/lib/queryKeys";
+import { issueToV2Status } from "@/lib/cortex-status";
+import { cortexStatusStyles } from "@/lib/cortex-status";
+import { relativeTime, formatCents } from "@/lib/utils";
+import { TopBar } from "@/components/cortex/TopBar";
+import { AgentAvatar } from "@/components/cortex/AgentAvatar";
+import { InteractionMask } from "@/components/cortex/InteractionMask";
+import type { MaskData } from "@/components/cortex/InteractionMask";
+import type { ChatMessage } from "@/components/cortex/MaskChat";
+import type { MaskFile } from "@/components/cortex/MaskFiles";
+import { PageSkeleton } from "@/components/PageSkeleton";
+import { cn } from "@/lib/utils";
+import type { CortexStatus } from "@/lib/cortex-status";
+import type { IssueComment, IssueAttachment } from "@paperclipai/shared";
+
+const STATUS_LABEL: Record<string, string> = {
+  in_progress: "In corso",
+  todo: "Da fare",
+  blocked: "Bloccato",
+  in_review: "In review",
+  done: "Fatto",
+  cancelled: "Annullato",
+  backlog: "Backlog",
+};
+
+export default function CortexIssues() {
+  const { selectedCompanyId } = useCompany();
+  const { selectedProjectId } = useOutletContext<{ selectedProjectId: string | null }>();
+  const [maskOpen, setMaskOpen] = useState(false);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const queryClient = useQueryClient();
+
+  const { data: issues, isLoading } = useQuery({
+    queryKey: queryKeys.issues.list(selectedCompanyId!),
+    queryFn: () => issuesApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: agents } = useQuery({
+    queryKey: queryKeys.agents.list(selectedCompanyId!),
+    queryFn: () => agentsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: liveRuns } = useQuery({
+    queryKey: queryKeys.liveRuns(selectedCompanyId!),
+    queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 8_000,
+  });
+
+  const { data: issueComments } = useQuery({
+    queryKey: queryKeys.issues.comments(selectedIssueId!),
+    queryFn: () => issuesApi.listComments(selectedIssueId!),
+    enabled: !!selectedIssueId,
+  });
+
+  const { data: issueAttachments } = useQuery({
+    queryKey: queryKeys.issues.attachments(selectedIssueId!),
+    queryFn: () => issuesApi.listAttachments(selectedIssueId!),
+    enabled: !!selectedIssueId,
+  });
+
+  const agentMap = useMemo(() => {
+    const m = new Map<string, { name: string; title?: string | null; spentMonthlyCents: number; adapterType: string }>();
+    for (const a of agents ?? []) m.set(a.id, a);
+    return m;
+  }, [agents]);
+
+  const liveRunIssueIds = useMemo(
+    () => new Set((liveRuns ?? []).filter((r) => r.issueId).map((r) => r.issueId as string)),
+    [liveRuns],
+  );
+
+  const filtered = useMemo(() => {
+    const all = issues ?? [];
+    return selectedProjectId ? all.filter((i) => i.projectId === selectedProjectId) : all;
+  }, [issues, selectedProjectId]);
+
+  const searched = useMemo(() => {
+    if (!search.trim()) return filtered;
+    const q = search.toLowerCase();
+    return filtered.filter((i) =>
+      i.title.toLowerCase().includes(q) ||
+      (i.identifier ?? "").toLowerCase().includes(q) ||
+      (i.assigneeAgentId && agentMap.get(i.assigneeAgentId)?.name.toLowerCase().includes(q)),
+    );
+  }, [filtered, search, agentMap]);
+
+  const sorted = useMemo(() => {
+    const order: Record<string, number> = { blocked: 0, in_review: 1, in_progress: 2, todo: 3, backlog: 4, done: 5, cancelled: 6 };
+    return [...searched].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+  }, [searched]);
+
+  const counts = useMemo(() => {
+    const c = { active: 0, blocked: 0, done: 0 };
+    for (const i of filtered) {
+      if (i.status === "blocked" || i.status === "in_review") c.blocked++;
+      else if (i.status === "in_progress" || i.status === "todo") c.active++;
+      else if (i.status === "done") c.done++;
+    }
+    return c;
+  }, [issues]);
+
+  // ── Mask data ──
+
+  const selectedIssue = useMemo(
+    () => selectedIssueId ? (issues ?? []).find((i) => i.id === selectedIssueId) ?? null : null,
+    [selectedIssueId, issues],
+  );
+
+  const maskData: MaskData | null = useMemo(() => {
+    if (!selectedIssue) return null;
+    const agent = selectedIssue.assigneeAgentId ? agentMap.get(selectedIssue.assigneeAgentId) : null;
+    const status = issueToV2Status(selectedIssue.status, {
+      isUnread: selectedIssue.isUnreadForMe ?? false,
+      hasLiveRun: liveRunIssueIds.has(selectedIssue.id),
+    });
+    const messages: ChatMessage[] = (issueComments ?? []).map((c: IssueComment) => ({
+      id: c.id,
+      from: (c.authorAgentId ? "agent" : "ceo") as "agent" | "ceo",
+      text: c.body,
+      timestamp: new Date(c.createdAt).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+    }));
+    const files: MaskFile[] = (issueAttachments ?? []).map((a: IssueAttachment) => {
+      const ext = (a.originalFilename ?? a.objectKey).split(".").pop()?.toLowerCase() ?? "";
+      const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
+      return {
+        icon: isImage ? "🖼" : "📎",
+        name: a.originalFilename ?? a.objectKey,
+        meta: `${(a.byteSize / 1024).toFixed(0)} KB`,
+        time: new Date(a.createdAt).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+        action: "open" as const,
+        href: a.contentPath,
+      };
+    });
+    const liveRun = (liveRuns ?? []).find((r) => r.issueId === selectedIssue.id);
+    const metrics: Array<{ label: string; value: string }> = [];
+    if (liveRun) {
+      metrics.push({ label: "Stato run", value: liveRun.status });
+      if (liveRun.adapterType) metrics.push({ label: "Modello", value: liveRun.adapterType });
+    }
+    if (agent) metrics.push({ label: "Spesa mese", value: formatCents(agent.spentMonthlyCents) });
+
+    return {
+      issueId: selectedIssue.id,
+      issueIdentifier: selectedIssue.identifier ?? undefined,
+      issueTitle: selectedIssue.title,
+      issueDescription: selectedIssue.description ?? undefined,
+      issueStatus: selectedIssue.status,
+      agentId: selectedIssue.assigneeAgentId ?? "",
+      agentName: agent?.name ?? "Non assegnato",
+      agentRole: agent?.title ?? undefined,
+      agentStatus: status,
+      modelTag: agent?.adapterType,
+      costTag: agent ? formatCents(agent.spentMonthlyCents) : undefined,
+      requestMessage: status === "needs-me" ? `Azione richiesta su "${selectedIssue.title}"` : undefined,
+      messages,
+      files,
+      metrics: metrics.length > 0 ? metrics : undefined,
+    };
+  }, [selectedIssue, agentMap, liveRunIssueIds, issueComments, issueAttachments, liveRuns]);
+
+  // ── Actions ──
+
+  const handleRowClick = useCallback((issueId: string) => {
+    setSelectedIssueId(issueId);
+    setMaskOpen(true);
+  }, []);
+
+  const handleSendMessage = useCallback(async (text: string) => {
+    if (!selectedIssueId) return;
+    try {
+      await issuesApi.addComment(selectedIssueId, text);
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(selectedIssueId) });
+    } catch (e) {
+      console.error("[Cortex] handleSendMessage failed:", e);
+    }
+  }, [selectedIssueId, queryClient]);
+
+  const handleApprove = useCallback(async () => {
+    if (!selectedIssueId) return;
+    try {
+      await issuesApi.addComment(selectedIssueId, "✅ Approvato dal CEO.");
+      await issuesApi.update(selectedIssueId, { status: "done" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(selectedIssueId) });
+      setMaskOpen(false);
+    } catch (e) {
+      console.error("[Cortex] handleApprove failed:", e);
+    }
+  }, [selectedIssueId, selectedCompanyId, queryClient]);
+
+  const handleRevise = useCallback(async () => {
+    if (!selectedIssueId) return;
+    try {
+      await issuesApi.addComment(selectedIssueId, "🔄 Revisione richiesta dal CEO.", true);
+      await issuesApi.update(selectedIssueId, { status: "in_progress" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(selectedIssueId) });
+      setMaskOpen(false);
+    } catch (e) {
+      console.error("[Cortex] handleRevise failed:", e);
+    }
+  }, [selectedIssueId, selectedCompanyId, queryClient]);
+
+  const handleReject = useCallback(async () => {
+    if (!selectedIssueId) return;
+    try {
+      await issuesApi.addComment(selectedIssueId, "❌ Rifiutato dal CEO.");
+      await issuesApi.update(selectedIssueId, { status: "cancelled" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(selectedIssueId) });
+      setMaskOpen(false);
+    } catch (e) {
+      console.error("[Cortex] handleReject failed:", e);
+    }
+  }, [selectedIssueId, selectedCompanyId, queryClient]);
+
+  const handleCloseMask = useCallback(() => {
+    setMaskOpen(false);
+    if (selectedIssueId) issuesApi.markRead(selectedIssueId).catch(() => {});
+  }, [selectedIssueId]);
+
+  if (isLoading) return <PageSkeleton variant="inbox" />;
+
+  return (
+    <div className="relative flex h-full flex-col overflow-hidden bg-[#060810] text-white">
+      <TopBar
+        title="Issues"
+        chip={`${sorted.length} totali`}
+        kpis={[
+          { value: String(counts.blocked), label: "bloccati", hot: counts.blocked > 0 },
+          { value: String(counts.active), label: "attivi" },
+          { value: String(counts.done), label: "completati" },
+        ]}
+      />
+
+      {/* Search */}
+      <div className="flex items-center gap-2 border-b border-white/[0.06] px-5 py-2">
+        <svg className="h-3.5 w-3.5 text-white/35" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cerca per titolo, ID o agente..."
+          className="flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/30"
+        />
+        {search && (
+          <button onClick={() => setSearch("")} className="text-[10px] text-white/35 hover:text-white/60">✕</button>
+        )}
+      </div>
+
+      {/* Table header */}
+      <div className="flex items-center border-b border-white/[0.06] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/35">
+        <span className="w-[60px]">ID</span>
+        <span className="flex-1">Titolo</span>
+        <span className="w-[160px]">Agente</span>
+        <span className="w-[100px]">Stato</span>
+        <span className="w-[80px] text-right">Aggiornato</span>
+      </div>
+
+      {/* Table rows */}
+      <div className="flex-1 overflow-y-auto">
+        {sorted.map((issue) => {
+          const agent = issue.assigneeAgentId ? agentMap.get(issue.assigneeAgentId) : null;
+          const status: CortexStatus = issueToV2Status(issue.status, {
+            hasLiveRun: liveRunIssueIds.has(issue.id),
+          });
+          const s = cortexStatusStyles[status];
+
+          return (
+            <button
+              key={issue.id}
+              onClick={() => handleRowClick(issue.id)}
+              className={cn(
+                "flex w-full items-center border-b border-white/[0.02] px-5 py-2.5 text-left transition-colors hover:bg-white/[0.03]",
+                selectedIssueId === issue.id && maskOpen && "bg-white/[0.04]",
+              )}
+            >
+              <span className="w-[60px] font-mono text-[11px] text-white/45">
+                {issue.identifier ?? "—"}
+              </span>
+              <div className="flex min-w-0 flex-1 items-center gap-2.5 pr-3">
+                <span className="truncate text-[13px]">{issue.title}</span>
+              </div>
+              <div className="flex w-[160px] items-center gap-2">
+                {agent ? (
+                  <>
+                    <AgentAvatar name={agent.name} status={status} size="sm" />
+                    <span className="truncate text-[11px] text-white/60">{agent.name}</span>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-white/35">—</span>
+                )}
+              </div>
+              <div className="w-[100px]">
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium",
+                  s.bg, s.text,
+                )}>
+                  <span className={cn("h-[5px] w-[5px] rounded-full", s.dot)} />
+                  {STATUS_LABEL[issue.status] ?? issue.status}
+                </span>
+              </div>
+              <span className="w-[80px] text-right font-mono text-[10px] text-white/35">
+                {relativeTime(issue.updatedAt)}
+              </span>
+            </button>
+          );
+        })}
+
+        {sorted.length === 0 && (
+          <div className="flex flex-col items-center justify-center gap-2 pt-32 text-white/35">
+            <span className="text-[32px]">📋</span>
+            <span className="text-[12px]">Nessuna issue</span>
+          </div>
+        )}
+      </div>
+
+      <InteractionMask
+        open={maskOpen}
+        data={maskData}
+        onClose={handleCloseMask}
+        onApprove={handleApprove}
+        onRevise={handleRevise}
+        onReject={handleReject}
+        onSendMessage={handleSendMessage}
+      />
+    </div>
+  );
+}

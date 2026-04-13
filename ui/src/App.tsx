@@ -6,6 +6,7 @@ import { OnboardingWizard } from "./components/OnboardingWizard";
 import { authApi } from "./api/auth";
 import { healthApi } from "./api/health";
 import { Dashboard } from "./pages/Dashboard";
+import { ProjectBoard } from "./pages/ProjectBoard";
 import { Companies } from "./pages/Companies";
 import { Agents } from "./pages/Agents";
 import { AgentDetail } from "./pages/AgentDetail";
@@ -46,6 +47,12 @@ import { BoardClaimPage } from "./pages/BoardClaim";
 import { CliAuthPage } from "./pages/CliAuth";
 import { InviteLandingPage } from "./pages/InviteLanding";
 import { NotFoundPage } from "./pages/NotFound";
+import { CortexLayout } from "./pages/cortex/CortexLayout";
+import CortexDashboard from "./pages/cortex/CortexDashboard";
+import CortexInbox from "./pages/cortex/CortexInbox";
+import CortexIssues from "./pages/cortex/CortexIssues";
+import CortexCosts from "./pages/cortex/CortexCosts";
+import CortexSettings from "./pages/cortex/CortexSettings";
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
@@ -124,6 +131,7 @@ function boardRoutes() {
     <>
       <Route index element={<Navigate to="dashboard" replace />} />
       <Route path="dashboard" element={<Dashboard />} />
+      <Route path="board" element={<ProjectBoard />} />
       <Route path="office" element={<PixelOffice />} />
       <Route path="onboarding" element={<OnboardingRoutePage />} />
       <Route path="companies" element={<Companies />} />
@@ -380,6 +388,15 @@ export function App() {
           <Route path="office" element={<UnprefixedBoardRedirect />} />
           <Route path=":companyPrefix" element={<Layout />}>
             {boardRoutes()}
+          </Route>
+          <Route path=":companyPrefix/cortex" element={<CortexLayout />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<CortexDashboard />} />
+            <Route path="inbox" element={<CortexInbox />} />
+            <Route path="issues" element={<CortexIssues />} />
+            <Route path="office" element={<PixelOffice />} />
+            <Route path="costs" element={<CortexCosts />} />
+            <Route path="settings" element={<CortexSettings />} />
           </Route>
           <Route path="*" element={<NotFoundPage scope="global" />} />
         </Route>
