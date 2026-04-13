@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { RefreshCw, Zap, AlertCircle, CheckCircle2 } from "lucide-react";
 import { AgentAvatar } from "./AgentAvatar";
 import { issueToV2Status } from "@/lib/cortex-status";
 import type { CortexStatus } from "@/lib/cortex-status";
@@ -20,11 +21,11 @@ interface ActivityFeedProps {
   className?: string;
 }
 
-const TYPE_ICON: Record<string, string> = {
-  status: "🔄",
-  running: "⚡",
-  blocked: "✋",
-  done: "✅",
+const TYPE_ICON: Record<string, React.ReactNode> = {
+  status: <RefreshCw className="h-3.5 w-3.5 text-white/40" />,
+  running: <Zap className="h-3.5 w-3.5 text-[#67e8f9]" />,
+  blocked: <AlertCircle className="h-3.5 w-3.5 text-[#fcd34d]" />,
+  done: <CheckCircle2 className="h-3.5 w-3.5 text-[#6ee7b7]" />,
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -51,7 +52,7 @@ export function ActivityFeed({ items, onItemClick, className }: ActivityFeedProp
               onClick={() => onItemClick?.(item.id)}
               className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.03]"
             >
-              <span className="text-[12px]">{TYPE_ICON[item.type]}</span>
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center">{TYPE_ICON[item.type]}</span>
               <div className="min-w-0 flex-1">
                 <span className="truncate text-[11px] text-white/60">{item.title}</span>
                 <span className="ml-1.5 text-[10px] text-white/30">{TYPE_LABEL[item.type]}</span>

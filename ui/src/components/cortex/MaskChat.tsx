@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { MessageCircle } from "lucide-react";
 import { OutputPreviewCard } from "./OutputPreviewCard";
 import { FilePill } from "./FilePill";
 
@@ -95,7 +96,7 @@ export function MaskChat({ messages, isLoading }: MaskChatProps) {
   if (messages.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 text-white/35">
-        <span className="text-[32px]">💬</span>
+        <MessageCircle className="h-8 w-8 text-white/15" />
         <span className="text-[12px]">Nessun messaggio</span>
       </div>
     );

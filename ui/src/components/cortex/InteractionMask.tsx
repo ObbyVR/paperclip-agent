@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "./AgentAvatar";
 import { MaskChat, type ChatMessage } from "./MaskChat";
@@ -106,7 +106,7 @@ export function InteractionMask({ open, data, chatLoading, onClose, onApprove, o
       {/* Request banner */}
       {data.requestMessage && (
         <div className="flex items-center gap-2.5 border-b border-[rgba(252,211,77,0.08)] bg-[rgba(252,211,77,0.08)] px-5 py-2.5 text-[13px] font-medium text-[#fcd34d]">
-          <span className="shrink-0">✋</span>{data.requestMessage}
+          <AlertCircle className="h-4 w-4 shrink-0" />{data.requestMessage}
         </div>
       )}
 

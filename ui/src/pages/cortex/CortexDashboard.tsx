@@ -18,6 +18,7 @@ import type { MaskData } from "@/components/cortex/InteractionMask";
 import type { ChatMessage } from "@/components/cortex/MaskChat";
 import type { MaskFile } from "@/components/cortex/MaskFiles";
 import type { AgentNodeData } from "@/components/cortex/AgentNode";
+import { Globe, AlertCircle, Zap } from "lucide-react";
 import { ActivityFeed, buildActivityItems } from "@/components/cortex/ActivityFeed";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import type { IssueComment, IssueAttachment } from "@paperclipai/shared";
@@ -417,7 +418,7 @@ export default function CortexDashboard() {
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-white/30">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-400/[0.06]">
-            <span className="text-[36px]">🌐</span>
+            <Globe className="h-10 w-10 text-indigo-400/40" />
           </div>
           <span className="text-[14px] font-medium text-white/45">
             {projectId ? "Nessun task attivo in questo progetto" : "Nessun progetto attivo"}
@@ -433,12 +434,12 @@ export default function CortexDashboard() {
         <div className="flex flex-wrap gap-2 border-t border-white/[0.04] px-4 py-2.5 md:px-7">
           {pendingDecisions > 0 && (
             <button onClick={() => navigateTo("inbox")} className="flex items-center gap-1.5 rounded-full border border-[rgba(252,211,77,0.12)] bg-[rgba(252,211,77,0.06)] px-3 py-1.5 text-[11px] font-medium text-[#fcd34d] transition-all hover:bg-[rgba(252,211,77,0.12)]">
-              <span>✋</span> {pendingDecisions} da decidere
+              <AlertCircle className="h-3.5 w-3.5" /> {pendingDecisions} da decidere
             </button>
           )}
           {activeTasks > 0 && (
             <button onClick={() => navigateTo("issues")} className="flex items-center gap-1.5 rounded-full border border-[rgba(103,232,249,0.12)] bg-[rgba(103,232,249,0.06)] px-3 py-1.5 text-[11px] font-medium text-[#67e8f9] transition-all hover:bg-[rgba(103,232,249,0.12)]">
-              <span>⚡</span> {activeTasks} task attivi
+              <Zap className="h-3.5 w-3.5" /> {activeTasks} task attivi
             </button>
           )}
         </div>

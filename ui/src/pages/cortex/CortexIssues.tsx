@@ -6,9 +6,9 @@ import { issuesApi } from "@/api/issues";
 import { agentsApi } from "@/api/agents";
 import { heartbeatsApi } from "@/api/heartbeats";
 import { queryKeys } from "@/lib/queryKeys";
-import { issueToV2Status } from "@/lib/cortex-status";
-import { cortexStatusStyles } from "@/lib/cortex-status";
+import { issueToV2Status, cortexStatusStyles } from "@/lib/cortex-status";
 import { relativeTime, formatCents } from "@/lib/utils";
+import { ClipboardList } from "lucide-react";
 import { TopBar } from "@/components/cortex/TopBar";
 import { AgentAvatar } from "@/components/cortex/AgentAvatar";
 import { InteractionMask } from "@/components/cortex/InteractionMask";
@@ -487,7 +487,7 @@ export default function CortexIssues() {
 
         {sorted.length === 0 && (
           <div className="flex flex-col items-center justify-center gap-2 pt-32 text-white/35">
-            <span className="text-[32px]">📋</span>
+            <ClipboardList className="h-8 w-8 text-white/15" />
             <span className="text-[12px]">Nessuna issue</span>
           </div>
         )}

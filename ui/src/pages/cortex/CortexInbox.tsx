@@ -8,6 +8,7 @@ import { heartbeatsApi } from "@/api/heartbeats";
 import { queryKeys } from "@/lib/queryKeys";
 import { issueToV2Status } from "@/lib/cortex-status";
 import { relativeTime, formatCents } from "@/lib/utils";
+import { InboxIcon } from "lucide-react";
 import { TopBar } from "@/components/cortex/TopBar";
 import { InboxSection } from "@/components/cortex/InboxSection";
 import { InboxItem } from "@/components/cortex/InboxItem";
@@ -335,7 +336,7 @@ export default function CortexInbox() {
 
         {!issues?.length && (
           <div className="flex flex-col items-center justify-center gap-2 pt-32 text-white/30">
-            <span className="text-[40px]">&#x1F4ED;</span>
+            <InboxIcon className="h-10 w-10 text-white/15" />
             <span className="text-[14px]">Nessun task in inbox</span>
           </div>
         )}

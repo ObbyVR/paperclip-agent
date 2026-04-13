@@ -1,4 +1,4 @@
-import { ExternalLink, Download } from "lucide-react";
+import { ExternalLink, Download, FolderOpen } from "lucide-react";
 
 export interface MaskFile {
   icon: string;
@@ -15,7 +15,7 @@ export function MaskFiles({ files }: MaskFilesProps) {
   if (files.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 text-white/35">
-        <span className="text-[32px]">📁</span>
+        <FolderOpen className="h-8 w-8 text-white/15" />
         <span className="text-[12px]">Nessun file allegato</span>
       </div>
     );

@@ -1,3 +1,4 @@
+import { ClipboardList } from "lucide-react";
 import { cortexStatusStyles } from "@/lib/cortex-status";
 import type { CortexStatus } from "@/lib/cortex-status";
 import { cn } from "@/lib/utils";
@@ -86,7 +87,7 @@ export function MaskDetails({ issueTitle, issueIdentifier, issueDescription, iss
       {/* Empty state only if nothing at all */}
       {!issueTitle && !unlockExplanation && (!subTasks || subTasks.length === 0) && (!metrics || metrics.length === 0) && (
         <div className="flex flex-col items-center justify-center gap-2 pt-16 text-white/35">
-          <span className="text-[32px]">📋</span>
+          <ClipboardList className="h-8 w-8 text-white/15" />
           <span className="text-[12px]">Nessun dettaglio disponibile</span>
         </div>
       )}

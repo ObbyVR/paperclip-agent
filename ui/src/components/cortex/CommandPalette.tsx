@@ -7,13 +7,13 @@ import { issuesApi } from "@/api/issues";
 import { agentsApi } from "@/api/agents";
 import { queryKeys } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { Search, ArrowRight } from "lucide-react";
+import { Search, ArrowRight, Sun, Inbox, CircleDot, Monitor, DollarSign, Settings, FolderOpen, ClipboardList } from "lucide-react";
 
 interface CommandItem {
   id: string;
   label: string;
   sublabel?: string;
-  icon: string;
+  icon: React.ReactNode;
   action: () => void;
   category: "nav" | "project" | "issue" | "agent";
 }
@@ -52,13 +52,14 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     const items: CommandItem[] = [];
 
     // Nav items
-    const navItems = [
-      { id: "nav-dashboard", label: "Dashboard", icon: "☀", path: "dashboard" },
-      { id: "nav-inbox", label: "Inbox", icon: "📥", path: "inbox" },
-      { id: "nav-issues", label: "Issues", icon: "⊙", path: "issues" },
-      { id: "nav-office", label: "Pixel Office", icon: "🖥", path: "office" },
-      { id: "nav-costs", label: "Costi", icon: "💰", path: "costs" },
-      { id: "nav-settings", label: "Settings", icon: "⚙", path: "settings" },
+    const iconCls = "h-4 w-4 text-white/40";
+    const navItems: Array<{ id: string; label: string; icon: React.ReactNode; path: string }> = [
+      { id: "nav-dashboard", label: "Dashboard", icon: <Sun className={iconCls} />, path: "dashboard" },
+      { id: "nav-inbox", label: "Inbox", icon: <Inbox className={iconCls} />, path: "inbox" },
+      { id: "nav-issues", label: "Issues", icon: <CircleDot className={iconCls} />, path: "issues" },
+      { id: "nav-office", label: "Pixel Office", icon: <Monitor className={iconCls} />, path: "office" },
+      { id: "nav-costs", label: "Costi", icon: <DollarSign className={iconCls} />, path: "costs" },
+      { id: "nav-settings", label: "Settings", icon: <Settings className={iconCls} />, path: "settings" },
     ];
     for (const n of navItems) {
       items.push({ ...n, category: "nav", action: () => { navigate(n.path); onClose(); } });
@@ -70,7 +71,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         id: `proj-${p.id}`,
         label: p.name,
         sublabel: "Progetto",
-        icon: "📁",
+        icon: <FolderOpen className="h-4 w-4 text-white/40" />,
         category: "project",
         action: () => { navigate("dashboard"); onClose(); },
       });
@@ -86,7 +87,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         id: `issue-${i.id}`,
         label: i.title,
         sublabel: [i.identifier, agent?.name].filter(Boolean).join(" · "),
-        icon: "📋",
+        icon: <ClipboardList className="h-4 w-4 text-white/40" />,
         category: "issue",
         action: () => { navigate(`issues/${i.id}`); onClose(); },
       });
@@ -192,7 +193,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                     selectedIdx === i ? "bg-indigo-400/[0.12]" : "hover:bg-white/[0.03]",
                   )}
                 >
-                  <span className="w-5 text-center text-[14px]">{item.icon}</span>
+                  <span className="flex w-5 items-center justify-center">{item.icon}</span>
                   <div className="min-w-0 flex-1">
                     <span className="text-[13px] font-medium text-white">{item.label}</span>
                     {item.sublabel && (

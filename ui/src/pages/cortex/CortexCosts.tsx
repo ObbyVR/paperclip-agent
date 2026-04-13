@@ -6,6 +6,7 @@ import { agentsApi } from "@/api/agents";
 import { dashboardApi } from "@/api/dashboard";
 import { queryKeys } from "@/lib/queryKeys";
 import { formatCents } from "@/lib/utils";
+import { Coins } from "lucide-react";
 import { TopBar } from "@/components/cortex/TopBar";
 import { AgentAvatar } from "@/components/cortex/AgentAvatar";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -147,7 +148,7 @@ export default function CortexCosts() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 pt-20 text-white/35">
-            <span className="text-[32px]">💰</span>
+            <Coins className="h-8 w-8 text-white/15" />
             <span className="text-[12px]">Nessuna spesa questo mese</span>
           </div>
         )}
