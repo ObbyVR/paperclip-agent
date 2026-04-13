@@ -39,6 +39,7 @@ export default function CortexIssues() {
   const [dragOrder, setDragOrder] = useState<string[] | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [statusDropdownId, setStatusDropdownId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const dragSrcId = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -259,6 +260,34 @@ export default function CortexIssues() {
     }
   }, [selectedCompanyId, queryClient]);
 
+  const handleBulkAction = useCallback(async (newStatus: string) => {
+    if (selected.size === 0) return;
+    const msg = newStatus === "done" ? "✅ Approvato dal CEO (bulk)." : newStatus === "cancelled" ? "❌ Rifiutato dal CEO (bulk)." : "🔄 Revisione richiesta (bulk).";
+    try {
+      await Promise.all([...selected].map(async (id) => {
+        await issuesApi.addComment(id, msg, newStatus === "in_progress");
+        await issuesApi.update(id, { status: newStatus });
+      }));
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      setSelected(new Set());
+    } catch (e) {
+      console.error("[Cortex] bulkAction failed:", e);
+    }
+  }, [selected, selectedCompanyId, queryClient]);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selected.size === sorted.length) setSelected(new Set());
+    else setSelected(new Set(sorted.map((i) => i.id)));
+  }, [selected.size, sorted]);
+
   const handleCloseMask = useCallback(() => {
     setMaskOpen(false);
     if (selectedIssueId) issuesApi.markRead(selectedIssueId).catch(() => {});
@@ -294,8 +323,27 @@ export default function CortexIssues() {
         )}
       </div>
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 border-b border-indigo-400/[0.15] bg-indigo-400/[0.06] px-4 py-2 md:px-5">
+          <span className="text-[11px] font-medium text-indigo-400">{selected.size} selezionat{selected.size === 1 ? "o" : "i"}</span>
+          <div className="ml-auto flex gap-1.5">
+            <button onClick={() => handleBulkAction("done")} className="rounded-md bg-[#6ee7b7] px-3 py-1 text-[10px] font-semibold text-[#0b0d15] transition-all hover:brightness-110">Approva</button>
+            <button onClick={() => handleBulkAction("in_progress")} className="rounded-md border border-[rgba(252,211,77,0.15)] bg-[rgba(252,211,77,0.08)] px-3 py-1 text-[10px] font-semibold text-[#fcd34d]">Revisione</button>
+            <button onClick={() => handleBulkAction("cancelled")} className="rounded-md border border-[rgba(252,165,165,0.15)] bg-[rgba(252,165,165,0.08)] px-3 py-1 text-[10px] font-semibold text-[#fca5a5]">Rifiuta</button>
+            <button onClick={() => setSelected(new Set())} className="ml-1 text-[10px] text-white/35 hover:text-white/60">Deseleziona</button>
+          </div>
+        </div>
+      )}
+
       {/* Table header */}
       <div className="flex items-center border-b border-white/[0.06] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/35 md:px-5">
+        <input
+          type="checkbox"
+          checked={sorted.length > 0 && selected.size === sorted.length}
+          onChange={toggleSelectAll}
+          className="mr-2 h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-white/20 bg-transparent accent-indigo-400"
+        />
         <span className="hidden w-[60px] sm:block">ID</span>
         <span className="flex-1">Titolo</span>
         <span className="hidden w-[160px] md:block">Agente</span>
@@ -341,6 +389,13 @@ export default function CortexIssues() {
                 dragOverId === issue.id && "border-t-2 border-t-indigo-400",
               )}
             >
+              <input
+                type="checkbox"
+                checked={selected.has(issue.id)}
+                onChange={(e) => { e.stopPropagation(); toggleSelect(issue.id); }}
+                onClick={(e) => e.stopPropagation()}
+                className="mr-2 h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-white/20 bg-transparent accent-indigo-400"
+              />
               <span className="mr-1 hidden w-4 cursor-grab text-center text-[10px] text-white/20 active:cursor-grabbing sm:block">⋮⋮</span>
               <span className="hidden w-[60px] font-mono text-[11px] text-white/45 sm:block">
                 {issue.identifier ?? "—"}

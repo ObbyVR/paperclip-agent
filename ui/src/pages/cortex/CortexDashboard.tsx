@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useNavigate } from "@/lib/router";
 import { useOutletContext } from "@/lib/router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "@/context/CompanyContext";
@@ -17,6 +18,7 @@ import type { MaskData } from "@/components/cortex/InteractionMask";
 import type { ChatMessage } from "@/components/cortex/MaskChat";
 import type { MaskFile } from "@/components/cortex/MaskFiles";
 import type { AgentNodeData } from "@/components/cortex/AgentNode";
+import { ActivityFeed, buildActivityItems } from "@/components/cortex/ActivityFeed";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import type { IssueComment, IssueAttachment } from "@paperclipai/shared";
 
@@ -29,6 +31,7 @@ interface CortexOutletContext {
 
 export default function CortexDashboard() {
   const { selectedProjectId: projectId, setSelectedProjectId, onMobileMenuOpen, onSearchOpen } = useOutletContext<CortexOutletContext>();
+  const navigateTo = useNavigate();
   const { selectedCompanyId } = useCompany();
   const [maskOpen, setMaskOpen] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
@@ -93,6 +96,39 @@ export default function CortexDashboard() {
     for (const a of agents ?? []) m.set(a.id, a);
     return m;
   }, [agents]);
+
+  const agentNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of agents ?? []) m.set(a.id, a.name);
+    return m;
+  }, [agents]);
+
+  // Refresh timestamp
+  const [lastRefresh, setLastRefresh] = useState(() => new Date());
+  const refreshInterval = useRef<ReturnType<typeof setInterval>>(undefined);
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    setLastRefresh(new Date());
+  }, [allIssues, liveRuns]);
+  // Force re-render every 10s to update "ago" text
+  useEffect(() => {
+    refreshInterval.current = setInterval(() => forceUpdate((n) => n + 1), 10_000);
+    return () => clearInterval(refreshInterval.current);
+  }, []);
+
+  const refreshAgo = useMemo(() => {
+    const secs = Math.round((Date.now() - lastRefresh.getTime()) / 1000);
+    if (secs < 5) return "adesso";
+    if (secs < 60) return `${secs}s fa`;
+    return `${Math.round(secs / 60)}m fa`;
+  }, [lastRefresh, forceUpdate]);
+
+  const activityItems = useMemo(() => {
+    const filteredIssues = projectId
+      ? (allIssues ?? []).filter((i) => i.projectId === projectId)
+      : (allIssues ?? []);
+    return buildActivityItems(filteredIssues, agentNameMap, liveIssueIds);
+  }, [allIssues, agentNameMap, liveIssueIds, projectId]);
 
   // ── Graph nodes: depends on whether a project is selected ──
 
@@ -375,6 +411,32 @@ export default function CortexDashboard() {
           </span>
         </div>
       )}
+
+      {/* Quick actions */}
+      {(pendingDecisions > 0 || activeTasks > 0) && (
+        <div className="flex flex-wrap gap-2 border-t border-white/[0.04] px-4 py-2.5 md:px-7">
+          {pendingDecisions > 0 && (
+            <button onClick={() => navigateTo("inbox")} className="flex items-center gap-1.5 rounded-full border border-[rgba(252,211,77,0.12)] bg-[rgba(252,211,77,0.06)] px-3 py-1.5 text-[11px] font-medium text-[#fcd34d] transition-all hover:bg-[rgba(252,211,77,0.12)]">
+              <span>✋</span> {pendingDecisions} da decidere
+            </button>
+          )}
+          {activeTasks > 0 && (
+            <button onClick={() => navigateTo("issues")} className="flex items-center gap-1.5 rounded-full border border-[rgba(103,232,249,0.12)] bg-[rgba(103,232,249,0.06)] px-3 py-1.5 text-[11px] font-medium text-[#67e8f9] transition-all hover:bg-[rgba(103,232,249,0.12)]">
+              <span>⚡</span> {activeTasks} task attivi
+            </button>
+          )}
+        </div>
+      )}
+
+      <ActivityFeed
+        items={activityItems}
+        onItemClick={(issueId) => { setSelectedIssueId(issueId); setMaskOpen(true); }}
+      />
+
+      {/* Refresh indicator */}
+      <div className="flex items-center justify-end border-t border-white/[0.03] px-4 py-1.5 md:px-7">
+        <span className="text-[9px] text-white/15">Aggiornato {refreshAgo}</span>
+      </div>
 
       <InteractionMask
         open={maskOpen}

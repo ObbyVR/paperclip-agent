@@ -54,6 +54,7 @@ import CortexIssues from "./pages/cortex/CortexIssues";
 import CortexCosts from "./pages/cortex/CortexCosts";
 import CortexSettings from "./pages/cortex/CortexSettings";
 import CortexIssueDetail from "./pages/cortex/CortexIssueDetail";
+import CortexAgentProfile from "./pages/cortex/CortexAgentProfile";
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
@@ -399,6 +400,7 @@ export function App() {
             <Route path="office" element={<PixelOffice />} />
             <Route path="costs" element={<CortexCosts />} />
             <Route path="settings" element={<CortexSettings />} />
+            <Route path="agents/:agentId" element={<CortexAgentProfile />} />
           </Route>
           <Route path="*" element={<NotFoundPage scope="global" />} />
         </Route>

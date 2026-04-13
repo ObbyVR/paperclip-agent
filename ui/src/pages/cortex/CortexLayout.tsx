@@ -1,5 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Outlet, useLocation } from "@/lib/router";
+import { useQuery } from "@tanstack/react-query";
+import { useCompany } from "@/context/CompanyContext";
+import { issuesApi } from "@/api/issues";
+import { queryKeys } from "@/lib/queryKeys";
 import { CortexSidebar } from "@/components/cortex/CortexSidebar";
 import { CommandPalette } from "@/components/cortex/CommandPalette";
 import { KeyboardHelp } from "@/components/cortex/KeyboardHelp";
@@ -10,6 +14,25 @@ export function CortexLayout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const location = useLocation();
+  const { selectedCompanyId } = useCompany();
+
+  // Fetch issues for tab title badge
+  const { data: issues } = useQuery({
+    queryKey: queryKeys.issues.list(selectedCompanyId!),
+    queryFn: () => issuesApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const urgentCount = useMemo(
+    () => (issues ?? []).filter((i) => i.status === "blocked" || i.status === "in_review").length,
+    [issues],
+  );
+
+  // Update document title with badge
+  useEffect(() => {
+    document.title = urgentCount > 0 ? `(${urgentCount}) Cortex` : "Cortex";
+    return () => { document.title = "Paperclip"; };
+  }, [urgentCount]);
 
   // Extract base path segment for route-level key (ignore nested params)
   const routeKey = location.pathname.split("/").slice(0, 4).join("/");

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useOutletContext } from "@/lib/router";
+import { useOutletContext, useNavigate } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { useCompany } from "@/context/CompanyContext";
 import { agentsApi } from "@/api/agents";
@@ -31,6 +31,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 export default function CortexSettings() {
   const { onMobileMenuOpen, onSearchOpen } = useOutletContext<{ onMobileMenuOpen?: () => void; onSearchOpen?: () => void }>();
   const { selectedCompanyId, selectedCompany } = useCompany();
+  const navigate = useNavigate();
 
   const { data: agents, isLoading } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -66,7 +67,7 @@ export default function CortexSettings() {
         <SettingsSection title={`Agenti (${activeAgents.length})`}>
           <div className="space-y-1">
             {activeAgents.map((agent) => (
-              <div key={agent.id} className="flex items-center gap-2.5 rounded-lg border border-white/[0.02] bg-[#161a27] px-3 py-2.5 md:gap-3 md:px-4 md:py-3">
+              <button key={agent.id} onClick={() => navigate(`../agents/${agent.id}`)} className="flex w-full items-center gap-2.5 rounded-lg border border-white/[0.02] bg-[#161a27] px-3 py-2.5 text-left transition-colors hover:border-white/[0.06] hover:bg-[#1e2233] md:gap-3 md:px-4 md:py-3">
                 <AgentAvatar name={agent.name} status={agent.status === "error" ? "error" : "idle"} size="sm" />
                 <div className="min-w-0 flex-1">
                   <div className="text-[12px] font-medium md:text-[12.5px]">{agent.name}</div>
@@ -82,7 +83,7 @@ export default function CortexSettings() {
                   {agent.status}
                 </span>
                 <span className="hidden font-mono text-[10px] text-white/35 sm:block">{agent.adapterType}</span>
-              </div>
+              </button>
             ))}
           </div>
         </SettingsSection>
