@@ -42,9 +42,12 @@ export default function CortexIssueDetail() {
   });
 
   const issue = useMemo(
-    () => (issues ?? []).find((i) => i.id === issueId) ?? null,
+    () => (issues ?? []).find((i) => i.id === issueId || i.identifier === issueId) ?? null,
     [issues, issueId],
   );
+
+  // Resolve actual ID for API calls (in case we matched by identifier)
+  const resolvedIssueId = issue?.id ?? issueId;
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -60,15 +63,15 @@ export default function CortexIssueDetail() {
   });
 
   const { data: comments, isLoading: commentsLoading } = useQuery({
-    queryKey: queryKeys.issues.comments(issueId!),
-    queryFn: () => issuesApi.listComments(issueId!),
-    enabled: !!issueId,
+    queryKey: queryKeys.issues.comments(resolvedIssueId!),
+    queryFn: () => issuesApi.listComments(resolvedIssueId!),
+    enabled: !!resolvedIssueId,
   });
 
   const { data: attachments } = useQuery({
-    queryKey: queryKeys.issues.attachments(issueId!),
-    queryFn: () => issuesApi.listAttachments(issueId!),
-    enabled: !!issueId,
+    queryKey: queryKeys.issues.attachments(resolvedIssueId!),
+    queryFn: () => issuesApi.listAttachments(resolvedIssueId!),
+    enabled: !!resolvedIssueId,
   });
 
   const agent = useMemo(() => {
@@ -129,30 +132,30 @@ export default function CortexIssueDetail() {
 
   // Actions
   const doSend = useCallback(async () => {
-    if (!input.trim() || sending || !issueId) return;
+    if (!input.trim() || sending || !resolvedIssueId) return;
     setSending(true);
     try {
-      await issuesApi.addComment(issueId, input.trim());
-      queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId) });
+      await issuesApi.addComment(resolvedIssueId, input.trim());
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(resolvedIssueId) });
       setInput("");
     } finally {
       setSending(false);
     }
-  }, [input, sending, issueId, queryClient]);
+  }, [input, sending, resolvedIssueId, queryClient]);
 
   const handleAction = useCallback(async (action: "approve" | "revise" | "reject") => {
-    if (!issueId) return;
+    if (!resolvedIssueId) return;
     try {
       const msg = action === "approve" ? "✅ Approvato dal CEO." : action === "revise" ? "🔄 Revisione richiesta dal CEO." : "❌ Rifiutato dal CEO.";
       const newStatus = action === "approve" ? "done" : action === "revise" ? "in_progress" : "cancelled";
-      await issuesApi.addComment(issueId, msg, action === "revise");
-      await issuesApi.update(issueId, { status: newStatus });
+      await issuesApi.addComment(resolvedIssueId, msg, action === "revise");
+      await issuesApi.update(resolvedIssueId, { status: newStatus });
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(resolvedIssueId) });
     } catch (e) {
       console.error("[Cortex] action failed:", e);
     }
-  }, [issueId, selectedCompanyId, queryClient]);
+  }, [resolvedIssueId, selectedCompanyId, queryClient]);
 
   if (!issue) return <PageSkeleton variant="inbox" />;
 
