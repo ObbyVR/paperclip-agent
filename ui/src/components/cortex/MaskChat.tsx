@@ -3,6 +3,20 @@ import { cn } from "@/lib/utils";
 import { OutputPreviewCard } from "./OutputPreviewCard";
 import { FilePill } from "./FilePill";
 
+/**
+ * Rewrite internal Paperclip links to point to Cortex routes.
+ * E.g. /WEB/issues/WEB-123 → /WEB/cortex/issues/<id>
+ *      /WEB/inbox → /WEB/cortex/inbox
+ */
+function rewriteInternalUrl(url: string): string {
+  // Match /:prefix/issues/:id or /:prefix/inbox etc. (not already /cortex/)
+  return url
+    .replace(/\/([^/]+)\/(inbox|issues|dashboard|settings)(\/|$)/g, (match, prefix, page, trail) => {
+      if (match.includes("/cortex/")) return match;
+      return `/${prefix}/cortex/${page}${trail}`;
+    });
+}
+
 /** Minimal markdown-to-HTML for chat bubbles */
 function miniMarkdown(text: string): string {
   // Escape HTML
@@ -36,7 +50,10 @@ function miniMarkdown(text: string): string {
     .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-white/90">$1</strong>')
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/`([^`]+)`/g, '<code class="rounded bg-white/[0.08] px-1.5 py-0.5 text-[11px] font-mono text-white/70">$1</code>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" class="text-indigo-400 underline decoration-indigo-400/30 hover:decoration-indigo-400">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, url) => {
+      const rewritten = rewriteInternalUrl(url);
+      return `<a href="${rewritten}" target="_blank" rel="noreferrer" class="text-indigo-400 underline decoration-indigo-400/30 hover:decoration-indigo-400">${label}</a>`;
+    });
 
   // Remaining newlines → <br>
   html = html.replace(/\n/g, "<br>");
