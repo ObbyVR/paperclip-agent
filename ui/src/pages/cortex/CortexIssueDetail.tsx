@@ -85,14 +85,36 @@ export default function CortexIssueDetail() {
     return issueToV2Status(issue.status, { isUnread: issue.isUnreadForMe, hasLiveRun });
   }, [issue, liveRuns]);
 
+  // Build attachment map by commentId for inline file display
+  const attachmentsByComment = useMemo(() => {
+    const map = new Map<string, Array<{ icon?: string; name: string; size?: string; href?: string }>>();
+    for (const a of attachments ?? []) {
+      if (!a.issueCommentId) continue;
+      const ext = (a.originalFilename ?? a.objectKey).split(".").pop()?.toLowerCase() ?? "";
+      const isHtml = ext === "html" || ext === "htm";
+      const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
+      const entry = {
+        icon: isHtml ? "🌐" : isImage ? "🖼" : "📎",
+        name: a.originalFilename ?? a.objectKey,
+        size: `${(a.byteSize / 1024).toFixed(0)} KB`,
+        href: a.contentPath,
+      };
+      const list = map.get(a.issueCommentId) ?? [];
+      list.push(entry);
+      map.set(a.issueCommentId, list);
+    }
+    return map;
+  }, [attachments]);
+
   const messages: ChatMessage[] = useMemo(
     () => (comments ?? []).map((c: IssueComment) => ({
       id: c.id,
       from: (c.authorAgentId ? "agent" : "ceo") as "agent" | "ceo",
       text: c.body,
       timestamp: new Date(c.createdAt).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+      files: attachmentsByComment.get(c.id),
     })),
-    [comments],
+    [comments, attachmentsByComment],
   );
 
   const files: MaskFile[] = useMemo(

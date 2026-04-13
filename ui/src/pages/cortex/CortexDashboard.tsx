@@ -224,15 +224,31 @@ export default function CortexDashboard() {
 
   // ── Helpers ──
 
+  // Build attachment-per-comment lookup for inline file pills in chat
+  const attachmentsByComment = useMemo(() => {
+    const map = new Map<string, Array<{ icon?: string; name: string; size?: string; href?: string }>>();
+    for (const a of issueAttachments ?? []) {
+      if (!a.issueCommentId) continue;
+      const ext = (a.originalFilename ?? a.objectKey).split(".").pop()?.toLowerCase() ?? "";
+      const isHtml = ext === "html" || ext === "htm";
+      const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
+      const entry = { icon: isHtml ? "🌐" : isImage ? "🖼" : "📎", name: a.originalFilename ?? a.objectKey, size: `${(a.byteSize / 1024).toFixed(0)} KB`, href: a.contentPath };
+      const list = map.get(a.issueCommentId) ?? [];
+      list.push(entry);
+      map.set(a.issueCommentId, list);
+    }
+    return map;
+  }, [issueAttachments]);
+
   function commentToMessage(c: IssueComment): ChatMessage {
     const isAgent = !!c.authorAgentId;
-    const agent = c.authorAgentId ? agentMap.get(c.authorAgentId) : null;
     const d = new Date(c.createdAt);
     return {
       id: c.id,
       from: isAgent ? "agent" : "ceo",
       text: c.body,
       timestamp: d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+      files: attachmentsByComment.get(c.id),
     };
   }
 
