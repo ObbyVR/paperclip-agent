@@ -1,12 +1,5 @@
 import { ExternalLink } from "lucide-react";
-
-/** Rewrite old platform internal links to Cortex routes */
-function rewriteUrl(url: string): string {
-  return url.replace(/\/([^/]+)\/(inbox|issues|dashboard|settings)(\/|$)/g, (match, prefix, page, trail) => {
-    if (match.includes("/cortex/")) return match;
-    return `/${prefix}/cortex/${page}${trail}`;
-  });
-}
+import { rewriteInternalUrl } from "@/lib/cortex-utils";
 
 interface OutputPreviewCardProps {
   name: string;
@@ -14,7 +7,7 @@ interface OutputPreviewCardProps {
 }
 
 export function OutputPreviewCard({ name, openUrl }: OutputPreviewCardProps) {
-  const url = openUrl ? rewriteUrl(openUrl) : undefined;
+  const url = openUrl ? rewriteInternalUrl(openUrl) : undefined;
   return (
     <div
       className="mt-2 cursor-pointer overflow-hidden rounded-lg border border-white/10 bg-[#1e2233] transition-colors hover:border-indigo-400/50"

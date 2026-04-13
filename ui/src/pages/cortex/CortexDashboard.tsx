@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "@/lib/router";
 import { useOutletContext } from "@/lib/router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -106,15 +106,14 @@ export default function CortexDashboard() {
 
   // Refresh timestamp
   const [lastRefresh, setLastRefresh] = useState(() => new Date());
-  const refreshInterval = useRef<ReturnType<typeof setInterval>>(undefined);
-  const [, forceUpdate] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     setLastRefresh(new Date());
   }, [allIssues, liveRuns]);
   // Force re-render every 10s to update "ago" text
   useEffect(() => {
-    refreshInterval.current = setInterval(() => forceUpdate((n) => n + 1), 10_000);
-    return () => clearInterval(refreshInterval.current);
+    const id = setInterval(() => setTick((n) => n + 1), 10_000);
+    return () => clearInterval(id);
   }, []);
 
   const refreshAgo = useMemo(() => {
@@ -122,7 +121,7 @@ export default function CortexDashboard() {
     if (secs < 5) return "adesso";
     if (secs < 60) return `${secs}s fa`;
     return `${Math.round(secs / 60)}m fa`;
-  }, [lastRefresh, forceUpdate]);
+  }, [lastRefresh, tick]);
 
   const activityItems = useMemo(() => {
     const filteredIssues = projectId

@@ -135,17 +135,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   // Reset selection on query change
   useEffect(() => { setSelectedIdx(0); }, [query]);
 
-  // Global shortcut
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        if (open) onClose();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
 
   if (!open) return null;
 

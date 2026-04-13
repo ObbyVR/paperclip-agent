@@ -255,7 +255,7 @@ export default function CortexInbox() {
   if (issuesLoading) return <PageSkeleton variant="inbox" />;
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#0b0d15] text-white">
+    <div className="relative flex h-full flex-col overflow-hidden bg-[#060810] text-white">
       <TopBar
         title="Inbox"
         kpis={[

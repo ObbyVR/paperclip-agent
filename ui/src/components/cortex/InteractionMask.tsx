@@ -84,10 +84,14 @@ export function InteractionMask({ open, data, chatLoading, onClose, onApprove, o
       {open && (
         <div className="absolute inset-0 z-20 bg-black/20" onClick={onClose} />
       )}
-      <div className={cn(
-        "absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-white/[0.06] bg-[#10131d] shadow-[-12px_0_48px_rgba(0,0,0,0.5)] transition-transform duration-[280ms] ease-[cubic-bezier(0.4,0,0.2,1)] md:w-[460px]",
-        open ? "translate-x-0" : "translate-x-full",
-      )}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Dettagli issue"
+        className={cn(
+          "absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-white/[0.06] bg-[#10131d] shadow-[-12px_0_48px_rgba(0,0,0,0.5)] transition-transform duration-[280ms] ease-[cubic-bezier(0.4,0,0.2,1)] md:w-[460px]",
+          open ? "translate-x-0" : "translate-x-full",
+        )}>
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3.5">
         <AgentAvatar name={data.agentName} status={data.agentStatus} size="lg" />
@@ -98,7 +102,7 @@ export function InteractionMask({ open, data, chatLoading, onClose, onApprove, o
             {data.issueIdentifier && <span className="font-mono text-[10px] text-white/35">{data.issueIdentifier}</span>}
           </div>
         </div>
-        <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-md text-white/45 transition-all hover:bg-white/[0.06] hover:text-white">
+        <button onClick={onClose} aria-label="Chiudi" className="flex h-7 w-7 items-center justify-center rounded-md text-white/45 transition-all hover:bg-white/[0.06] hover:text-white">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>

@@ -1,5 +1,6 @@
 import { ClipboardList } from "lucide-react";
 import { cortexStatusStyles } from "@/lib/cortex-status";
+import { STATUS_LABEL } from "@/lib/cortex-utils";
 import type { CortexStatus } from "@/lib/cortex-status";
 import { cn } from "@/lib/utils";
 
@@ -14,11 +15,6 @@ interface MaskDetailsProps {
   subTasks?: SubTask[];
   metrics?: Array<{ label: string; value: string }>;
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  in_progress: "In corso", todo: "Da fare", blocked: "Bloccato",
-  in_review: "In review", done: "Fatto", cancelled: "Annullato", backlog: "Backlog",
-};
 
 export function MaskDetails({ issueTitle, issueIdentifier, issueDescription, issueStatus, agentStatus, unlockExplanation, subTasks, metrics }: MaskDetailsProps) {
   const dot: Record<string, string> = { done: "bg-[#6ee7b7]", active: "bg-[#67e8f9] animate-pulse", pending: "bg-white/45" };

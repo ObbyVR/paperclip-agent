@@ -8,8 +8,10 @@ import { agentsApi } from "@/api/agents";
 import { heartbeatsApi } from "@/api/heartbeats";
 import { queryKeys } from "@/lib/queryKeys";
 import { issueToV2Status, cortexStatusStyles } from "@/lib/cortex-status";
+import { STATUS_LABEL } from "@/lib/cortex-utils";
 import { relativeTime, formatCents } from "@/lib/utils";
 import { TopBar } from "@/components/cortex/TopBar";
+import { ClipboardList } from "lucide-react";
 import { MaskChat, type ChatMessage } from "@/components/cortex/MaskChat";
 import { MaskDetails } from "@/components/cortex/MaskDetails";
 import { MaskFiles, type MaskFile } from "@/components/cortex/MaskFiles";
@@ -19,11 +21,6 @@ import { cn } from "@/lib/utils";
 import type { IssueComment, IssueAttachment } from "@paperclipai/shared";
 
 type DetailTab = "chat" | "details" | "files";
-
-const STATUS_LABEL: Record<string, string> = {
-  in_progress: "In corso", todo: "Da fare", blocked: "Bloccato",
-  in_review: "In review", done: "Fatto", cancelled: "Annullato", backlog: "Backlog",
-};
 
 export default function CortexIssueDetail() {
   const { issueId } = useParams<{ issueId: string }>();
@@ -35,7 +32,7 @@ export default function CortexIssueDetail() {
   const [sending, setSending] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: issues } = useQuery({
+  const { data: issues, isLoading: issuesLoading } = useQuery({
     queryKey: queryKeys.issues.list(selectedCompanyId!),
     queryFn: () => issuesApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
@@ -160,6 +157,8 @@ export default function CortexIssueDetail() {
       await issuesApi.addComment(resolvedIssueId, input.trim());
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(resolvedIssueId) });
       setInput("");
+    } catch (e) {
+      console.error("[Cortex] doSend failed:", e);
     } finally {
       setSending(false);
     }
@@ -179,7 +178,14 @@ export default function CortexIssueDetail() {
     }
   }, [resolvedIssueId, selectedCompanyId, queryClient]);
 
-  if (!issue) return <PageSkeleton variant="inbox" />;
+  if (issuesLoading) return <PageSkeleton variant="inbox" />;
+  if (!issue) return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#060810] text-white/40">
+      <ClipboardList className="h-10 w-10 text-white/15" />
+      <span className="text-[14px]">Issue non trovata</span>
+      <button onClick={() => navigate("../issues")} className="mt-2 rounded-lg border border-white/[0.08] px-4 py-2 text-[12px] text-white/50 transition-colors hover:bg-white/[0.04]">Torna a Issues</button>
+    </div>
+  );
 
   const s = cortexStatusStyles[status];
   const showActions = status === "needs-me";

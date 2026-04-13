@@ -1,4 +1,4 @@
-import { ExternalLink, Download, FolderOpen } from "lucide-react";
+import { ExternalLink, Download, FolderOpen, Globe, Image, Paperclip, FileText } from "lucide-react";
 
 export interface MaskFile {
   icon: string;
@@ -8,6 +8,13 @@ export interface MaskFile {
   action: "open" | "download";
   href?: string;
 }
+
+const FILE_ICON: Record<string, React.ReactNode> = {
+  "🌐": <Globe className="h-5 w-5 text-indigo-400" />,
+  "🖼": <Image className="h-5 w-5 text-cyan-400" />,
+  "📎": <Paperclip className="h-5 w-5 text-white/40" />,
+  "📄": <FileText className="h-5 w-5 text-white/40" />,
+};
 
 interface MaskFilesProps { files: MaskFile[]; }
 
@@ -23,9 +30,9 @@ export function MaskFiles({ files }: MaskFilesProps) {
 
   return (
     <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-5 py-4">
-      {files.map((f, i) => (
-        <a key={i} href={f.href ?? "#"} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-[#161a27] px-3 py-2.5 transition-all hover:border-white/10 hover:bg-[#1e2233]">
-          <span className="shrink-0 text-xl">{f.icon}</span>
+      {files.map((f) => (
+        <a key={f.href ?? f.name} href={f.href ?? "#"} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-[#161a27] px-3 py-2.5 transition-all hover:border-white/10 hover:bg-[#1e2233]">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center">{FILE_ICON[f.icon] ?? <FileText className="h-5 w-5 text-white/40" />}</span>
           <div className="min-w-0 flex-1">
             <div className="text-[12.5px] font-medium">{f.name}</div>
             <div className="mt-0.5 flex gap-2 text-[10px] text-white/45"><span>{f.meta}</span><span>{f.time}</span></div>

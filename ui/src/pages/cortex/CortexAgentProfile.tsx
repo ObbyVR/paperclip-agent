@@ -5,6 +5,7 @@ import { useCompany } from "@/context/CompanyContext";
 import { agentsApi } from "@/api/agents";
 import { issuesApi } from "@/api/issues";
 import { queryKeys } from "@/lib/queryKeys";
+import { STATUS_LABEL } from "@/lib/cortex-utils";
 import { formatCents, relativeTime } from "@/lib/utils";
 import { issueToV2Status, cortexStatusStyles } from "@/lib/cortex-status";
 import { TopBar } from "@/components/cortex/TopBar";
@@ -12,11 +13,6 @@ import { AgentAvatar } from "@/components/cortex/AgentAvatar";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { cn } from "@/lib/utils";
 import type { CortexStatus } from "@/lib/cortex-status";
-
-const STATUS_LABEL: Record<string, string> = {
-  in_progress: "In corso", todo: "Da fare", blocked: "Bloccato",
-  in_review: "In review", done: "Fatto", cancelled: "Annullato", backlog: "Backlog",
-};
 
 const AGENT_STATUS_LABEL: Record<string, string> = {
   active: "Attivo", paused: "In pausa", error: "Errore", terminated: "Terminato",

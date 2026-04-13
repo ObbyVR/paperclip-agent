@@ -4,19 +4,7 @@ import { MessageCircle } from "lucide-react";
 import { OutputPreviewCard } from "./OutputPreviewCard";
 import { FilePill } from "./FilePill";
 
-/**
- * Rewrite internal Paperclip links to point to Cortex routes.
- * E.g. /WEB/issues/WEB-123 → /WEB/cortex/issues/<id>
- *      /WEB/inbox → /WEB/cortex/inbox
- */
-function rewriteInternalUrl(url: string): string {
-  // Match /:prefix/issues/:id or /:prefix/inbox etc. (not already /cortex/)
-  return url
-    .replace(/\/([^/]+)\/(inbox|issues|dashboard|settings)(\/|$)/g, (match, prefix, page, trail) => {
-      if (match.includes("/cortex/")) return match;
-      return `/${prefix}/cortex/${page}${trail}`;
-    });
-}
+import { rewriteInternalUrl } from "@/lib/cortex-utils";
 
 /** Minimal markdown-to-HTML for chat bubbles */
 function miniMarkdown(text: string): string {

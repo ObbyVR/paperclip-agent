@@ -7,6 +7,7 @@ import { agentsApi } from "@/api/agents";
 import { heartbeatsApi } from "@/api/heartbeats";
 import { queryKeys } from "@/lib/queryKeys";
 import { issueToV2Status, cortexStatusStyles } from "@/lib/cortex-status";
+import { STATUS_LABEL } from "@/lib/cortex-utils";
 import { relativeTime, formatCents } from "@/lib/utils";
 import { ClipboardList } from "lucide-react";
 import { TopBar } from "@/components/cortex/TopBar";
@@ -19,16 +20,6 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { cn } from "@/lib/utils";
 import type { CortexStatus } from "@/lib/cortex-status";
 import type { IssueComment, IssueAttachment } from "@paperclipai/shared";
-
-const STATUS_LABEL: Record<string, string> = {
-  in_progress: "In corso",
-  todo: "Da fare",
-  blocked: "Bloccato",
-  in_review: "In review",
-  done: "Fatto",
-  cancelled: "Annullato",
-  backlog: "Backlog",
-};
 
 export default function CortexIssues() {
   const { selectedCompanyId } = useCompany();
@@ -139,7 +130,7 @@ export default function CortexIssues() {
       else if (i.status === "done") c.done++;
     }
     return c;
-  }, [issues]);
+  }, [filtered]);
 
   // ── Mask data ──
 
