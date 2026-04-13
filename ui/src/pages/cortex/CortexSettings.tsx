@@ -29,7 +29,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function CortexSettings() {
-  const { onMobileMenuOpen } = useOutletContext<{ onMobileMenuOpen?: () => void }>();
+  const { onMobileMenuOpen, onSearchOpen } = useOutletContext<{ onMobileMenuOpen?: () => void; onSearchOpen?: () => void }>();
   const { selectedCompanyId, selectedCompany } = useCompany();
 
   const { data: agents, isLoading } = useQuery({
@@ -51,7 +51,7 @@ export default function CortexSettings() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#060810] text-white">
-      <TopBar title="Settings" onMenuOpen={onMobileMenuOpen} />
+      <TopBar title="Settings" onMenuOpen={onMobileMenuOpen} onSearchOpen={onSearchOpen} />
 
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
         <SettingsSection title="Azienda">

@@ -32,7 +32,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function CortexIssues() {
   const { selectedCompanyId } = useCompany();
-  const { selectedProjectId, onMobileMenuOpen } = useOutletContext<{ selectedProjectId: string | null; onMobileMenuOpen?: () => void }>();
+  const { selectedProjectId, onMobileMenuOpen, onSearchOpen } = useOutletContext<{ selectedProjectId: string | null; onMobileMenuOpen?: () => void; onSearchOpen?: () => void }>();
   const [maskOpen, setMaskOpen] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -257,6 +257,7 @@ export default function CortexIssues() {
           { value: String(counts.done), label: "completati" },
         ]}
         onMenuOpen={onMobileMenuOpen}
+        onSearchOpen={onSearchOpen}
       />
 
       {/* Search */}

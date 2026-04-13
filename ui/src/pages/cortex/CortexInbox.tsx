@@ -27,7 +27,7 @@ interface CategorizedIssue {
 
 export default function CortexInbox() {
   const { selectedCompanyId } = useCompany();
-  const { selectedProjectId, onMobileMenuOpen } = useOutletContext<{ selectedProjectId: string | null; onMobileMenuOpen?: () => void }>();
+  const { selectedProjectId, onMobileMenuOpen, onSearchOpen } = useOutletContext<{ selectedProjectId: string | null; onMobileMenuOpen?: () => void; onSearchOpen?: () => void }>();
   const [maskOpen, setMaskOpen] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -254,6 +254,7 @@ export default function CortexInbox() {
           { value: String(categorized.working.length), label: "in corso" },
         ]}
         onMenuOpen={onMobileMenuOpen}
+        onSearchOpen={onSearchOpen}
       />
 
       <div className="flex-1 overflow-y-auto pb-8">

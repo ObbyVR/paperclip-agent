@@ -24,10 +24,11 @@ interface CortexOutletContext {
   selectedProjectId: string | null;
   setSelectedProjectId: (id: string | null) => void;
   onMobileMenuOpen?: () => void;
+  onSearchOpen?: () => void;
 }
 
 export default function CortexDashboard() {
-  const { selectedProjectId: projectId, setSelectedProjectId, onMobileMenuOpen } = useOutletContext<CortexOutletContext>();
+  const { selectedProjectId: projectId, setSelectedProjectId, onMobileMenuOpen, onSearchOpen } = useOutletContext<CortexOutletContext>();
   const { selectedCompanyId } = useCompany();
   const [maskOpen, setMaskOpen] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
@@ -356,6 +357,7 @@ export default function CortexDashboard() {
         ]}
         onBack={projectId ? () => setSelectedProjectId(null) : undefined}
         onMenuOpen={onMobileMenuOpen}
+        onSearchOpen={onSearchOpen}
       />
 
       {graphNodes.length > 0 ? (

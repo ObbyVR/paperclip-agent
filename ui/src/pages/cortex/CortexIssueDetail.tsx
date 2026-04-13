@@ -29,7 +29,7 @@ export default function CortexIssueDetail() {
   const { issueId } = useParams<{ issueId: string }>();
   const navigate = useNavigate();
   const { selectedCompanyId } = useCompany();
-  const { onMobileMenuOpen } = useOutletContext<{ onMobileMenuOpen?: () => void }>();
+  const { onMobileMenuOpen, onSearchOpen } = useOutletContext<{ onMobileMenuOpen?: () => void; onSearchOpen?: () => void }>();
   const [tab, setTab] = useState<DetailTab>("chat");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -166,6 +166,7 @@ export default function CortexIssueDetail() {
         chip={STATUS_LABEL[issue.status]}
         onBack={() => navigate("../issues")}
         onMenuOpen={onMobileMenuOpen}
+        onSearchOpen={onSearchOpen}
       />
 
       {/* Issue header */}

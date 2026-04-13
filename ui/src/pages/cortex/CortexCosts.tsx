@@ -25,7 +25,7 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
 }
 
 export default function CortexCosts() {
-  const { onMobileMenuOpen } = useOutletContext<{ onMobileMenuOpen?: () => void }>();
+  const { onMobileMenuOpen, onSearchOpen } = useOutletContext<{ onMobileMenuOpen?: () => void; onSearchOpen?: () => void }>();
   const { selectedCompanyId } = useCompany();
 
   const { data: summary, isLoading } = useQuery({
@@ -58,6 +58,7 @@ export default function CortexCosts() {
       <TopBar
         title="Costi"
         onMenuOpen={onMobileMenuOpen}
+        onSearchOpen={onSearchOpen}
         kpis={[
           { value: formatCents(totalSpend), label: "spesa mese" },
           { value: budget > 0 ? formatCents(budget) : "Illimitato", label: "budget" },

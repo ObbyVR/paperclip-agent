@@ -36,7 +36,7 @@ export function CortexLayout() {
       />
       <main className="relative flex flex-1 flex-col overflow-hidden">
         <div key={routeKey} className="flex h-full flex-col animate-[cortex-fade-in_0.2s_ease-out]">
-          <Outlet context={{ selectedProjectId, setSelectedProjectId, onMobileMenuOpen: () => setMobileMenuOpen(true) }} />
+          <Outlet context={{ selectedProjectId, setSelectedProjectId, onMobileMenuOpen: () => setMobileMenuOpen(true), onSearchOpen: () => setPaletteOpen(true) }} />
         </div>
       </main>
       <CommandPalette open={paletteOpen} onClose={closePalette} />
